@@ -11,8 +11,8 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 200, 0, 280)
-mainFrame.Position = UDim2.new(0, 20, 0.5, -140)
+mainFrame.Size = UDim2.new(0, 200, 0, 240)
+mainFrame.Position = UDim2.new(0, 20, 0.5, -120)
 mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
@@ -26,7 +26,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 28)
 title.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
-title.Text = "Chest Tween"
+title.Text = "Chest Farm"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -34,6 +34,432 @@ title.Parent = mainFrame
 
 local titleCorner = Instance.new("UICorner")
 titleCorner.CornerRadius = UDim.new(0, 6)
+titleCorner.Parent = title
+
+local hideBtn = Instance.new("TextButton")
+hideBtn.Size = UDim2.new(0, 24, 0, 24)
+hideBtn.Position = UDim2.new(1, -28, 0, 2)
+hideBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+hideBtn.Text = "-"
+hideBtn.TextColor3 = Color3.new(1, 1, 1)
+hideBtn.TextSize = 14
+hideBtn.Parent = mainFrame
+
+local hideCorner = Instance.new("UICorner")
+hideCorner.CornerRadius = UDim.new(0, 4)
+hideCorner.Parent = hideBtn
+
+local autoBtn = Instance.new("TextButton")
+autoBtn.Size = UDim2.new(1, -12, 0, 28)
+autoBtn.Position = UDim2.new(0, 6, 0, 34)
+autoBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+autoBtn.Text = "Auto Farm: OFF"
+autoBtn.TextColor3 = Color3.new(1, 1, 1)
+autoBtn.TextSize = 12
+autoBtn.Font = Enum.Font.GothamBold
+autoBtn.Parent = mainFrame
+
+local autoCorner = Instance.new("UICorner")
+autoCorner.CornerRadius = UDim.new(0, 4)
+autoCorner.Parent = autoBtn
+
+-- ========== سرعة ==========
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(1, -70, 0, 16)
+speedLabel.Position = UDim2.new(0, 6, 0, 68)
+speedLabel.BackgroundTransparency = 1
+speedLabel.Text = "Speed: 200"
+speedLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+speedLabel.TextSize = 10
+speedLabel.Font = Enum.Font.Gotham
+speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+speedLabel.Parent = mainFrame
+
+local speedInput = Instance.new("TextBox")
+speedInput.Size = UDim2.new(0, 50, 0, 16)
+speedInput.Position = UDim2.new(1, -56, 0, 68)
+speedInput.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+speedInput.Text = "200"
+speedInput.TextColor3 = Color3.new(1, 1, 1)
+speedInput.TextSize = 10
+speedInput.Font = Enum.Font.GothamBold
+speedInput.ClearTextOnFocus = true
+speedInput.Parent = mainFrame
+
+local inputCorner = Instance.new("UICorner")
+inputCorner.CornerRadius = UDim.new(0, 3)
+inputCorner.Parent = speedInput
+
+local speedFrame = Instance.new("Frame")
+speedFrame.Size = UDim2.new(1, -12, 0, 20)
+speedFrame.Position = UDim2.new(0, 6, 0, 88)
+speedFrame.BackgroundTransparency = 1
+speedFrame.Parent = mainFrame
+
+local speedLayout = Instance.new("UIListLayout")
+speedLayout.FillDirection = Enum.FillDirection.Horizontal
+speedLayout.Padding = UDim.new(0, 3)
+speedLayout.Parent = speedFrame
+
+for _, sp in ipairs({400, 300, 200, 100}) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 46, 1, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+    btn.Text = tostring(sp)
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.TextSize = 9
+    btn.Font = Enum.Font.GothamBold
+    btn.Parent = speedFrame
+    local bc = Instance.new("UICorner")
+    bc.CornerRadius = UDim.new(0, 3)
+    bc.Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        tweenSpeed = sp
+        speedInput.Text = tostring(sp)
+        speedLabel.Text = "Speed: " .. sp
+    end)
+end
+
+-- ========== عداد ==========
+local countLabel = Instance.new("TextLabel")
+countLabel.Size = UDim2.new(1, -12, 0, 16)
+countLabel.Position = UDim2.new(0, 6, 0, 112)
+countLabel.BackgroundTransparency = 1
+countLabel.Text = "Found: 0 | Farmed: 0"
+countLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+countLabel.TextSize = 10
+countLabel.Font = Enum.Font.Gotham
+countLabel.TextXAlignment = Enum.TextXAlignment.Left
+countLabel.Parent = mainFrame
+
+-- ========== قائمة الصناديق ==========
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Size = UDim2.new(1, -12, 1, -140)
+scrollFrame.Position = UDim2.new(0, 6, 0, 132)
+scrollFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+scrollFrame.BorderSizePixel = 0
+scrollFrame.ScrollBarThickness = 4
+scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollFrame.Parent = mainFrame
+
+local scrollCorner = Instance.new("UICorner")
+scrollCorner.CornerRadius = UDim.new(0, 4)
+scrollCorner.Parent = scrollFrame
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 3)
+listLayout.Parent = scrollFrame
+
+-- ========== المتغيرات ==========
+local tweenSpeed = 200
+local autoEnabled = false
+local currentConnection = nil
+local chestButtons = {}
+local visitedChests = {}
+local farmedCount = 0
+
+-- ========== دوال مساعدة ==========
+local function getHRP()
+    local char = player.Character
+    if char then
+        return char:FindFirstChild("HumanoidRootPart")
+    end
+    return nil
+end
+
+local function getHumanoid()
+    local char = player.Character
+    if char then
+        return char:FindFirstChild("Humanoid")
+    end
+    return nil
+end
+
+local function getChestPos(chest)
+    if not chest or not chest.Parent then return nil end
+    if chest:IsA("Model") then
+        if chest.PrimaryPart then
+            return chest.PrimaryPart.Position
+        end
+        for _, part in ipairs(chest:GetDescendants()) do
+            if part:IsA("BasePart") then
+                return part.Position
+            end
+        end
+    elseif chest:IsA("BasePart") then
+        return chest.Position
+    end
+    return nil
+end
+
+-- ⭐ يجمع الصناديق من Workspace
+local function getChests()
+    local chests = {}
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and obj.Name == "Chest" then
+            table.insert(chests, obj)
+        end
+    end
+    return chests
+end
+
+local function isVisited(chestPos)
+    if not chestPos then return true end
+    for _, visitedPos in ipairs(visitedChests) do
+        if (visitedPos - chestPos).Magnitude < 25 then
+            return true
+        end
+    end
+    return false
+end
+
+-- ========== التوين السلس ==========
+local function smoothFlyTo(targetPos, onComplete)
+    local hrp = getHRP()
+    if not hrp then
+        if onComplete then task.defer(onComplete) end
+        return
+    end
+    
+    if currentConnection then
+        currentConnection:Disconnect()
+        currentConnection = nil
+    end
+    
+    local startCF = hrp.CFrame
+    local targetCF = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+    local distance = (startCF.Position - targetCF.Position).Magnitude
+    local duration = math.max(distance / tweenSpeed, 0.01)
+    local startTime = tick()
+    
+    if distance < 5 then
+        hrp.CFrame = targetCF
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        if onComplete then task.defer(onComplete) end
+        return
+    end
+    
+    currentConnection = RunService.Heartbeat:Connect(function()
+        if not hrp or not hrp.Parent then
+            if currentConnection then
+                currentConnection:Disconnect()
+                currentConnection = nil
+            end
+            return
+        end
+        
+        local elapsed = tick() - startTime
+        local alpha = elapsed / duration
+        
+        if alpha >= 1 then
+            hrp.CFrame = targetCF
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            
+            if currentConnection then
+                currentConnection:Disconnect()
+                currentConnection = nil
+            end
+            
+            if onComplete then
+                task.defer(onComplete)
+            end
+            return
+        end
+        
+        alpha = alpha * alpha * (3 - 2 * alpha)
+        hrp.CFrame = startCF:Lerp(targetCF, alpha)
+        hrp.AssemblyLinearVelocity = Vector3.zero
+    end)
+end
+
+-- ========== وضع الأوتو ==========
+local function stopAuto()
+    autoEnabled = false
+    visitedChests = {}
+    farmedCount = 0
+    autoBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    autoBtn.Text = "Auto Farm: OFF"
+    if currentConnection then
+        currentConnection:Disconnect()
+        currentConnection = nil
+    end
+    local humanoid = getHumanoid()
+    if humanoid then
+        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        humanoid.AutoRotate = true
+    end
+end
+
+local function startAuto()
+    autoEnabled = true
+    visitedChests = {}
+    farmedCount = 0
+    autoBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+    autoBtn.Text = "Auto Farm: ON"
+    
+    local function nextChest()
+        if not autoEnabled then return end
+        
+        local chests = getChests()
+        if #chests == 0 then
+            task.defer(nextChest)
+            return
+        end
+        
+        local hrp = getHRP()
+        if not hrp then
+            task.defer(nextChest)
+            return
+        end
+        
+        local bestChest = nil
+        local bestDist = math.huge
+        
+        for _, chest in ipairs(chests) do
+            local pos = getChestPos(chest)
+            if pos and not isVisited(pos) then
+                local d = (hrp.Position - pos).Magnitude
+                if d < bestDist then
+                    bestDist = d
+                    bestChest = chest
+                end
+            end
+        end
+        
+        if not bestChest then
+            visitedChests = {}
+            for _, chest in ipairs(chests) do
+                local pos = getChestPos(chest)
+                if pos then
+                    local d = (hrp.Position - pos).Magnitude
+                    if d < bestDist then
+                        bestDist = d
+                        bestChest = chest
+                    end
+                end
+            end
+        end
+        
+        if not bestChest then
+            bestChest = chests[1]
+        end
+        
+        local pos = getChestPos(bestChest)
+        if pos then
+            table.insert(visitedChests, pos)
+            farmedCount = farmedCount + 1
+            smoothFlyTo(pos, function()
+                if not autoEnabled then return end
+                task.defer(nextChest)
+            end)
+        else
+            task.defer(nextChest)
+        end
+    end
+    
+    nextChest()
+end
+
+autoBtn.MouseButton1Click:Connect(function()
+    if autoEnabled then
+        stopAuto()
+    else
+        startAuto()
+    end
+end)
+
+-- ========== تحديث القائمة ==========
+local function updateList()
+    for _, btn in ipairs(chestButtons) do
+        btn:Destroy()
+    end
+    chestButtons = {}
+    
+    local chests = getChests()
+    countLabel.Text = "Found: " .. #chests .. " | Farmed: " .. farmedCount
+    
+    for i, chest in ipairs(chests) do
+        local pos = getChestPos(chest)
+        local dist = ""
+        local hrp = getHRP()
+        if hrp and pos then
+            local d = math.floor((hrp.Position - pos).Magnitude)
+            dist = " [" .. d .. "m]"
+        end
+        
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -6, 0, 24)
+        btn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+        btn.Text = "Chest #" .. i .. dist
+        btn.TextColor3 = Color3.new(1, 1, 1)
+        btn.TextSize = 10
+        btn.Font = Enum.Font.Gotham
+        btn.Parent = scrollFrame
+        
+        local bc = Instance.new("UICorner")
+        bc.CornerRadius = UDim.new(0, 4)
+        bc.Parent = btn
+        
+        btn.MouseButton1Click:Connect(function()
+            stopAuto()
+            local p = getChestPos(chest)
+            if p then smoothFlyTo(p) end
+        end)
+        
+        table.insert(chestButtons, btn)
+    end
+    
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #chests * 27)
+end
+
+-- ========== إخفاء/إظهار ==========
+local guiVisible = true
+hideBtn.MouseButton1Click:Connect(function()
+    guiVisible = not guiVisible
+    local items = {scrollFrame, autoBtn, speedLabel, speedInput, speedFrame, countLabel}
+    for _, item in ipairs(items) do
+        item.Visible = guiVisible
+    end
+    if guiVisible then
+        hideBtn.Text = "-"
+        mainFrame.Size = UDim2.new(0, 200, 0, 240)
+    else
+        hideBtn.Text = "+"
+        mainFrame.Size = UDim2.new(0, 200, 0, 28)
+    end
+end)
+
+-- ========== اختصارات ==========
+speedInput.FocusLost:Connect(function()
+    local num = tonumber(speedInput.Text)
+    if num then
+        tweenSpeed = math.clamp(num, 10, 400)
+        speedInput.Text = tostring(tweenSpeed)
+        speedLabel.Text = "Speed: " .. tweenSpeed
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.R then
+        updateList()
+    end
+end)
+
+-- ========== تحديث تلقائي + Respawn ==========
+task.spawn(function()
+    while true do
+        updateList()
+        task.wait(2)
+    end
+end)
+
+player.CharacterAdded:Connect(function(char)
+    char:WaitForChild("HumanoidRootPart")
+    if autoEnabled then
+        task.wait(0.5)
+        startAuto()
+    end
+end)
 titleCorner.Parent = title
 
 local hideBtn = Instance.new("TextButton")
