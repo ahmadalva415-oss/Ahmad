@@ -1,670 +1,136 @@
--- ══════════════════════════════════════
---   LRT CAR PATROL - Neon UI Edition
---   Compatible: Delta Mobile / PC
--- ══════════════════════════════════════
+local p=game:GetService("Players")local w=game:GetService("Workspace")local r=game:GetService("RunService")local t=game:GetService("TweenService")local u=game:GetService("UserInputService")local lp=p.LocalPlayer local pg=lp:WaitForChild("PlayerGui")
 
-local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local CoreGui = game:GetService("CoreGui")
+-- Welcome
+local ws=Instance.new("ScreenGui")ws.Name="W"ws.ResetOnSpawn=false ws.Parent=pg
+local wf=Instance.new("Frame")wf.Size=UDim2.new(1,0,1,0)wf.BackgroundColor3=Color3.fromRGB(5,5,10)wf.BackgroundTransparency=1 wf.BorderSizePixel=0 wf.Parent=ws
+local tl=Instance.new("Frame")tl.Size=UDim2.new(0,0,0,3)tl.Position=UDim2.new(0.5,0,0.24,0)tl.BackgroundColor3=Color3.fromRGB(0,200,255)tl.BorderSizePixel=0 tl.Parent=wf
+local bl=Instance.new("Frame")bl.Size=UDim2.new(0,0,0,3)bl.Position=UDim2.new(0.5,0,0.47,0)bl.BackgroundColor3=Color3.fromRGB(255,50,150)bl.BorderSizePixel=0 bl.Parent=wf
+local wt=Instance.new("TextLabel")wt.Size=UDim2.new(1,0,0,50)wt.Position=UDim2.new(0,0,0.29,0)wt.BackgroundTransparency=1 wt.Text="منور يا "..lp.DisplayName wt.TextColor3=Color3.fromRGB(255,255,255)wt.TextSize=38 wt.Font=Enum.Font.SourceSansBold wt.TextTransparency=1 wt.Parent=wf
+local st=Instance.new("TextLabel")st.Size=UDim2.new(1,0,0,30)st.Position=UDim2.new(0,0,0.41,0)st.BackgroundTransparency=1 st.Text="نورنا في سيرفر ديسكورد"st.TextColor3=Color3.fromRGB(180,180,220)st.TextSize=18 st.Font=Enum.Font.SourceSans st.TextTransparency=1 st.Parent=wf
+local lb=Instance.new("Frame")lb.Size=UDim2.new(0,0,0,0)lb.Position=UDim2.new(0.5,0,0.55,0)lb.BackgroundColor3=Color3.fromRGB(0,60,80)lb.BorderSizePixel=0 lb.Parent=wf Instance.new("UICorner",lb).CornerRadius=UDim.new(0,16)
+local lt=Instance.new("TextLabel")lt.Size=UDim2.new(1,0,1,0)lt.BackgroundTransparency=1 lt.Text="LRT"lt.TextColor3=Color3.fromRGB(0,220,255)lt.TextSize=32 lt.Font=Enum.Font.SourceSansBold lt.Parent=lb
+local lg=Instance.new("Frame")lg.Size=UDim2.new(1.3,0,1.3,0)lg.Position=UDim2.new(-0.15,0,-0.15,0)lg.BackgroundColor3=Color3.fromRGB(0,200,255)lg.BackgroundTransparency=0.9 lg.BorderSizePixel=0 lg.ZIndex=0 lg.Parent=lb Instance.new("UICorner",lg).CornerRadius=UDim.new(0,20)
 
-local LocalPlayer = Players.LocalPlayer
-
--- ══════════════════════════════════════
---   WELCOME SCREEN
--- ══════════════════════════════════════
-
-local function createWelcomeScreen()
-	local welcomeGui = Instance.new("ScreenGui")
-	welcomeGui.Name = "LRT_Welcome"
-	welcomeGui.ResetOnSpawn = false
-	welcomeGui.DisplayOrder = 999999
-	welcomeGui.Parent = CoreGui
-
-	local bg = Instance.new("Frame")
-	bg.Name = "Background"
-	bg.Size = UDim2.new(1, 0, 1, 0)
-	bg.BackgroundColor3 = Color3.fromRGB(5, 5, 15)
-	bg.BorderSizePixel = 0
-	bg.Parent = welcomeGui
-
-	local particlesFrame = Instance.new("Frame")
-	particlesFrame.Name = "Particles"
-	particlesFrame.Size = UDim2.new(1, 0, 1, 0)
-	particlesFrame.BackgroundTransparency = 1
-	particlesFrame.Parent = bg
-
-	for i = 1, 50 do
-		local particle = Instance.new("Frame")
-		particle.Size = UDim2.new(0, math.random(2, 6), 0, math.random(2, 6))
-		particle.Position = UDim2.new(math.random(), 0, math.random(), 0)
-		particle.BackgroundColor3 = Color3.fromRGB(
-			math.random(100, 255),
-			math.random(100, 255),
-			math.random(150, 255)
-		)
-		particle.BackgroundTransparency = math.random(3, 8) / 10
-		particle.BorderSizePixel = 0
-		particle.Parent = particlesFrame
-		
-		local corner = Instance.new("UICorner")
-		corner.CornerRadius = UDim.new(1, 0)
-		corner.Parent = particle
-
-		task.spawn(function()
-			while particle and particle.Parent do
-				local tween = TweenService:Create(particle, TweenInfo.new(
-					math.random(3, 8),
-					Enum.EasingStyle.Sine,
-					Enum.EasingDirection.InOut
-				), {
-					Position = UDim2.new(math.random(), 0, math.random(), 0),
-					BackgroundTransparency = math.random(3, 8) / 10
-				})
-				tween:Play()
-				tween.Completed:Wait()
-			end
-		end)
-	end
-
-	local topLine = Instance.new("Frame")
-	topLine.Name = "TopLine"
-	topLine.Size = UDim2.new(0, 0, 0, 2)
-	topLine.Position = UDim2.new(0.5, 0, 0.3, -50)
-	topLine.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
-	topLine.BorderSizePixel = 0
-	topLine.Parent = bg
-
-	local bottomLine = Instance.new("Frame")
-	bottomLine.Name = "BottomLine"
-	bottomLine.Size = UDim2.new(0, 0, 0, 2)
-	bottomLine.Position = UDim2.new(0.5, 0, 0.3, 50)
-	bottomLine.BackgroundColor3 = Color3.fromRGB(255, 50, 150)
-	bottomLine.BorderSizePixel = 0
-	bottomLine.Parent = bg
-
-	local welcomeText = Instance.new("TextLabel")
-	welcomeText.Name = "WelcomeText"
-	welcomeText.Size = UDim2.new(1, 0, 0, 80)
-	welcomeText.Position = UDim2.new(0, 0, 0.3, -40)
-	welcomeText.BackgroundTransparency = 1
-	welcomeText.Text = "منور يا " .. LocalPlayer.DisplayName
-	welcomeText.TextColor3 = Color3.fromRGB(255, 255, 255)
-	welcomeText.TextSize = 52
-	welcomeText.Font = Enum.Font.GothamBlack
-	welcomeText.TextStrokeTransparency = 0.8
-	welcomeText.TextStrokeColor3 = Color3.fromRGB(0, 200, 255)
-	welcomeText.Parent = bg
-
-	local discordText = Instance.new("TextLabel")
-	discordText.Name = "DiscordText"
-	discordText.Size = UDim2.new(1, 0, 0, 50)
-	discordText.Position = UDim2.new(0, 0, 0.5, -25)
-	discordText.BackgroundTransparency = 1
-	discordText.Text = "نورنا في سيرفر ديسكورد"
-	discordText.TextColor3 = Color3.fromRGB(200, 200, 255)
-	discordText.TextSize = 28
-	discordText.Font = Enum.Font.GothamBold
-	discordText.Parent = bg
-
-	local serverText = Instance.new("TextLabel")
-	serverText.Name = "ServerText"
-	serverText.Size = UDim2.new(1, 0, 0, 60)
-	serverText.Position = UDim2.new(0, 0, 0.5, 20)
-	serverText.BackgroundTransparency = 1
-	serverText.Text = "LRT"
-	serverText.TextColor3 = Color3.fromRGB(0, 200, 255)
-	serverText.TextSize = 64
-	serverText.Font = Enum.Font.GothamBlack
-	serverText.TextStrokeTransparency = 0.6
-	serverText.TextStrokeColor3 = Color3.fromRGB(255, 50, 150)
-	serverText.Parent = bg
-
-	local glowFrame = Instance.new("Frame")
-	glowFrame.Name = "Glow"
-	glowFrame.Size = UDim2.new(0, 200, 0, 80)
-	glowFrame.Position = UDim2.new(0.5, -100, 0.5, 10)
-	glowFrame.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
-	glowFrame.BackgroundTransparency = 0.9
-	glowFrame.BorderSizePixel = 0
-	glowFrame.Parent = bg
-	
-	local glowCorner = Instance.new("UICorner")
-	glowCorner.CornerRadius = UDim.new(0, 20)
-	glowCorner.Parent = glowFrame
-
-	local skipBtn = Instance.new("TextButton")
-	skipBtn.Name = "SkipButton"
-	skipBtn.Size = UDim2.new(0, 180, 0, 45)
-	skipBtn.Position = UDim2.new(0.5, -90, 0.7, 0)
-	skipBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
-	skipBtn.Text = "اضغط للمتابعة"
-	skipBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	skipBtn.TextSize = 16
-	skipBtn.Font = Enum.Font.GothamBold
-	skipBtn.BorderSizePixel = 0
-	skipBtn.Parent = bg
-
-	local skipCorner = Instance.new("UICorner")
-	skipCorner.CornerRadius = UDim.new(0, 10)
-	skipCorner.Parent = skipBtn
-
-	local btnStroke = Instance.new("UIStroke")
-	btnStroke.Color = Color3.fromRGB(0, 200, 255)
-	btnStroke.Thickness = 2
-	btnStroke.Parent = skipBtn
-
-	TweenService:Create(topLine, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Size = UDim2.new(0.6, 0, 0, 2),
-		Position = UDim2.new(0.2, 0, 0.3, -50)
-	}):Play()
-
-	TweenService:Create(bottomLine, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Size = UDim2.new(0.6, 0, 0, 2),
-		Position = UDim2.new(0.2, 0, 0.3, 50)
-	}):Play()
-
-	welcomeText.TextTransparency = 1
-	discordText.TextTransparency = 1
-	serverText.TextTransparency = 1
-	skipBtn.BackgroundTransparency = 1
-	skipBtn.TextTransparency = 1
-	btnStroke.Transparency = 1
-
-	TweenService:Create(welcomeText, TweenInfo.new(1.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		TextTransparency = 0
-	}):Play()
-
-	task.delay(0.4, function()
-		TweenService:Create(discordText, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			TextTransparency = 0
-		}):Play()
-	end)
-
-	task.delay(0.8, function()
-		TweenService:Create(serverText, TweenInfo.new(1.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			TextTransparency = 0
-		}):Play()
-	end)
-
-	task.delay(1.5, function()
-		TweenService:Create(skipBtn, TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			BackgroundTransparency = 0,
-			TextTransparency = 0
-		}):Play()
-		TweenService:Create(btnStroke, TweenInfo.new(0.8), {Transparency = 0}):Play()
-	end)
-
-	task.spawn(function()
-		while serverText and serverText.Parent do
-			local pulse = TweenService:Create(serverText, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-				TextSize = 68
-			})
-			pulse:Play()
-			pulse.Completed:Wait()
-			
-			local pulseBack = TweenService:Create(serverText, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-				TextSize = 64
-			})
-			pulseBack:Play()
-			pulseBack.Completed:Wait()
-		end
-	end)
-
-	task.spawn(function()
-		while glowFrame and glowFrame.Parent do
-			local glowIn = TweenService:Create(glowFrame, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-				BackgroundTransparency = 0.7,
-				Size = UDim2.new(0, 220, 0, 90)
-			})
-			glowIn:Play()
-			glowIn.Completed:Wait()
-			
-			local glowOut = TweenService:Create(glowFrame, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-				BackgroundTransparency = 0.95,
-				Size = UDim2.new(0, 200, 0, 80)
-			})
-			glowOut:Play()
-			glowOut.Completed:Wait()
-		end
-	end)
-
-	local function hideWelcome()
-		local fadeOut = TweenService:Create(bg, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-			BackgroundTransparency = 1
-		})
-		fadeOut:Play()
-		
-		for _, child in ipairs(bg:GetDescendants()) do
-			if child:IsA("TextLabel") or child:IsA("TextButton") then
-				TweenService:Create(child, TweenInfo.new(0.8), {TextTransparency = 1}):Play()
-			elseif child:IsA("Frame") and child.Name ~= "Background" then
-				TweenService:Create(child, TweenInfo.new(0.8), {BackgroundTransparency = 1}):Play()
-			end
-		end
-		
-		fadeOut.Completed:Wait()
-		welcomeGui:Destroy()
-	end
-
-	skipBtn.MouseButton1Click:Connect(hideWelcome)
-
-	task.delay(6, function()
-		if welcomeGui and welcomeGui.Parent then
-			hideWelcome()
-		end
-	end)
-end
-
-pcall(createWelcomeScreen)
-
--- ══════════════════════════════════════
---   MAIN GUI - Dark Theme
--- ══════════════════════════════════════
-
-local SG = Instance.new("ScreenGui")
-SG.Name = "LRT_CarAccel"
-SG.ResetOnSpawn = false
-SG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-SG.Parent = CoreGui
-
--- Toggle Button
-local ToggleBtn = Instance.new("TextButton")
-ToggleBtn.Size = UDim2.new(0, 55, 0, 55)
-ToggleBtn.Position = UDim2.new(0, 10, 0.5, -27)
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-ToggleBtn.Text = "LRT"
-ToggleBtn.TextColor3 = Color3.fromRGB(255, 170, 0)
-ToggleBtn.TextSize = 16
-ToggleBtn.Font = Enum.Font.GothamBlack
-ToggleBtn.Parent = SG
-
-Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(0, 14)
-
-local TStroke = Instance.new("UIStroke", ToggleBtn)
-TStroke.Color = Color3.fromRGB(255, 170, 0)
-TStroke.Thickness = 2
-
--- Main Panel
-local Panel = Instance.new("Frame")
-Panel.Size = UDim2.new(0, 260, 0, 320)
-Panel.Position = UDim2.new(0, 72, 0.5, -160)
-Panel.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
-Panel.BorderSizePixel = 0
-Panel.Visible = false
-Panel.Active = true
-Panel.Draggable = true
-Panel.Parent = SG
-
-Instance.new("UICorner", Panel).CornerRadius = UDim.new(0, 12)
-
--- Title Bar
-local TitleBar = Instance.new("Frame")
-TitleBar.Size = UDim2.new(1, 0, 0, 40)
-TitleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-TitleBar.BorderSizePixel = 0
-TitleBar.Parent = Panel
-
-Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 12)
-
-local TitleFix = Instance.new("Frame", TitleBar)
-TitleFix.Size = UDim2.new(1, 0, 0, 10)
-TitleFix.Position = UDim2.new(0, 0, 1, -10)
-TitleFix.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-TitleFix.BorderSizePixel = 0
-
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -40, 1, 0)
-Title.Position = UDim2.new(0, 0, 0, 0)
-Title.BackgroundTransparency = 1
-Title.Text = "  LRT PATROL"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 16
-Title.Font = Enum.Font.GothamBold
-Title.TextXAlignment = Enum.TextXAlignment.Center
-Title.Parent = TitleBar
-
--- Minimize Button
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0, 32, 0, 32)
-CloseBtn.Position = UDim2.new(1, -36, 0, 4)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-CloseBtn.Text = "-"
-CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseBtn.TextSize = 20
-CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.Parent = TitleBar
-
-Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 8)
-
--- Content
-local Content = Instance.new("Frame")
-Content.Size = UDim2.new(1, -16, 1, -48)
-Content.Position = UDim2.new(0, 8, 0, 44)
-Content.BackgroundTransparency = 1
-Content.Parent = Panel
-
--- Main Toggle Button (Full Width - Red)
-local PatrolBtn = Instance.new("TextButton")
-PatrolBtn.Size = UDim2.new(1, 0, 0, 42)
-PatrolBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-PatrolBtn.Text = "PATROL: OFF"
-PatrolBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-PatrolBtn.TextSize = 14
-PatrolBtn.Font = Enum.Font.GothamBold
-PatrolBtn.Parent = Content
-Instance.new("UICorner", PatrolBtn).CornerRadius = UDim.new(0, 8)
-
--- Info Row
-local InfoRow = Instance.new("Frame")
-InfoRow.Size = UDim2.new(1, 0, 0, 28)
-InfoRow.Position = UDim2.new(0, 0, 0, 50)
-InfoRow.BackgroundTransparency = 1
-InfoRow.Parent = Content
-
-local SpeedLabel = Instance.new("TextLabel")
-SpeedLabel.Size = UDim2.new(0.5, 0, 1, 0)
-SpeedLabel.BackgroundTransparency = 1
-SpeedLabel.Text = "Max Speed: 160"
-SpeedLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-SpeedLabel.TextSize = 14
-SpeedLabel.Font = Enum.Font.Gotham
-SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
-SpeedLabel.Parent = InfoRow
-
-local SpeedValue = Instance.new("TextButton")
-SpeedValue.Size = UDim2.new(0, 60, 1, 0)
-SpeedValue.Position = UDim2.new(1, -60, 0, 0)
-SpeedValue.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-SpeedValue.Text = "160"
-SpeedValue.TextColor3 = Color3.fromRGB(255, 255, 255)
-SpeedValue.TextSize = 14
-SpeedValue.Font = Enum.Font.GothamBold
-SpeedValue.Parent = InfoRow
-Instance.new("UICorner", SpeedValue).CornerRadius = UDim.new(0, 6)
-
--- Row Maker
-function MakeRow(parent, yPos)
-	local row = Instance.new("Frame")
-	row.Size = UDim2.new(1, 0, 0, 34)
-	row.Position = UDim2.new(0, 0, 0, yPos)
-	row.BackgroundTransparency = 1
-	row.Parent = parent
-	
-	local layout = Instance.new("UIListLayout", row)
-	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.Padding = UDim.new(0, 6)
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	layout.VerticalAlignment = Enum.VerticalAlignment.Center
-	
-	return row
-end
-
-function MakeSmallBtn(parent, text, color, callback)
-	local b = Instance.new("TextButton")
-	b.Size = UDim2.new(0.3, 0, 1, 0)
-	b.BackgroundColor3 = color
-	b.Text = text
-	b.TextColor3 = Color3.fromRGB(255, 255, 255)
-	b.TextSize = 12
-	b.Font = Enum.Font.GothamBold
-	b.Parent = parent
-	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
-	
-	b.MouseButton1Click:Connect(function()
-		TweenService:Create(b, TweenInfo.new(0.08), {Size = UDim2.new(0.28, 0, 0.9, 0)}):Play()
-		wait(0.08)
-		TweenService:Create(b, TweenInfo.new(0.08), {Size = UDim2.new(0.3, 0, 1, 0)}):Play()
-		callback()
-	end)
-	return b
-end
-
--- Speed Row
-local Row1 = MakeRow(Content, 86)
-MakeSmallBtn(Row1, "100", Color3.fromRGB(50, 50, 70), function()
-	MaxSpeed = 100
-	SpeedLabel.Text = "Max Speed: 100"
-	SpeedValue.Text = "100"
-	print("Max: 100")
-end)
-MakeSmallBtn(Row1, "160", Color3.fromRGB(50, 50, 70), function()
-	MaxSpeed = 160
-	SpeedLabel.Text = "Max Speed: 160"
-	SpeedValue.Text = "160"
-	print("Max: 160")
-end)
-MakeSmallBtn(Row1, "200", Color3.fromRGB(50, 50, 70), function()
-	MaxSpeed = 200
-	SpeedLabel.Text = "Max Speed: 200"
-	SpeedValue.Text = "200"
-	print("Max: 200")
+spawn(function()
+t:Create(wf,TweenInfo.new(0.6),{BackgroundTransparency=0}):Play()wait(0.4)
+t:Create(tl,TweenInfo.new(0.7),{Size=UDim2.new(0.55,0,0,3),Position=UDim2.new(0.225,0,0.24,0)}):Play()
+t:Create(bl,TweenInfo.new(0.7),{Size=UDim2.new(0.55,0,0,3),Position=UDim2.new(0.225,0,0.47,0)}):Play()wait(0.6)
+t:Create(wt,TweenInfo.new(0.5),{TextTransparency=0}):Play()wait(0.2)
+t:Create(st,TweenInfo.new(0.5),{TextTransparency=0}):Play()wait(0.3)
+t:Create(lb,TweenInfo.new(0.5,Enum.EasingStyle.Back),{Size=UDim2.new(0,170,0,65),Position=UDim2.new(0.5,-85,0.55,0)}):Play()
+for i=1,5 do t:Create(lg,TweenInfo.new(0.5),{BackgroundTransparency=0.75}):Play()wait(0.5)t:Create(lg,TweenInfo.new(0.5),{BackgroundTransparency=0.92}):Play()wait(0.5)end
+wait(1.5)t:Create(wf,TweenInfo.new(0.6),{BackgroundTransparency=1}):Play()
+t:Create(wt,TweenInfo.new(0.4),{TextTransparency=1}):Play()
+t:Create(st,TweenInfo.new(0.4),{TextTransparency=1}):Play()
+t:Create(lb,TweenInfo.new(0.4,Enum.EasingStyle.Back),{Size=UDim2.new(0,0,0,0),Position=UDim2.new(0.5,0,0.55,0)}):Play()
+t:Create(tl,TweenInfo.new(0.4),{BackgroundTransparency=1}):Play()
+t:Create(bl,TweenInfo.new(0.4),{BackgroundTransparency=1}):Play()wait(0.7)ws:Destroy()
 end)
 
--- Distance Label
-local DistLabel = Instance.new("TextLabel")
-DistLabel.Size = UDim2.new(1, 0, 0, 20)
-DistLabel.Position = UDim2.new(0, 0, 0, 126)
-DistLabel.BackgroundTransparency = 1
-DistLabel.Text = "Distance: 1000m"
-DistLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-DistLabel.TextSize = 13
-DistLabel.Font = Enum.Font.Gotham
-DistLabel.TextXAlignment = Enum.TextXAlignment.Left
-DistLabel.Parent = Content
+-- GUI
+local sg=Instance.new("ScreenGui")sg.Name="K"sg.ResetOnSpawn=false sg.Parent=pg
+local tg=Instance.new("Frame")tg.Size=UDim2.new(0,62,0,62)tg.Position=UDim2.new(0,9,0.5,-31)tg.BackgroundColor3=Color3.fromRGB(0,200,255)tg.BackgroundTransparency=0.9 tg.BorderSizePixel=0 tg.Parent=sg Instance.new("UICorner",tg).CornerRadius=UDim.new(1,0)
+local tb=Instance.new("TextButton")tb.Size=UDim2.new(0,52,0,52)tb.Position=UDim2.new(0,14,0.5,-26)tb.BackgroundColor3=Color3.fromRGB(30,30,45)tb.Text="P"tb.TextColor3=Color3.fromRGB(0,200,255)tb.TextSize=24 tb.Font=Enum.Font.SourceSansBold tb.AutoButtonColor=false tb.Parent=sg Instance.new("UICorner",tb).CornerRadius=UDim.new(1,0)
+local td=Instance.new("Frame")td.Size=UDim2.new(1,4,1,4)td.Position=UDim2.new(0,-2,0,-2)td.BackgroundColor3=Color3.fromRGB(0,200,255)td.BackgroundTransparency=0.6 td.BorderSizePixel=0 td.ZIndex=0 td.Parent=tb Instance.new("UICorner",td).CornerRadius=UDim.new(1,0)
 
--- Distance Row
-local Row2 = MakeRow(Content, 148)
-MakeSmallBtn(Row2, "500m", Color3.fromRGB(50, 50, 70), function()
-	PatrolDistance = 500
-	DistLabel.Text = "Distance: 500m"
-	print("Dist: 500")
-end)
-MakeSmallBtn(Row2, "1000m", Color3.fromRGB(50, 50, 70), function()
-	PatrolDistance = 1000
-	DistLabel.Text = "Distance: 1000m"
-	print("Dist: 1000")
-end)
-MakeSmallBtn(Row2, "2000m", Color3.fromRGB(50, 50, 70), function()
-	PatrolDistance = 2000
-	DistLabel.Text = "Distance: 2000m"
-	print("Dist: 2000")
-end)
+local pn=Instance.new("Frame")pn.Size=UDim2.new(0,250,0,280)pn.Position=UDim2.new(0,80,0.5,-140)pn.BackgroundColor3=Color3.fromRGB(25,25,35)pn.BorderSizePixel=0 pn.Visible=false pn.Active=true pn.Parent=sg Instance.new("UICorner",pn).CornerRadius=UDim.new(0,12)
+local tr=Instance.new("Frame")tr.Size=UDim2.new(1,0,0,38)tr.BackgroundColor3=Color3.fromRGB(35,35,50)tr.BorderSizePixel=0 tr.Parent=pn Instance.new("UICorner",tr).CornerRadius=UDim.new(0,12)
+local tf=Instance.new("Frame")tf.Size=UDim2.new(1,0,0,12)tf.Position=UDim2.new(0,0,1,-12)tf.BackgroundColor3=Color3.fromRGB(35,35,50)tf.BorderSizePixel=0 tf.Parent=tr
+local tt=Instance.new("TextLabel")tt.Size=UDim2.new(1,-50,1,0)tt.Position=UDim2.new(0,10,0,0)tt.BackgroundTransparency=1 tt.Text="فارم فلوس"tt.TextColor3=Color3.fromRGB(255,255,255)tt.TextSize=16 tt.Font=Enum.Font.SourceSansBold tt.TextXAlignment=Enum.TextXAlignment.Left tt.Parent=tr
+local cb=Instance.new("TextButton")cb.Size=UDim2.new(0,30,0,30)cb.Position=UDim2.new(1,-36,0.5,-15)cb.BackgroundColor3=Color3.fromRGB(50,50,70)cb.Text="-"cb.TextColor3=Color3.fromRGB(255,255,255)cb.TextSize=18 cb.Font=Enum.Font.SourceSansBold cb.AutoButtonColor=false cb.Parent=tr Instance.new("UICorner",cb).CornerRadius=UDim.new(0,8)
 
--- Accel Label
-local AccelLabel = Instance.new("TextLabel")
-AccelLabel.Size = UDim2.new(1, 0, 0, 20)
-AccelLabel.Position = UDim2.new(0, 0, 0, 188)
-AccelLabel.BackgroundTransparency = 1
-AccelLabel.Text = "Acceleration: Normal"
-AccelLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-AccelLabel.TextSize = 13
-AccelLabel.Font = Enum.Font.Gotham
-AccelLabel.TextXAlignment = Enum.TextXAlignment.Left
-AccelLabel.Parent = Content
+local ct=Instance.new("Frame")ct.Size=UDim2.new(1,-16,1,-46)ct.Position=UDim2.new(0,8,0,40)ct.BackgroundTransparency=1 ct.BorderSizePixel=0 ct.Parent=pn
 
--- Accel Row
-local Row3 = MakeRow(Content, 210)
-MakeSmallBtn(Row3, "Slow", Color3.fromRGB(50, 50, 70), function()
-	Acceleration = 1
-	AccelLabel.Text = "Acceleration: Slow"
-	print("Accel: 1")
-end)
-MakeSmallBtn(Row3, "Normal", Color3.fromRGB(50, 50, 70), function()
-	Acceleration = 2
-	AccelLabel.Text = "Acceleration: Normal"
-	print("Accel: 2")
-end)
-MakeSmallBtn(Row3, "Fast", Color3.fromRGB(50, 50, 70), function()
-	Acceleration = 5
-	AccelLabel.Text = "Acceleration: Fast"
-	print("Accel: 5")
-end)
+local pb=Instance.new("TextButton")pb.Size=UDim2.new(1,0,0,46)pb.Position=UDim2.new(0,0,0,0)pb.BackgroundColor3=Color3.fromRGB(200,50,50)pb.Text="Auto: OFF"pb.TextColor3=Color3.fromRGB(255,255,255)pb.TextSize=16 pb.Font=Enum.Font.SourceSansBold pb.AutoButtonColor=false pb.Parent=ct Instance.new("UICorner",pb).CornerRadius=UDim.new(0,10)
 
--- Height Label
-local HeightLabel = Instance.new("TextLabel")
-HeightLabel.Size = UDim2.new(1, 0, 0, 20)
-HeightLabel.Position = UDim2.new(0, 0, 0, 250)
-HeightLabel.BackgroundTransparency = 1
-HeightLabel.Text = "Height: 15"
-HeightLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-HeightLabel.TextSize = 13
-HeightLabel.Font = Enum.Font.Gotham
-HeightLabel.TextXAlignment = Enum.TextXAlignment.Left
-HeightLabel.Parent = Content
+local sl=Instance.new("TextLabel")sl.Size=UDim2.new(0.5,0,0,24)sl.Position=UDim2.new(0,0,0,54)sl.BackgroundTransparency=1 sl.Text="Speed: 160"sl.TextColor3=Color3.fromRGB(180,180,200)sl.TextSize=14 sl.Font=Enum.Font.SourceSans sl.TextXAlignment=Enum.TextXAlignment.Left sl.Parent=ct
 
--- Height Row
-local Row4 = MakeRow(Content, 272)
-MakeSmallBtn(Row4, "H: 10", Color3.fromRGB(50, 50, 70), function()
-	TargetHeight = 10
-	HeightLabel.Text = "Height: 10"
-	print("Height: 10")
-end)
-MakeSmallBtn(Row4, "H: 20", Color3.fromRGB(50, 50, 70), function()
-	TargetHeight = 20
-	HeightLabel.Text = "Height: 20"
-	print("Height: 20")
-end)
-MakeSmallBtn(Row4, "H: 30", Color3.fromRGB(50, 50, 70), function()
-	TargetHeight = 30
-	HeightLabel.Text = "Height: 30"
-	print("Height: 30")
-end)
+-- DRAG FUNCTION
+function md(f,h)local d=false local ds=nil local sp=nil h.InputBegan:Connect(function(i)if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then d=true ds=i.Position sp=f.Position end end)h.InputEnded:Connect(function(i)if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then d=false end end)u.InputChanged:Connect(function(i)if d and(i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch)then local de=i.Position-ds f.Position=UDim2.new(sp.X.Scale,sp.X.Offset+de.X,sp.Y.Scale,sp.Y.Offset+de.Y)end end)end
 
--- Stop Button
-local StopBtn = Instance.new("TextButton")
-StopBtn.Size = UDim2.new(1, 0, 0, 36)
-StopBtn.Position = UDim2.new(0, 0, 0, 312)
-StopBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-StopBtn.Text = "STOP"
-StopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-StopBtn.TextSize = 14
-StopBtn.Font = Enum.Font.GothamBold
-StopBtn.Parent = Content
-Instance.new("UICorner", StopBtn).CornerRadius = UDim.new(0, 8)
+md(tb,tb)
+md(pn,tr)
 
--- ══════════════════════════════════════
---   PATROL SYSTEM
--- ══════════════════════════════════════
+function mb(tx,pr,po,cb)
+local b=Instance.new("TextButton")b.Size=UDim2.new(0.31,0,0,34)b.Position=po b.BackgroundColor3=Color3.fromRGB(50,50,70)b.Text=tx b.TextColor3=Color3.fromRGB(255,255,255)b.TextSize=13 b.Font=Enum.Font.SourceSansBold b.AutoButtonColor=false b.Parent=pr Instance.new("UICorner",b).CornerRadius=UDim.new(0,8)
+b.MouseEnter:Connect(function()t:Create(b,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(65,65,90)}):Play()end)
+b.MouseLeave:Connect(function()t:Create(b,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(50,50,70)}):Play()end)
+b.MouseButton1Click:Connect(function()t:Create(b,TweenInfo.new(0.1),{Size=UDim2.new(0.29,0,0,32)}):Play()wait(0.1)t:Create(b,TweenInfo.new(0.1),{Size=UDim2.new(0.31,0,0,34)}):Play()cb()end)return b end
 
-local PatrolEnabled = false
-local PatrolDistance = 1000
-local MaxSpeed = 160
-local CurrentSpeed = 0
-local Acceleration = 2
-local UpSpeed = 0.5
-local TargetHeight = 15
-local CurrentCar = nil
-local StartPos = nil
-local StartCFrame = nil
-local GoingForward = true
-local IsTurning = false
+local dl=Instance.new("TextLabel")dl.Size=UDim2.new(1,0,0,20)dl.Position=UDim2.new(0,0,0,84)dl.BackgroundTransparency=1 dl.Text="Distance"dl.TextColor3=Color3.fromRGB(150,150,170)dl.TextSize=12 dl.Font=Enum.Font.SourceSans dl.TextXAlignment=Enum.TextXAlignment.Left dl.Parent=ct
+mb("300",ct,UDim2.new(0,0,0,106),function()pd=300 end)
+mb("200",ct,UDim2.new(0.345,0,0,106),function()pd=200 end)
+mb("100",ct,UDim2.new(0.69,0,0,106),function()pd=100 end)
 
-local function GetPlayerCar()
-	local char = LocalPlayer.Character
-	if not char then return nil end
-	local humanoid = char:FindFirstChildOfClass("Humanoid")
-	if not humanoid then return nil end
-	
-	local seat = humanoid.SeatPart
-	if seat and seat:IsA("VehicleSeat") then
-		return seat.Parent, seat
-	end
-	
-	local pc = Workspace:FindFirstChild("PlayersCars")
-	if pc then
-		for _, car in pairs(pc:GetChildren()) do
-			local vseat = car:FindFirstChild("VehicleSeat") or car:FindFirstChild("DriveSeat")
-			if vseat and vseat.Occupant == humanoid then
-				return car, vseat
-			end
-		end
-	end
-	
-	for _, obj in pairs(Workspace:GetDescendants()) do
-		if obj:IsA("VehicleSeat") and obj.Occupant == humanoid then
-			return obj.Parent, obj
-		end
-	end
-	return nil, nil
-end
+local al=Instance.new("TextLabel")al.Size=UDim2.new(1,0,0,20)al.Position=UDim2.new(0,0,0,146)al.BackgroundTransparency=1 al.Text="Acceleration"al.TextColor3=Color3.fromRGB(150,150,170)al.TextSize=12 al.Font=Enum.Font.SourceSans al.TextXAlignment=Enum.TextXAlignment.Left al.Parent=ct
+mb("Fast",ct,UDim2.new(0,0,0,168),function()ac=5 end)
+mb("Normal",ct,UDim2.new(0.345,0,0,168),function()ac=2 end)
+mb("Slow",ct,UDim2.new(0.69,0,0,168),function()ac=1 end)
 
-local function GetCarRoot(car)
-	if not car then return nil end
-	if car.PrimaryPart then return car.PrimaryPart end
-	local biggest = nil
-	local maxSize = 0
-	for _, v in pairs(car:GetDescendants()) do
-		if v:IsA("BasePart") then
-			local size = v.Size.Magnitude
-			if size > maxSize then
-				maxSize = size
-				biggest = v
-			end
-		end
-	end
-	return biggest
-end
+local hl=Instance.new("TextLabel")hl.Size=UDim2.new(1,0,0,20)hl.Position=UDim2.new(0,0,0,206)hl.BackgroundTransparency=1 hl.Text="Height"hl.TextColor3=Color3.fromRGB(150,150,170)hl.TextSize=12 hl.Font=Enum.Font.SourceSans hl.TextXAlignment=Enum.TextXAlignment.Left hl.Parent=ct
+mb("30",ct,UDim2.new(0,0,0,228),function()th=30 end)
+mb("20",ct,UDim2.new(0.345,0,0,228),function()th=20 end)
+mb("10",ct,UDim2.new(0.69,0,0,228),function()th=10 end)
 
-local function EnablePatrol()
-	local car, seat = GetPlayerCar()
-	if not car then
-		warn("اركب سيارة اولاً!")
-		return
-	end
-	
-	CurrentCar = car
-	local root = GetCarRoot(car)
-	if not root then return end
-	
-	StartPos = root.Position
-	StartCFrame = root.CFrame
-	
-	for _, v in pairs(root:GetChildren()) do
-		if v.Name == "LRT_PatrolVel" or v.Name == "LRT_PatrolGyro" then
-			v:Destroy()
-		end
-	end
-	
-	local bg = Instance.new("BodyGyro")
-	bg.Name = "LRT_PatrolGyro"
-	bg.MaxTorque = Vector3.new(999999, 999999, 999999)
-	bg.P = 50000
-	bg.CFrame = root.CFrame
-	bg.Parent = root
-	
-	local bv = Instance.new("BodyVelocity")
-	bv.Name = "LRT_PatrolVel"
-	bv.MaxForce = Vector3.new(999999, 999999, 999999)
-	bv.Velocity = Vector3.new(0, 0, 0)
-	bv.Parent = root
-	
-	CurrentSpeed = 0
-	GoingForward = true
-	IsTurning = false
-	PatrolEnabled = true
-	print("Patrol STARTED")
-end
+-- Toggle effects
+tb.MouseEnter:Connect(function()t:Create(tb,TweenInfo.new(0.2),{Size=UDim2.new(0,56,0,56),Position=UDim2.new(0,12,0.5,-28)}):Play()t:Create(td,TweenInfo.new(0.2),{BackgroundTransparency=0.3}):Play()t:Create(tg,TweenInfo.new(0.2),{BackgroundTransparency=0.8,Size=UDim2.new(0,68,0,68),Position=UDim2.new(0,6,0.5,-34)}):Play()end)
+tb.MouseLeave:Connect(function()t:Create(tb,TweenInfo.new(0.2),{Size=UDim2.new(0,52,0,52),Position=UDim2.new(0,14,0.5,-26)}):Play()t:Create(td,TweenInfo.new(0.2),{BackgroundTransparency=0.6}):Play()t:Create(tg,TweenInfo.new(0.2),{BackgroundTransparency=0.9,Size=UDim2.new(0,62,0,62),Position=UDim2.new(0,9,0.5,-31)}):Play()end)
 
-local function DisablePatrol()
-	PatrolEnabled = false
-	IsTurning = false
-	CurrentCar = nil
-	StartPos = nil
-	StartCFrame = nil
-	CurrentSpeed = 0
-	
-	for _, car in pairs(Workspace:GetDescendants()) do
-		if car:IsA("Model") then
-			local root = GetCarRoot(car)
-			if root then
-				for _, v in pairs(root:GetChildren()) do
-					if v.Name == "LRT_PatrolVel" or v.Name == "LRT_PatrolGyro" then
-						v:Destroy()
-					end
-				end
-			end
-		end
-	end
-	print("Patrol ST
+-- Patrol System
+local pe=false local pd=1000 local ms=160 local cs=0 local ac=2 local us=0.5 local th=15 local cc=nil local sp=nil local sc=nil local gf=true local it=false
+
+function gc()
+local c=lp.Character if not c then return nil end local h=c:FindFirstChildOfClass("Humanoid") if not h then return nil end
+local s=h.SeatPart if s and s:IsA("VehicleSeat") then return s.Parent,s end
+local pc=w:FindFirstChild("PlayersCars") if pc then for _,ca in pairs(pc:GetChildren()) do local vs=ca:FindFirstChild("VehicleSeat") or ca:FindFirstChild("DriveSeat") if vs and vs.Occupant==h then return ca,vs end end end
+for _,o in pairs(w:GetDescendants()) do if o:IsA("VehicleSeat") and o.Occupant==h then return o.Parent,o end end return nil,nil end
+
+function gr(ca) if not ca then return nil end if ca.PrimaryPart then return ca.PrimaryPart end local b=nil local m=0 for _,v in pairs(ca:GetDescendants()) do if v:IsA("BasePart") then local z=v.Size.Magnitude if z>m then m=z b=v end end end return b end
+
+function ep()
+local ca,se=gc() if not ca then warn("Sit in a car first!") return end
+cc=ca local rt=gr(ca) if not rt then return end
+sp=rt.Position sc=rt.CFrame
+for _,v in pairs(rt:GetChildren()) do if v.Name=="KVN_PatrolVel" or v.Name=="KVN_PatrolGyro" then v:Destroy() end end
+local bg=Instance.new("BodyGyro")bg.Name="KVN_PatrolGyro"bg.MaxTorque=Vector3.new(999999,999999,999999)bg.P=50000 bg.CFrame=rt.CFrame bg.Parent=rt
+local bv=Instance.new("BodyVelocity")bv.Name="KVN_PatrolVel"bv.MaxForce=Vector3.new(999999,999999,999999)bv.Velocity=Vector3.new(0,0,0)bv.Parent=rt
+cs=0 gf=true it=false pe=true end
+
+function dp()
+pe=false it=false cc=nil sp=nil sc=nil cs=0
+for _,ca in pairs(w:GetDescendants()) do if ca:IsA("Model") then local rt=gr(ca) if rt then for _,v in pairs(rt:GetChildren()) do if v.Name=="KVN_PatrolVel" or v.Name=="KVN_PatrolGyro" then v:Destroy() end end end end end end
+
+function up()
+if not pe or not cc or not sp or it then return end
+local rt=gr(cc) if not rt then return end
+local bv=rt:FindFirstChild("KVN_PatrolVel") local bg=rt:FindFirstChild("KVN_PatrolGyro") if not bv or not bg then return end
+if cs<ms then cs=cs+ac if cs>ms then cs=ms end end
+local cy=rt.Position.Y local uv=0 if cy<th then uv=us end
+if gf then
+local d=(rt.Position-sp).Magnitude
+if d>=pd then it=true cs=0 bv.Velocity=Vector3.new(0,0,0) spawn(function()
+local tc=sc*CFrame.Angles(0,math.pi,0) local sf=bg.CFrame local dr=1.5 local el=0
+while el<dr do el=el+0.03 bg.CFrame=sf:Lerp(tc,el/dr) wait(0.03) end
+bg.CFrame=tc gf=false it=false cs=0 end)
+else local lk=sc.LookVector bv.Velocity=Vector3.new(lk.X*cs,uv,lk.Z*cs) bg.CFrame=sc end
+else
+local d=(rt.Position-sp).Magnitude
+if d<=20 then it=true cs=0 bv.Velocity=Vector3.new(0,0,0) spawn(function()
+local sf=bg.CFrame local dr=1.5 local el=0
+while el<dr do el=el+0.03 bg.CFrame=sf:Lerp(sc,el/dr) wait(0.03) end
+bg.CFrame=sc gf=true it=false cs=0 end)
+else local bk=-sc.LookVector bv.Velocity=Vector3.new(bk.X*cs,uv,bk.Z*cs) bg.CFrame=sc*CFrame.Angles(0,math.pi,0) end end end
+
+-- Events
+pb.MouseButton1Click:Connect(function()
+if not pe then ep() pb.Text="Auto: ON" pb.BackgroundColor3=Color3.fromRGB(0,180,80)
+else dp() pb.Text="Auto: OFF" pb.BackgroundColor3=Color3.fromRGB(200,50,50) end end)
+
+tb.MouseButton1Click:Connect(function() pn.Visible=not pn.Visible if pn.Visible then t:Create(tg,TweenInfo.new(0.3),{BackgroundTransparency=0.75}):Play() else t:Create(tg,TweenInfo.new(0.3),{BackgroundTransparency=0.9}):Play() end end)
+cb.MouseButton1Click:Connect(function() pn.Visible=false t:Create(tg,TweenInfo.new(0.3),{BackgroundTransparency=0.9}):Play() end)
+
+r.RenderStepped:Connect(function() if pe then up() sl.Text="Speed: "..math.floor(cs) end end)
+
+spawn(function() while sg.Parent do if pe then local ca=gc() if not ca then dp() pb.Text="Auto: OFF" pb.BackgroundColor3=Color3.fromRGB(200,50,50) end end wait(0.5) end end)
+
+print("KVN Loaded")print("Welcome "..lp.DisplayName)print("LRT")
