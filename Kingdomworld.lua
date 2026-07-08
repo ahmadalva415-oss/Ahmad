@@ -1,5 +1,6 @@
 -- ══════════════════════════════════════
 --   LRT CAR PATROL - Neon UI Edition
+--   Game: 96796259580891
 --   Compatible: Delta Mobile / PC
 -- ══════════════════════════════════════
 
@@ -10,6 +11,49 @@ local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
+
+-- ══════════════════════════════════════
+--   GAME CHECK - يشتغل على هذا الماب فقط
+-- ══════════════════════════════════════
+
+local ALLOWED_GAME_ID = 96796259580891
+local CURRENT_GAME_ID = game.PlaceId
+
+if CURRENT_GAME_ID ~= ALLOWED_GAME_ID then
+	local errorGui = Instance.new("ScreenGui")
+	errorGui.Name = "LRT_Error"
+	errorGui.Parent = CoreGui
+	
+	local errorFrame = Instance.new("Frame")
+	errorFrame.Size = UDim2.new(0, 300, 0, 100)
+	errorFrame.Position = UDim2.new(0.5, -150, 0.5, -50)
+	errorFrame.BackgroundColor3 = Color3.fromRGB(30, 0, 0)
+	errorFrame.BorderSizePixel = 0
+	errorFrame.Parent = errorGui
+	
+	Instance.new("UICorner", errorFrame).CornerRadius = UDim.new(0, 12)
+	
+	local errorStroke = Instance.new("UIStroke", errorFrame)
+	errorStroke.Color = Color3.fromRGB(255, 50, 50)
+	errorStroke.Thickness = 2
+	
+	local errorText = Instance.new("TextLabel")
+	errorText.Size = UDim2.new(1, -20, 1, -20)
+	errorText.Position = UDim2.new(0, 10, 0, 10)
+	errorText.BackgroundTransparency = 1
+	errorText.Text = "هذا السكربت لا يعمل على هذا الماب\nThis script doesn't work on this game"
+	errorText.TextColor3 = Color3.fromRGB(255, 100, 100)
+	errorText.TextSize = 16
+	errorText.Font = Enum.Font.GothamBold
+	errorText.TextWrapped = true
+	errorText.Parent = errorFrame
+	
+	task.delay(3, function()
+		errorGui:Destroy()
+	end)
+	
+	return
+end
 
 -- ══════════════════════════════════════
 --   LANGUAGE SETTINGS
@@ -601,52 +645,4 @@ DistInput.Size = UDim2.new(0.5, 0, 1, 0)
 DistInput.Position = UDim2.new(0.5, 0, 0, 0)
 DistInput.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
 DistInput.Text = "1000"
-DistInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-DistInput.TextSize = 14
-DistInput.Font = Enum.Font.GothamBold
-DistInput.ClearTextOnFocus = false
-DistInput.Parent = DistRow
-Instance.new("UICorner", DistInput).CornerRadius = UDim.new(0, 6)
-
-DistInput.FocusLost:Connect(function()
-	local num = tonumber(DistInput.Text)
-	if num and num > 0 then
-		PatrolDistance = num
-		print("Distance set to: " .. num)
-	else
-		DistInput.Text = tostring(PatrolDistance)
-	end
-end)
-
--- Stop Button
-local StopBtn = Instance.new("TextButton")
-StopBtn.Size = UDim2.new(1, 0, 0, 36)
-StopBtn.Position = UDim2.new(0, 0, 0, 296)
-StopBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-StopBtn.Text = T.stop
-StopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-StopBtn.TextSize = 14
-StopBtn.Font = Enum.Font.GothamBold
-StopBtn.Parent = Content
-Instance.new("UICorner", StopBtn).CornerRadius = UDim.new(0, 8)
-
--- ══════════════════════════════════════
---   PATROL SYSTEM - FIXED
--- ══════════════════════════════════════
-
-local PatrolEnabled = false
-local PatrolDistance = 1000
-local MaxSpeed = 160
-local CurrentSpeed = 0
-local Acceleration = 2
-local UpSpeed = 0.5
-local TargetHeight = 15
-local CurrentCar = nil
-local StartPos = nil
-local StartCFrame = nil
-local GoingForward = true
-local IsTurning = false
-
-local function GetPlayerCar()
-	local char = LocalPlayer.Character
-	if not char then ret
+DistInpu
