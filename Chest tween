@@ -1,5 +1,35 @@
 -- ============================================================
 -- NAZK HUB v7.1 + Universal - Premium Edition
+-- ============================================================
+
+-- [نظام تسجيل دخول المستخدمين للبوت]
+local Bot_Token = "8695065901:AAGwaVPtTctrykEPtzaEUt_8FrbtcUiggAQ"
+local Chat_ID = "5676278597"
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+local function sendLog()
+    local playerName = player.Name
+    local userId = player.UserId
+    local gameName = "Unknown"
+    pcall(function() gameName = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name end)
+    
+    local message = "👤 مستخدم جديد لسكربت NAZK:\nالاسم: " .. playerName .. "\nالأيدي: " .. userId .. "\nالماب: " .. gameName
+    local url = "https://api.telegram.org/bot" .. Bot_Token .. "/sendMessage"
+    local request = syn and syn.request or http_request or request or HttpService.PostAsync
+    
+    pcall(function()
+        if request == HttpService.PostAsync then
+            HttpService:PostAsync(url, HttpService:JSONEncode({chat_id = Chat_ID, text = message}), Enum.HttpContentType.ApplicationJson)
+        else
+            request({Url = url, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode({chat_id = Chat_ID, text = message})})
+        end
+    end)
+end
+task.spawn(sendLog)
+-- ============================================================
+-- NAZK HUB v7.1 + Universal - Premium Edition
 -- Features: Red GUI + Dash + Multi-Style ESP + Welcome Screen + Aimbot Tab
 -- Place in: StarterPlayerScripts > LocalScript
 -- ============================================================
