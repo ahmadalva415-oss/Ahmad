@@ -2132,3 +2132,436 @@ player.CharacterAdded:Connect(function(char)
 end)
 
 print("[NAZK HUB v7.1] Premium Universal Edition Loaded! Welcome, " .. player.Name)
+
+-- ============================================================
+-- NAZK HUB - Simple Auto Farm (Universal)
+-- Works on ALL games
+-- Features: No cooldown, Max speed 300, Instant next chest
+-- ============================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+-- ============================================================
+-- CONFIG
+-- ============================================================
+local CONFIG = {
+    FarmSpeed = 300,  -- Default max speed
+    SearchDistance = 500,  -- How far to search for chests
+    InstantNext = true  -- Go to next chest immediately after touching
+}
+
+-- ============================================================
+-- AUTO FARM SYSTEM
+-- ============================================================
+local autoEnabled = false
+local currentConnection = nil
+local visitedChests = {}
+local farmedCount = 0
+
+local function getHRP()
+    local char = player.Character
+    if char then
+        return char:FindFirstChild("HumanoidRootPart")
+    end
+    return nil
+end
+
+local function getHumanoid()
+    local char = player.Character
+    if char then
+        return char:FindFirstChildOfClass("Humanoid")
+    end
+    return nil
+end
+
+local function getChestPos(chest)
+    if not chest or not chest.Parent then return nil end
+    if chest:IsA("Model") then
+        if chest.PrimaryPart then
+            return chest.PrimaryPart.Position
+        end
+        local hitbox = chest:FindFirstChild("Hitbox")
+        if hitbox and hitbox:IsA("BasePart") then
+            return hitbox.Position
+        end
+        local aura = chest:FindFirstChild("Chest Aura")
+        if aura and aura:IsA("BasePart") then
+            return aura.Position
+        end
+        for _, part in ipairs(chest:GetDescendants()) do
+            if part:IsA("BasePart") then
+                return part.Position
+            end
+        end
+    elseif chest:IsA("BasePart") then
+        return chest.Position
+    end
+    return nil
+end
+
+local function getChests()
+    local chests = {}
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        -- Search for anything named "Chest" or similar
+        if obj:IsA("Model") and (obj.Name == "Chest" or obj.Name:lower():find("chest")) then
+            table.insert(chests, obj)
+        elseif obj:IsA("BasePart") and (obj.Name == "Chest" or obj.Name:lower():find("chest")) then
+            table.insert(chests, obj)
+        end
+    end
+    return chests
+end
+
+local function isVisited(chestPos)
+    if not chestPos then return true end
+    for _, visitedPos in ipairs(visitedChests) do
+        if (visitedPos - chestPos).Magnitude < 15 then
+            return true
+        end
+    end
+    return false
+end
+
+local function smoothFlyTo(targetPos, onComplete)
+    local hrp = getHRP()
+    if not hrp then
+        if onComplete then task.defer(onComplete) end
+        return
+    end
+    if currentConnection then
+        currentConnection:Disconnect()
+        currentConnection = nil
+    end
+    local startCF = hrp.CFrame
+    local targetCF = CFrame.new(targetPos + Vector3.new(0, 2, 0))
+    local distance = (startCF.Position - targetCF.Position).Magnitude
+    local duration = math.max(distance / CONFIG.FarmSpeed, 0.005)
+    local startTime = tick()
+
+    if distance < 3 then
+        hrp.CFrame = targetCF
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        if onComplete then task.defer(onComplete) end
+        return
+    end
+
+    currentConnection = RunService.Heartbeat:Connect(function()
+        if not hrp or not hrp.Parent then
+            if currentConnection then currentConnection:Disconnect() currentConnection = nil end
+            return
+        end
+
+        -- Check if we touched the chest (close enough)
+        local currentDist = (hrp.Position - targetCF.Position).Magnitude
+        if currentDist < 5 then
+            hrp.CFrame = targetCF
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            if currentConnection then currentConnection:Disconnect() currentConnection = nil end
+            if onComplete then task.defer(onComplete) end
+            return
+        end
+
+        local elapsed = tick() - startTime
+        local alpha = elapsed / duration
+        if alpha >= 1 then
+            hrp.CFrame = targetCF
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            if currentConnection then currentConnection:Disconnect() currentConnection = nil end
+            if onComplete then task.defer(onComplete) end
+            return
+        end
+        alpha = alpha * alpha * (3 - 2 * alpha)
+        hrp.CFrame = startCF:Lerp(targetCF, alpha)
+        hrp.AssemblyLinearVelocity = Vector3.zero
+    end)
+end
+
+local function stopAuto()
+    if not autoEnabled then return end
+    autoEnabled = false
+    visitedChests = {}
+    farmedCount = 0
+    if currentConnection then
+        currentConnection:Disconnect()
+        currentConnection = nil
+    end
+    local humanoid = getHumanoid()
+    if humanoid then
+        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        humanoid.AutoRotate = true
+    end
+    print("[NAZK] Auto Farm Stopped")
+end
+
+local function startAuto()
+    if autoEnabled then return end
+    autoEnabled = true
+    visitedChests = {}
+    farmedCount = 0
+    print("[NAZK] Auto Farm Started!")
+
+    local function nextChest()
+        if not autoEnabled then return end
+        local chests = getChests()
+        if #chests == 0 then
+            task.wait(0.5)
+            task.defer(nextChest)
+            return
+        end
+        local hrp = getHRP()
+        if not hrp then
+            task.wait(0.5)
+            task.defer(nextChest)
+            return
+        end
+
+        -- Find nearest unvisited chest
+        local bestChest = nil
+        local bestDist = math.huge
+        for _, chest in ipairs(chests) do
+            local pos = getChestPos(chest)
+            if pos and not isVisited(pos) then
+                local d = (hrp.Position - pos).Magnitude
+                if d < bestDist and d < CONFIG.SearchDistance then
+                    bestDist = d
+                    bestChest = chest
+                end
+            end
+        end
+
+        -- If all visited, reset and find nearest
+        if not bestChest then
+            visitedChests = {}
+            for _, chest in ipairs(chests) do
+                local pos = getChestPos(chest)
+                if pos then
+                    local d = (hrp.Position - pos).Magnitude
+                    if d < bestDist and d < CONFIG.SearchDistance then
+                        bestDist = d
+                        bestChest = chest
+                    end
+                end
+            end
+        end
+
+        if not bestChest then
+            task.wait(1)
+            task.defer(nextChest)
+            return
+        end
+
+        local pos = getChestPos(bestChest)
+        if pos then
+            table.insert(visitedChests, pos)
+            farmedCount = farmedCount + 1
+            print("[NAZK] Farming chest #" .. farmedCount)
+
+            smoothFlyTo(pos, function()
+                if not autoEnabled then return end
+                -- INSTANTLY go to next chest (no cooldown!)
+                task.defer(nextChest)
+            end)
+        else
+            task.wait(0.5)
+            task.defer(nextChest)
+        end
+    end
+    nextChest()
+end
+
+-- ============================================================
+-- GUI
+-- ============================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "NAZK_Farm"
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
+ScreenGui.ResetOnSpawn = false
+
+-- Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.Size = UDim2.new(0, 220, 0, 180)
+MainFrame.Position = UDim2.new(0, 20, 0.5, -90)
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = MainFrame
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(255, 50, 80)
+stroke.Thickness = 2
+stroke.Parent = MainFrame
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Parent = MainFrame
+Title.BackgroundTransparency = 1
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Position = UDim2.new(0, 0, 0, 5)
+Title.Font = Enum.Font.GothamBold
+Title.Text = "NAZK FARM"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 18
+
+-- Speed Label
+local SpeedLabel = Instance.new("TextLabel")
+SpeedLabel.Parent = MainFrame
+SpeedLabel.BackgroundTransparency = 1
+SpeedLabel.Size = UDim2.new(1, -20, 0, 20)
+SpeedLabel.Position = UDim2.new(0, 10, 0, 35)
+SpeedLabel.Font = Enum.Font.Gotham
+SpeedLabel.Text = "Speed: 300"
+SpeedLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+SpeedLabel.TextSize = 12
+
+-- Speed Slider Background
+local SliderBg = Instance.new("Frame")
+SliderBg.Parent = MainFrame
+SliderBg.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+SliderBg.BorderSizePixel = 0
+SliderBg.Size = UDim2.new(0.8, 0, 0, 8)
+SliderBg.Position = UDim2.new(0.1, 0, 0, 58)
+
+local sliderCorner = Instance.new("UICorner")
+sliderCorner.CornerRadius = UDim.new(0, 4)
+sliderCorner.Parent = SliderBg
+
+-- Speed Slider Fill
+local SliderFill = Instance.new("Frame")
+SliderFill.Parent = SliderBg
+SliderFill.BackgroundColor3 = Color3.fromRGB(255, 50, 80)
+SliderFill.BorderSizePixel = 0
+SliderFill.Size = UDim2.new(1, 0, 1, 0)
+
+local fillCorner = Instance.new("UICorner")
+fillCorner.CornerRadius = UDim.new(0, 4)
+fillCorner.Parent = SliderFill
+
+-- Status
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Parent = MainFrame
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Size = UDim2.new(1, -20, 0, 20)
+StatusLabel.Position = UDim2.new(0, 10, 0, 75)
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.Text = "Status: Idle"
+StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+StatusLabel.TextSize = 12
+
+-- Count
+local CountLabel = Instance.new("TextLabel")
+CountLabel.Parent = MainFrame
+CountLabel.BackgroundTransparency = 1
+CountLabel.Size = UDim2.new(1, -20, 0, 20)
+CountLabel.Position = UDim2.new(0, 10, 0, 95)
+CountLabel.Font = Enum.Font.Gotham
+CountLabel.Text = "Chests: 0"
+CountLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+CountLabel.TextSize = 12
+
+-- Toggle Button
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Parent = MainFrame
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 80)
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.Size = UDim2.new(0.8, 0, 0, 32)
+ToggleBtn.Position = UDim2.new(0.1, 0, 0, 125)
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.Text = "START FARM"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.TextSize = 14
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 6)
+btnCorner.Parent = ToggleBtn
+
+-- Draggable
+local dragging = false
+local dragStart, startPos
+
+MainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+    end
+end)
+
+MainFrame.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+MainFrame.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+-- Speed Slider Logic
+local sliderDragging = false
+
+SliderBg.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        sliderDragging = true
+        local pos = math.clamp((input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0, 1)
+        CONFIG.FarmSpeed = math.floor(50 + (pos * 250))  -- 50 to 300
+        SliderFill.Size = UDim2.new(pos, 0, 1, 0)
+        SpeedLabel.Text = "Speed: " .. CONFIG.FarmSpeed
+    end
+end)
+
+SliderBg.InputChanged:Connect(function(input)
+    if sliderDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local pos = math.clamp((input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0, 1)
+        CONFIG.FarmSpeed = math.floor(50 + (pos * 250))  -- 50 to 300
+        SliderFill.Size = UDim2.new(pos, 0, 1, 0)
+        SpeedLabel.Text = "Speed: " .. CONFIG.FarmSpeed
+    end
+end)
+
+SliderBg.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        sliderDragging = false
+    end
+end)
+
+-- Toggle Logic
+ToggleBtn.MouseButton1Click:Connect(function()
+    if autoEnabled then
+        stopAuto()
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 80)
+        ToggleBtn.Text = "START FARM"
+        StatusLabel.Text = "Status: Idle"
+        StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+    else
+        startAuto()
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 255, 100)
+        ToggleBtn.Text = "STOP FARM"
+        StatusLabel.Text = "Status: Farming..."
+        StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+    end
+end)
+
+-- Update Loop
+task.spawn(function()
+    while task.wait(0.3) do
+        CountLabel.Text = "Chests: " .. farmedCount
+    end
+end)
+
+-- Respawn handler
+player.CharacterAdded:Connect(function(char)
+    task.delay(0.5, function()
+        if autoEnabled then startAuto() end
+    end)
+end)
+
+print("[NAZK] Universal Auto Farm Loaded! | Max Speed: 300 | No Cooldown")
