@@ -1838,53 +1838,237 @@ CreateToggle(visualContainer, "Full Bright", false, function(enabled)
     end
 end)
 
--- Teleport Tab - COMING SOON
-local TPTab = CreateTab("Teleport", "T")
-local _, tpContainer = CreateSection(TPTab, "Teleport System")
+-- ============================================================
+-- SERVER HOP SYSTEM
+-- ============================================================
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local placeId = game.PlaceId
+local jobId = game.JobId
 
-local ComingSoonFrame = Create("Frame", {
-    Parent = tpContainer,
+local ServerHop_Config = {
+    MaxPlayers = 1,
+    RetryDelay = 2,
+    RetryLimit = 10
+}
+
+local isHopping = false
+local visitedServers = {}
+
+local function getServers(cursor)
+    local url = ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100"):format(placeId)
+    if cursor then
+        url = url .. "&cursor=" .. cursor
+    end
+
+    local success, result = pcall(function()
+        return game:HttpGet(url)
+    end)
+
+    if success then
+        return HttpService:JSONDecode(result)
+    else
+        warn("[NAZK] Failed to fetch servers: " .. tostring(result))
+        return nil
+    end
+end
+
+local function findLowPlayerServer()
+    local allServers = {}
+    local cursor = nil
+    local pages = 0
+
+    repeat
+        local data = getServers(cursor)
+        if not data then break end
+
+        for _, server in ipairs(data.data) do
+            if server.id ~= jobId and server.playing <= ServerHop_Config.MaxPlayers then
+                if not visitedServers[server.id] then
+                    table.insert(allServers, server)
+                end
+            end
+        end
+
+        cursor = data.nextPageCursor
+        pages = pages + 1
+        task.wait(0.1)
+    until not cursor or pages >= 5 or #allServers >= 20
+
+    -- Sort by lowest player count first
+    table.sort(allServers, function(a, b)
+        return a.playing < b.playing
+    end)
+
+    return allServers
+end
+
+local function serverHop()
+    if isHopping then return end
+    isHopping = true
+
+    local tries = 0
+    local servers = {}
+
+    repeat
+        servers = findLowPlayerServer()
+        tries = tries + 1
+
+        if #servers == 0 then
+            task.wait(ServerHop_Config.RetryDelay)
+        end
+    until #servers > 0 or tries >= ServerHop_Config.RetryLimit
+
+    if #servers > 0 then
+        local target = servers[1]
+        visitedServers[target.id] = true
+        print("[NAZK] Hopping to server with " .. target.playing .. " player(s) | JobId: " .. target.id)
+        TeleportService:TeleportToPlaceInstance(placeId, target.id, player)
+    else
+        warn("[NAZK] No low-player servers found after " .. tries .. " attempts.")
+        isHopping = false
+    end
+end
+
+local function serverHopRandom()
+    if isHopping then return end
+    isHopping = true
+
+    local allServers = {}
+    local cursor = nil
+    local pages = 0
+
+    repeat
+        local data = getServers(cursor)
+        if not data then break end
+
+        for _, server in ipairs(data.data) do
+            if server.id ~= jobId and not visitedServers[server.id] then
+                table.insert(allServers, server)
+            end
+        end
+
+        cursor = data.nextPageCursor
+        pages = pages + 1
+        task.wait(0.1)
+    until not cursor or pages >= 5
+
+    if #allServers > 0 then
+        local target = allServers[math.random(1, #allServers)]
+        visitedServers[target.id] = true
+        print("[NAZK] Hopping to random server | Players: " .. target.playing .. " | JobId: " .. target.id)
+        TeleportService:TeleportToPlaceInstance(placeId, target.id, player)
+    else
+        warn("[NAZK] No available servers found.")
+        isHopping = false
+    end
+end
+-- ============================================================
+-- SERVER HOP TAB
+-- ============================================================
+local ServerHopTab = CreateTab("Server Hop", "H")
+local _, shContainer = CreateSection(ServerHopTab, "Server Hopper")
+
+-- Status Display
+local SH_StatusFrame = Create("Frame", {
+    Parent = shContainer,
     BackgroundColor3 = CONFIG.Theme.Secondary,
     BorderSizePixel = 0,
-    Size = UDim2.new(1, 0, 0, 200)
+    Size = UDim2.new(1, 0, 0, 80)
 })
-AddCorner(ComingSoonFrame, 12)
-AddStroke(ComingSoonFrame, CONFIG.Theme.Accent, 1)
+AddCorner(SH_StatusFrame, 10)
+AddStroke(SH_StatusFrame, CONFIG.Theme.Accent, 1)
 
-local ComingSoonIcon = Create("TextLabel", {
-    Parent = ComingSoonFrame,
+local SH_StatusIcon = Create("TextLabel", {
+    Parent = SH_StatusFrame,
     BackgroundTransparency = 1,
-    Size = UDim2.new(1, 0, 0, 60),
-    Position = UDim2.new(0, 0, 0, 30),
+    Size = UDim2.new(1, 0, 0, 30),
+    Position = UDim2.new(0, 0, 0, 8),
     Font = Enum.Font.GothamBlack,
-    Text = "🔜",
+    Text = "🌐",
     TextColor3 = CONFIG.Theme.Accent,
-    TextSize = 48
+    TextSize = 28
 })
 
-local ComingSoonText = Create("TextLabel", {
-    Parent = ComingSoonFrame,
+local SH_StatusText = Create("TextLabel", {
+    Parent = SH_StatusFrame,
     BackgroundTransparency = 1,
-    Size = UDim2.new(1, -20, 0, 30),
-    Position = UDim2.new(0, 10, 0, 95),
+    Size = UDim2.new(1, -20, 0, 20),
+    Position = UDim2.new(0, 10, 0, 38),
     Font = Enum.Font.GothamBold,
-    Text = "COMING SOON",
+    Text = "Ready to Hop",
     TextColor3 = CONFIG.Theme.Text,
-    TextSize = 24
+    TextSize = 14
 })
 
-local ComingSoonSub = Create("TextLabel", {
-    Parent = ComingSoonFrame,
+local SH_StatusSub = Create("TextLabel", {
+    Parent = SH_StatusFrame,
     BackgroundTransparency = 1,
-    Size = UDim2.new(1, -20, 0, 40),
-    Position = UDim2.new(0, 10, 0, 130),
+    Size = UDim2.new(1, -20, 0, 18),
+    Position = UDim2.new(0, 10, 0, 58),
     Font = Enum.Font.Gotham,
-    Text = "Teleport locations will be available\nin the next update. Stay tuned!",
+    Text = "Find servers with low player count",
     TextColor3 = CONFIG.Theme.TextDark,
-    TextSize = 12,
-    TextWrapped = true
+    TextSize = 11
 })
 
+-- Max Players Slider
+CreateSlider(shContainer, "Max Players", 1, 10, 1, function(val)
+    ServerHop_Config.MaxPlayers = val
+end, " Players")
+
+-- Hop to Low Player Server Button
+local HopLowBtn = CreateButton(shContainer, "🎯 Hop to Low Player Server", function()
+    SH_StatusText.Text = "Searching..."
+    SH_StatusSub.Text = "Looking for servers with ≤" .. ServerHop_Config.MaxPlayers .. " players"
+    SH_StatusText.TextColor3 = CONFIG.Theme.Accent
+    task.spawn(function()
+        serverHop()
+    end)
+end)
+
+-- Hop to Random Server Button
+local HopRandomBtn = CreateButton(shContainer, "🎲 Hop to Random Server", function()
+    SH_StatusText.Text = "Searching..."
+    SH_StatusSub.Text = "Picking a random server..."
+    SH_StatusText.TextColor3 = CONFIG.Theme.Accent
+    task.spawn(function()
+        serverHopRandom()
+    end)
+end)
+
+-- Rejoin Current Server Button
+local RejoinBtn = CreateButton(shContainer, "🔄 Rejoin Current Server", function()
+    SH_StatusText.Text = "Rejoining..."
+    SH_StatusSub.Text = "Teleporting to current server..."
+    TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
+end)
+
+-- Divider
+local SH_Divider = Create("Frame", {
+    Parent = shContainer,
+    BackgroundColor3 = CONFIG.Theme.Border,
+    BorderSizePixel = 0,
+    Size = UDim2.new(1, 0, 0, 1),
+    Position = UDim2.new(0, 0, 0, 0)
+})
+AddGradient(SH_Divider, CONFIG.Theme.Accent, CONFIG.Theme.Accent2, 0)
+
+-- Info Section
+local _, infoContainer = CreateSection(ServerHopTab, "How it Works")
+
+local InfoText = Create("TextLabel", {
+    Parent = infoContainer,
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, -10, 0, 80),
+    Position = UDim2.new(0, 5, 0, 0),
+    Font = Enum.Font.Gotham,
+    Text = "• Searches all public servers\n• Filters by max player count\n• Avoids re-visiting same servers\n• Auto-retries if no servers found",
+    TextColor3 = CONFIG.Theme.TextDark,
+    TextSize = 11,
+    TextWrapped = true,
+    TextYAlignment = Enum.TextYAlignment.Top
+})
 -- Settings Tab
 local SettingsTab = CreateTab("Settings", "S")
 local _, settingsContainer = CreateSection(SettingsTab, "UI Settings")
