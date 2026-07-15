@@ -2134,22 +2134,23 @@ end)
 print("[NAZK HUB v7.1] Premium Universal Edition Loaded! Welcome, " .. player.Name)
 
 -- ============================================================
--- NAZK HUB - Simple Auto Farm (Universal)
+-- NAZK HUB - Auto Farm (Universal + Haze Seas System)
 -- Works on ALL games
--- Features: No cooldown, Max speed 300, Instant next chest
+-- Features: No cooldown, Max speed 275, Instant next chest
 -- ============================================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 
 -- ============================================================
 -- CONFIG
 -- ============================================================
 local CONFIG = {
-    FarmSpeed = 300,  -- Default max speed
-    SearchDistance = 500,  -- How far to search for chests
-    InstantNext = true  -- Go to next chest immediately after touching
+    FarmSpeed = 275,
+    SearchDistance = 500,
+    InstantNext = true
 }
 
 -- ============================================================
@@ -2203,11 +2204,8 @@ end
 
 local function getChests()
     local chests = {}
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        -- Search for anything named "Chest" or similar
-        if obj:IsA("Model") and (obj.Name == "Chest" or obj.Name:lower():find("chest")) then
-            table.insert(chests, obj)
-        elseif obj:IsA("BasePart") and (obj.Name == "Chest" or obj.Name:lower():find("chest")) then
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and obj.Name == "Chest" then
             table.insert(chests, obj)
         end
     end
@@ -2217,7 +2215,7 @@ end
 local function isVisited(chestPos)
     if not chestPos then return true end
     for _, visitedPos in ipairs(visitedChests) do
-        if (visitedPos - chestPos).Magnitude < 15 then
+        if (visitedPos - chestPos).Magnitude < 25 then
             return true
         end
     end
@@ -2235,34 +2233,21 @@ local function smoothFlyTo(targetPos, onComplete)
         currentConnection = nil
     end
     local startCF = hrp.CFrame
-    local targetCF = CFrame.new(targetPos + Vector3.new(0, 2, 0))
+    local targetCF = CFrame.new(targetPos + Vector3.new(0, 3, 0))
     local distance = (startCF.Position - targetCF.Position).Magnitude
-    local duration = math.max(distance / CONFIG.FarmSpeed, 0.005)
+    local duration = math.max(distance / CONFIG.FarmSpeed, 0.01)
     local startTime = tick()
-
-    if distance < 3 then
+    if distance < 5 then
         hrp.CFrame = targetCF
         hrp.AssemblyLinearVelocity = Vector3.zero
         if onComplete then task.defer(onComplete) end
         return
     end
-
     currentConnection = RunService.Heartbeat:Connect(function()
         if not hrp or not hrp.Parent then
             if currentConnection then currentConnection:Disconnect() currentConnection = nil end
             return
         end
-
-        -- Check if we touched the chest (close enough)
-        local currentDist = (hrp.Position - targetCF.Position).Magnitude
-        if currentDist < 5 then
-            hrp.CFrame = targetCF
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            if currentConnection then currentConnection:Disconnect() currentConnection = nil end
-            if onComplete then task.defer(onComplete) end
-            return
-        end
-
         local elapsed = tick() - startTime
         local alpha = elapsed / duration
         if alpha >= 1 then
@@ -2306,65 +2291,57 @@ local function startAuto()
         if not autoEnabled then return end
         local chests = getChests()
         if #chests == 0 then
-            task.wait(0.5)
+            task.wait(2)
             task.defer(nextChest)
             return
         end
         local hrp = getHRP()
         if not hrp then
-            task.wait(0.5)
+            task.wait(1)
             task.defer(nextChest)
             return
         end
-
-        -- Find nearest unvisited chest
         local bestChest = nil
         local bestDist = math.huge
         for _, chest in ipairs(chests) do
             local pos = getChestPos(chest)
             if pos and not isVisited(pos) then
                 local d = (hrp.Position - pos).Magnitude
-                if d < bestDist and d < CONFIG.SearchDistance then
+                if d < bestDist then
                     bestDist = d
                     bestChest = chest
                 end
             end
         end
-
-        -- If all visited, reset and find nearest
         if not bestChest then
             visitedChests = {}
             for _, chest in ipairs(chests) do
                 local pos = getChestPos(chest)
                 if pos then
                     local d = (hrp.Position - pos).Magnitude
-                    if d < bestDist and d < CONFIG.SearchDistance then
+                    if d < bestDist then
                         bestDist = d
                         bestChest = chest
                     end
                 end
             end
         end
-
         if not bestChest then
-            task.wait(1)
+            task.wait(2)
             task.defer(nextChest)
             return
         end
-
         local pos = getChestPos(bestChest)
         if pos then
             table.insert(visitedChests, pos)
             farmedCount = farmedCount + 1
             print("[NAZK] Farming chest #" .. farmedCount)
-
             smoothFlyTo(pos, function()
                 if not autoEnabled then return end
-                -- INSTANTLY go to next chest (no cooldown!)
                 task.defer(nextChest)
             end)
         else
-            task.wait(0.5)
+            task.wait(1)
             task.defer(nextChest)
         end
     end
@@ -2372,7 +2349,7 @@ local function startAuto()
 end
 
 -- ============================================================
--- GUI
+-- GUI (Futuristic Red Theme)
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "NAZK_Farm"
@@ -2415,7 +2392,7 @@ SpeedLabel.BackgroundTransparency = 1
 SpeedLabel.Size = UDim2.new(1, -20, 0, 20)
 SpeedLabel.Position = UDim2.new(0, 10, 0, 35)
 SpeedLabel.Font = Enum.Font.Gotham
-SpeedLabel.Text = "Speed: 300"
+SpeedLabel.Text = "Speed: 275"
 SpeedLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
 SpeedLabel.TextSize = 12
 
@@ -2436,7 +2413,7 @@ local SliderFill = Instance.new("Frame")
 SliderFill.Parent = SliderBg
 SliderFill.BackgroundColor3 = Color3.fromRGB(255, 50, 80)
 SliderFill.BorderSizePixel = 0
-SliderFill.Size = UDim2.new(1, 0, 1, 0)
+SliderFill.Size = UDim2.new(0.9, 0, 1, 0)
 
 local fillCorner = Instance.new("UICorner")
 fillCorner.CornerRadius = UDim.new(0, 4)
@@ -2480,6 +2457,67 @@ local btnCorner = Instance.new("UICorner")
 btnCorner.CornerRadius = UDim.new(0, 6)
 btnCorner.Parent = ToggleBtn
 
+-- ============================================================
+-- FUTURISTIC TOGGLE BUTTON (Top Right Corner) - Matches GUI
+-- ============================================================
+local ToggleFrameBtn = Instance.new("TextButton")
+ToggleFrameBtn.Name = "ToggleFrameBtn"
+ToggleFrameBtn.Parent = ScreenGui
+ToggleFrameBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+ToggleFrameBtn.BorderSizePixel = 0
+ToggleFrameBtn.Size = UDim2.new(0, 80, 0, 32)
+ToggleFrameBtn.Position = UDim2.new(1, -100, 0, 12)
+ToggleFrameBtn.Font = Enum.Font.GothamBold
+ToggleFrameBtn.Text = "CHEST"
+ToggleFrameBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleFrameBtn.TextSize = 14
+ToggleFrameBtn.AutoButtonColor = false
+
+-- Same corner radius as MainFrame
+local toggleBtnCorner = Instance.new("UICorner")
+toggleBtnCorner.CornerRadius = UDim.new(0, 8)
+toggleBtnCorner.Parent = ToggleFrameBtn
+
+-- Same stroke color as MainFrame
+local toggleBtnStroke = Instance.new("UIStroke")
+toggleBtnStroke.Color = Color3.fromRGB(255, 50, 80)
+toggleBtnStroke.Thickness = 2
+toggleBtnStroke.Parent = ToggleFrameBtn
+
+-- Hover & Click Effects - Futuristic glow
+local originalColor = Color3.fromRGB(20, 20, 25)
+local hoverColor = Color3.fromRGB(40, 25, 30)
+local clickColor = Color3.fromRGB(60, 30, 40)
+
+ToggleFrameBtn.MouseEnter:Connect(function()
+    TweenService:Create(ToggleFrameBtn, TweenInfo.new(0.15), {BackgroundColor3 = hoverColor}):Play()
+    TweenService:Create(toggleBtnStroke, TweenInfo.new(0.15), {Color = Color3.fromRGB(255, 80, 110)}):Play()
+    TweenService:Create(ToggleFrameBtn, TweenInfo.new(0.15), {Size = UDim2.new(0, 84, 0, 34)}):Play()
+    TweenService:Create(ToggleFrameBtn, TweenInfo.new(0.15), {Position = UDim2.new(1, -102, 0, 11)}):Play()
+end)
+
+ToggleFrameBtn.MouseLeave:Connect(function()
+    TweenService:Create(ToggleFrameBtn, TweenInfo.new(0.15), {BackgroundColor3 = originalColor}):Play()
+    TweenService:Create(toggleBtnStroke, TweenInfo.new(0.15), {Color = Color3.fromRGB(255, 50, 80)}):Play()
+    TweenService:Create(ToggleFrameBtn, TweenInfo.new(0.15), {Size = UDim2.new(0, 80, 0, 32)}):Play()
+    TweenService:Create(ToggleFrameBtn, TweenInfo.new(0.15), {Position = UDim2.new(1, -100, 0, 12)}):Play()
+end)
+
+ToggleFrameBtn.MouseButton1Down:Connect(function()
+    ToggleFrameBtn.BackgroundColor3 = clickColor
+    TweenService:Create(toggleBtnStroke, TweenInfo.new(0.1), {Color = Color3.fromRGB(255, 120, 140)}):Play()
+end)
+
+ToggleFrameBtn.MouseButton1Up:Connect(function()
+    ToggleFrameBtn.BackgroundColor3 = hoverColor
+    TweenService:Create(toggleBtnStroke, TweenInfo.new(0.1), {Color = Color3.fromRGB(255, 80, 110)}):Play()
+end)
+
+-- Toggle Frame Visibility
+ToggleFrameBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
 -- Draggable
 local dragging = false
 local dragStart, startPos
@@ -2512,7 +2550,7 @@ SliderBg.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         sliderDragging = true
         local pos = math.clamp((input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0, 1)
-        CONFIG.FarmSpeed = math.floor(50 + (pos * 250))  -- 50 to 300
+        CONFIG.FarmSpeed = math.floor(50 + (pos * 225))  -- 50 to 275
         SliderFill.Size = UDim2.new(pos, 0, 1, 0)
         SpeedLabel.Text = "Speed: " .. CONFIG.FarmSpeed
     end
@@ -2521,7 +2559,7 @@ end)
 SliderBg.InputChanged:Connect(function(input)
     if sliderDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
         local pos = math.clamp((input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0, 1)
-        CONFIG.FarmSpeed = math.floor(50 + (pos * 250))  -- 50 to 300
+        CONFIG.FarmSpeed = math.floor(50 + (pos * 225))  -- 50 to 275
         SliderFill.Size = UDim2.new(pos, 0, 1, 0)
         SpeedLabel.Text = "Speed: " .. CONFIG.FarmSpeed
     end
@@ -2564,4 +2602,4 @@ player.CharacterAdded:Connect(function(char)
     end)
 end)
 
-print("[NAZK] Universal Auto Farm Loaded! | Max Speed: 300 | No Cooldown")
+print("[NAZK] Universal Auto Farm Loaded! | Speed: 275 | No Cooldown")
