@@ -2120,7 +2120,7 @@ print("[NAZK HUB v7.1] Premium Universal Edition Loaded! Welcome, " .. player.Na
 -- ============================================================
 -- NAZK HUB - Auto Farm (Universal + Haze Seas System)
 -- Works on ALL games
--- Features: No cooldown, Max speed 250, Instant next chest
+-- Features: No cooldown, Max speed 210, Instant next chest
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -2132,7 +2132,7 @@ local player = Players.LocalPlayer
 -- CONFIG
 -- ============================================================
 local CONFIG = {
-    FarmSpeed = 250,
+    FarmSpeed = 210,
     SearchDistance = 500,
     InstantNext = true
 }
@@ -2376,7 +2376,7 @@ SpeedLabel.BackgroundTransparency = 1
 SpeedLabel.Size = UDim2.new(1, -20, 0, 20)
 SpeedLabel.Position = UDim2.new(0, 10, 0, 35)
 SpeedLabel.Font = Enum.Font.Gotham
-SpeedLabel.Text = "Speed: 250"
+SpeedLabel.Text = "Speed: 210"
 SpeedLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
 SpeedLabel.TextSize = 12
 
@@ -2534,7 +2534,7 @@ SliderBg.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         sliderDragging = true
         local pos = math.clamp((input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0, 1)
-        CONFIG.FarmSpeed = math.floor(50 + (pos * 200))  -- 50 to 250
+        CONFIG.FarmSpeed = math.floor(50 + (pos * 160))  -- 50 to 210
         SliderFill.Size = UDim2.new(pos, 0, 1, 0)
         SpeedLabel.Text = "Speed: " .. CONFIG.FarmSpeed
     end
@@ -2543,7 +2543,7 @@ end)
 SliderBg.InputChanged:Connect(function(input)
     if sliderDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
         local pos = math.clamp((input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0, 1)
-        CONFIG.FarmSpeed = math.floor(50 + (pos * 200))  -- 50 to 250
+        CONFIG.FarmSpeed = math.floor(50 + (pos * 160))  -- 50 to 210
         SliderFill.Size = UDim2.new(pos, 0, 1, 0)
         SpeedLabel.Text = "Speed: " .. CONFIG.FarmSpeed
     end
@@ -2586,4 +2586,4 @@ player.CharacterAdded:Connect(function(char)
     end)
 end)
 
-print("[NAZK] Universal Auto Farm Loaded! | Speed: 250 | No Cooldown")
+print("[NAZK] Universal Auto Farm Loaded! | Speed: 210 | No Cooldown")
