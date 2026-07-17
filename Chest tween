@@ -2069,6 +2069,143 @@ local InfoText = Create("TextLabel", {
     TextWrapped = true,
     TextYAlignment = Enum.TextYAlignment.Top
 })
+-- ============================================================
+-- SEA BEAST FARM TAB
+-- ============================================================
+local SeaBeastTab = CreateTab("SeaBeast", "B")
+local _, sbContainer = CreateSection(SeaBeastTab, "Sea Beast Farm")
+
+-- Status Display
+local SB_StatusFrame = Create("Frame", {
+    Parent = sbContainer,
+    BackgroundColor3 = CONFIG.Theme.Secondary,
+    BorderSizePixel = 0,
+    Size = UDim2.new(1, 0, 0, 80)
+})
+AddCorner(SB_StatusFrame, 10)
+AddStroke(SB_StatusFrame, CONFIG.Theme.Accent, 1)
+
+local SB_StatusIcon = Create("TextLabel", {
+    Parent = SB_StatusFrame,
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, 0, 0, 30),
+    Position = UDim2.new(0, 0, 0, 8),
+    Font = Enum.Font.GothamBlack,
+    Text = "🌊",
+    TextColor3 = CONFIG.Theme.Accent,
+    TextSize = 28
+})
+
+local SB_StatusText = Create("TextLabel", {
+    Parent = SB_StatusFrame,
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, -20, 0, 20),
+    Position = UDim2.new(0, 10, 0, 38),
+    Font = Enum.Font.GothamBold,
+    Text = "Sea Beast Farm Ready",
+    TextColor3 = CONFIG.Theme.Text,
+    TextSize = 14
+})
+
+local SB_StatusSub = Create("TextLabel", {
+    Parent = SB_StatusFrame,
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, -20, 0, 18),
+    Position = UDim2.new(0, 10, 0, 58),
+    Font = Enum.Font.Gotham,
+    Text = "Auto-find and farm Sea Beasts",
+    TextColor3 = CONFIG.Theme.TextDark,
+    TextSize = 11
+})
+
+-- Config
+local SB_Config = {
+    Enabled = false,
+    AutoAttack = true,
+    FarmSpeed = 225,
+    SearchRadius = 15000,
+    AttackDistance = 40,
+    BeastNames = {"Sea Beast1", "Sea Beast", "Sea_Beast", "SeaBeast"}
+}
+
+-- Speed Slider
+CreateSlider(sbContainer, "Farm Speed", 50, 500, 225, function(val)
+    SB_Config.FarmSpeed = val
+end, " Studs/s")
+
+-- Attack Distance Slider
+CreateSlider(sbContainer, "Attack Distance", 10, 100, 40, function(val)
+    SB_Config.AttackDistance = val
+end, " Studs")
+
+-- Toggles
+CreateToggle(sbContainer, "Auto Attack", true, function(enabled)
+    SB_Config.AutoAttack = enabled
+end)
+
+CreateToggle(sbContainer, "Auto Equip Weapon", true, function(enabled)
+    SB_Config.AutoEquip = enabled
+end)
+
+-- ON/OFF Toggle Button
+local SB_ToggleBtn = Create("TextButton", {
+    Parent = sbContainer,
+    BackgroundColor3 = CONFIG.Theme.Accent,
+    Size = UDim2.new(1, 0, 0, 36),
+    Font = Enum.Font.GothamBold,
+    Text = "START SEA BEAST FARM",
+    TextColor3 = CONFIG.Theme.Text,
+    TextSize = 12,
+    AutoButtonColor = false
+})
+AddCorner(SB_ToggleBtn, 6)
+AddGradient(SB_ToggleBtn, CONFIG.Theme.Accent, CONFIG.Theme.Accent2, 90)
+
+SB_ToggleBtn.MouseButton1Click:Connect(function()
+    SB_Config.Enabled = not SB_Config.Enabled
+    if SB_Config.Enabled then
+        SB_ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 255, 100)
+        SB_ToggleBtn.Text = "STOP SEA BEAST FARM"
+        SB_StatusText.Text = "Farming Sea Beasts..."
+        SB_StatusText.TextColor3 = Color3.fromRGB(100, 255, 100)
+        SB_StatusSub.Text = "Searching for Sea Beasts..."
+        task.spawn(StartSeaBeastFarm)
+    else
+        SB_ToggleBtn.BackgroundColor3 = CONFIG.Theme.Accent
+        SB_ToggleBtn.Text = "START SEA BEAST FARM"
+        SB_StatusText.Text = "Sea Beast Farm Ready"
+        SB_StatusText.TextColor3 = CONFIG.Theme.Text
+        SB_StatusSub.Text = "Goes to Sea Beast BODY (not spawn point)"
+        StopSeaBeastFarm()
+    end
+end)
+
+-- Divider
+local SB_Divider = Create("Frame", {
+    Parent = sbContainer,
+    BackgroundColor3 = CONFIG.Theme.Border,
+    BorderSizePixel = 0,
+    Size = UDim2.new(1, 0, 0, 1)
+})
+AddGradient(SB_Divider, CONFIG.Theme.Accent, CONFIG.Theme.Accent2, 0)
+
+-- Info Section
+local _, sbInfoContainer = CreateSection(SeaBeastTab, "How it Works")
+
+Create("TextLabel", {
+    Parent = sbInfoContainer,
+    BackgroundTransparency = 1,
+    Size = UDim2.new(1, -10, 0, 80),
+    Position = UDim2.new(0, 5, 0, 0),
+    Font = Enum.Font.Gotham,
+    Text = "• Auto-detects Sea Beasts in workspace\n• Tween flies at speed 225\n• M1 Spam attack when in range\n• Follows beast if it moves\n• Auto-equips weapon if enabled",
+    TextColor3 = CONFIG.Theme.TextDark,
+    TextSize = 11,
+    TextWrapped = true,
+    TextYAlignment = Enum.TextYAlignment.Top
+})
+
+
 -- Settings Tab
 local SettingsTab = CreateTab("Settings", "S")
 local _, settingsContainer = CreateSection(SettingsTab, "UI Settings")
@@ -2767,6 +2904,232 @@ end)
 player.CharacterAdded:Connect(function(char)
     task.delay(0.5, function()
         if autoEnabled then startAuto() end
+    end)
+end)
+
+
+-- ============================================================
+-- SEA BEAST FARM SYSTEM (FIXED - CHASE + STICK + ATTACK)
+-- ============================================================
+local SB_Running = false
+local SB_CurrentTarget = nil
+local SB_ChaseConn = nil
+local SB_AttackConn = nil
+
+local SB_BeastNames = {"Sea Beast1", "Sea Beast", "Sea_Beast", "SeaBeast", "SeaBeast1", "Sea_Beast1", "Sea_Beast2", "SeaBeast2", "SeaBeast3"}
+
+-- Check if real Sea Beast
+local function IsRealSeaBeast(obj)
+    if not obj or not obj:IsA("Model") then return false end
+    local name = obj.Name
+    local isBeast = false
+    for _, pattern in ipairs(SB_BeastNames) do
+        if name == pattern or name:find("Sea Beast") or name:find("SeaBeast") or name:find("Sea_Beast") then
+            isBeast = true
+            break
+        end
+    end
+    if not isBeast then return false end
+    if name:find("SpawnPoint") or name:find("Spawn") or name:find("Spawner") or name:find("Indicator") then return false end
+    if obj.PrimaryPart then return true end
+    for _, p in ipairs(obj:GetDescendants()) do
+        if p:IsA("BasePart") then return true end
+    end
+    return false
+end
+
+-- Scan for beasts
+local function SB_Scan()
+    local beasts = {}
+    local checked = {}
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if IsRealSeaBeast(obj) and not checked[obj] then
+            checked[obj] = true
+            table.insert(beasts, obj)
+        end
+    end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if IsRealSeaBeast(obj) and not checked[obj] then
+            checked[obj] = true
+            table.insert(beasts, obj)
+        end
+    end
+    return beasts
+end
+
+-- Get main body part (largest part = body)
+local function SB_GetBodyPart(obj)
+    if not obj or not obj.Parent then return nil end
+    if obj.PrimaryPart then return obj.PrimaryPart end
+    local biggest = nil
+    local maxSize = 0
+    for _, p in ipairs(obj:GetDescendants()) do
+        if p:IsA("BasePart") then
+            local size = p.Size.X * p.Size.Y * p.Size.Z
+            if size > maxSize then
+                maxSize = size
+                biggest = p
+            end
+        end
+    end
+    return biggest
+end
+
+-- Get beast position safely
+local function SB_GetBeastPos(obj)
+    local part = SB_GetBodyPart(obj)
+    if part then return part.Position end
+    return nil
+end
+
+-- Attack function (rapid)
+local function SB_Attack()
+    local char = player.Character
+    if not char then return end
+    if SB_Config.AutoEquip then
+        local tool = char:FindFirstChildOfClass("Tool")
+        if not tool then
+            local bp = player:FindFirstChild("Backpack")
+            if bp then
+                for _, t in ipairs(bp:GetChildren()) do
+                    if t:IsA("Tool") then
+                        t.Parent = char
+                        task.wait(0.05)
+                        break
+                    end
+                end
+            end
+        end
+    end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then 
+        pcall(function() tool:Activate() end)
+    end
+    pcall(function() if mouse1click then mouse1click() end end)
+end
+
+-- STICK ON TOP OF BEAST (8 studs above, looks down at it)
+local function SB_StartChase(beastPart)
+    if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
+    
+    SB_ChaseConn = RunService.Heartbeat:Connect(function()
+        if not SB_Running or not SB_Config.Enabled then
+            if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
+            return
+        end
+        
+        if not beastPart or not beastPart.Parent then
+            SB_StatusSub.Text = "Sea Beast disappeared! Searching..."
+            SB_CurrentTarget = nil
+            if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
+            return
+        end
+
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp or not hrp.Parent then return end
+
+        local beastPos = beastPart.Position
+        -- 8 studs above, facing down at the beast
+        local targetPos = beastPos + Vector3.new(0, 8, 0)
+        if targetPos.Y < 10 then
+            targetPos = Vector3.new(targetPos.X, 10, targetPos.Z)
+        end
+
+        hrp.CFrame = CFrame.new(targetPos, beastPos)
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.RotVelocity = Vector3.zero
+    end)
+end
+
+-- RAPID ATTACK CONNECTION
+local function SB_StartAttack()
+    if SB_AttackConn then SB_AttackConn:Disconnect() SB_AttackConn = nil end
+    
+    SB_AttackConn = RunService.Heartbeat:Connect(function()
+        if not SB_Running or not SB_Config.Enabled or not SB_CurrentTarget then
+            return
+        end
+        if SB_Config.AutoAttack then
+            SB_Attack()
+        end
+    end)
+end
+
+-- Main loop (SEARCH ONLY)
+local function SB_Loop()
+    while SB_Running and SB_Config.Enabled do
+        if SB_CurrentTarget and SB_CurrentTarget.Parent then
+            local beastPos = SB_GetBeastPos(SB_CurrentTarget)
+            if beastPos then
+                SB_StatusSub.Text = "ON: " .. SB_CurrentTarget.Name .. " | STICKING + ATTACKING!"
+                task.wait(0.5)
+            else
+                SB_StatusSub.Text = "Lost target position..."
+                SB_CurrentTarget = nil
+                if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
+                task.wait(0.5)
+            end
+        else
+            if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
+            SB_CurrentTarget = nil
+            
+            local beasts = SB_Scan()
+            if #beasts == 0 then
+                SB_StatusSub.Text = "Scanning for Sea Beast..."
+                task.wait(1)
+            else
+                local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                local closest = nil
+                local minD = math.huge
+
+                for _, b in ipairs(beasts) do
+                    local part = SB_GetBodyPart(b)
+                    if part and hrp then
+                        local d = (hrp.Position - part.Position).Magnitude
+                        if d < minD then
+                            minD = d
+                            closest = b
+                        end
+                    end
+                end
+
+                if closest then
+                    local bodyPart = SB_GetBodyPart(closest)
+                    if bodyPart then
+                        SB_CurrentTarget = closest
+                        SB_StatusSub.Text = "Found: " .. closest.Name .. " | Sticking..."
+                        SB_StartChase(bodyPart)
+                        SB_StartAttack()
+                    end
+                end
+                task.wait(0.5)
+            end
+        end
+    end
+end
+
+function StartSeaBeastFarm()
+    if SB_Running then return end
+    SB_Running = true
+    SB_CurrentTarget = nil
+    print("[NAZK] Sea Beast Farm Started! | Sticking on top + Rapid Attack!")
+    SB_StartAttack()
+    task.spawn(SB_Loop)
+end
+
+function StopSeaBeastFarm()
+    SB_Running = false
+    SB_Config.Enabled = false
+    SB_CurrentTarget = nil
+    if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
+    if SB_AttackConn then SB_AttackConn:Disconnect() SB_AttackConn = nil end
+    print("[NAZK] Sea Beast Farm Stopped")
+end
+
+player.CharacterAdded:Connect(function(char)
+    task.delay(1, function()
+        if SB_Config.Enabled then StartSeaBeastFarm() end
     end)
 end)
 
