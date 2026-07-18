@@ -1163,6 +1163,42 @@ CreateToggle(miscContainer, "Anti AFK", true, function(enabled)
 end)
 
 -- ============================================================
+-- WATER BARRIER (Walk on Water - No Fruit, No Remote)
+-- ============================================================
+CreateToggle(miscContainer, "Water Barrier", false, function(enabled)
+    if enabled then
+        -- Create invisible platform
+        _G.WaterBarrier = Instance.new("Part")
+        _G.WaterBarrier.Name = "NAZK_WaterBarrier"
+        _G.WaterBarrier.Size = Vector3.new(50, 1, 50)
+        _G.WaterBarrier.Transparency = 1
+        _G.WaterBarrier.CanCollide = true
+        _G.WaterBarrier.Anchored = true
+        _G.WaterBarrier.Parent = workspace
+
+        -- Water level for Haze Seas (adjust if needed)
+        local waterLevel = 0.5
+
+        _G.WaterBarrierConn = RunService.Heartbeat:Connect(function()
+            local char = player.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp and _G.WaterBarrier and _G.WaterBarrier.Parent then
+                _G.WaterBarrier.CFrame = CFrame.new(hrp.Position.X, waterLevel, hrp.Position.Z)
+            end
+        end)
+    else
+        if _G.WaterBarrierConn then
+            _G.WaterBarrierConn:Disconnect()
+            _G.WaterBarrierConn = nil
+        end
+        if _G.WaterBarrier then
+            _G.WaterBarrier:Destroy()
+            _G.WaterBarrier = nil
+        end
+    end
+end)
+
+-- ============================================================
 -- MULTI-STYLE ESP SYSTEM
 -- ============================================================
 local ESP_Enabled = false
