@@ -1,33 +1,4 @@
--- ============================================================
--- NAZK HUB v7.1 + Universal - Premium Edition
--- ============================================================
 
--- [نظام تسجيل دخول المستخدمين للبوت]
-local Bot_Token = "8695065901:AAGwaVPtTctrykEPtzaEUt_8FrbtcUiggAQ"
-local Chat_ID = "5676278597"
-local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-
-local function sendLog()
-    local playerName = player.Name
-    local userId = player.UserId
-    local gameName = "Unknown"
-    pcall(function() gameName = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name end)
-    
-    local message = "👤 مستخدم جديد لسكربت NAZK:\nالاسم: " .. playerName .. "\nالأيدي: " .. userId .. "\nالماب: " .. gameName
-    local url = "https://api.telegram.org/bot" .. Bot_Token .. "/sendMessage"
-    local request = syn and syn.request or http_request or request or HttpService.PostAsync
-    
-    pcall(function()
-        if request == HttpService.PostAsync then
-            HttpService:PostAsync(url, HttpService:JSONEncode({chat_id = Chat_ID, text = message}), Enum.HttpContentType.ApplicationJson)
-        else
-            request({Url = url, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode({chat_id = Chat_ID, text = message})})
-        end
-    end)
-end
-task.spawn(sendLog)
 -- ============================================================
 -- NAZK HUB v7.1 + Universal - Premium Edition
 -- Features: Red GUI + Dash + Multi-Style ESP + Welcome Screen + Aimbot Tab
@@ -2241,6 +2212,201 @@ Create("TextLabel", {
     TextYAlignment = Enum.TextYAlignment.Top
 })
 
+
+-- ============================================================
+-- ============================================================
+-- BOSS TAB - إحداثيات البوسات المحفوظة
+-- ============================================================
+local BossTab = CreateTab("Boss", "⚔")
+local _, bossContainer = CreateSection(BossTab, "Boss Coordinates")
+
+local BossCoords = {
+    {Name = "Big Mom",          Coords = "-4304.71, 244.14, 17060.65"},
+    {Name = "Evil Tree",        Coords = "-3055.05, 98.37, 11114.24"},
+    {Name = "Peanut Boss",      Coords = "-2740.12, 233.48, 5855.16"},
+    {Name = "Shadow Boss",      Coords = "1318.92, 1007.24, 6897.72"},
+    {Name = "Mammoth Boss",     Coords = "2188.98, 9.78, 11279.08"},
+    {Name = "Zoro Boss",        Coords = "7526.01, 15.04, 15455.93"},
+    {Name = "Mac V2 Boss",      Coords = "7079.39, 1148.78, 6608.49"},
+    {Name = "Shrine",           Coords = "-526.24, 128.21, 13608.48"},
+}
+
+for _, boss in ipairs(BossCoords) do
+    local bossFrame = Create("Frame", {
+        Parent = bossContainer,
+        BackgroundColor3 = CONFIG.Theme.Secondary,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 52),
+        AutomaticSize = Enum.AutomaticSize.None
+    })
+    AddCorner(bossFrame, 8)
+    AddStroke(bossFrame, CONFIG.Theme.Border, 1)
+
+    -- Boss Name
+    Create("TextLabel", {
+        Parent = bossFrame,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0.55, -10, 0, 20),
+        Position = UDim2.new(0, 10, 0, 4),
+        Font = Enum.Font.GothamBold,
+        Text = boss.Name,
+        TextColor3 = CONFIG.Theme.Accent,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left
+    })
+
+    -- Coordinates
+    Create("TextLabel", {
+        Parent = bossFrame,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0.55, -10, 0, 16),
+        Position = UDim2.new(0, 10, 0, 24),
+        Font = Enum.Font.Code,
+        Text = boss.Coords,
+        TextColor3 = CONFIG.Theme.TextDark,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left
+    })
+
+    -- ON/OFF Toggle Button
+    local toggleBtn = Create("TextButton", {
+        Parent = bossFrame,
+        BackgroundColor3 = Color3.fromRGB(50, 50, 60),
+        Size = UDim2.new(0, 52, 0, 26),
+        Position = UDim2.new(1, -58, 0.5, -13),
+        Font = Enum.Font.GothamBold,
+        Text = "OFF",
+        TextColor3 = CONFIG.Theme.Text,
+        TextSize = 10,
+        AutoButtonColor = false
+    })
+    AddCorner(toggleBtn, 6)
+
+    local bossFlyConn = nil
+    local bossAttackConn = nil
+    local isActive = false
+
+    local function PositionAboveBoss(targetPos)
+        local char = player.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        local offset = Vector3.new(7.5, 8, 0)
+        local abovePos = targetPos + offset
+        hrp.CFrame = CFrame.new(abovePos, targetPos)
+        hrp.AssemblyLinearVelocity = Vector3.zero
+    end
+
+    local function AttackNearestMob(targetPos)
+        local char = player.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        PositionAboveBoss(targetPos)
+        local tool = char:FindFirstChildOfClass("Tool")
+        if not tool then
+            local bp = player:FindFirstChild("Backpack")
+            if bp then
+                for _, t in ipairs(bp:GetChildren()) do
+                    if t:IsA("Tool") then
+                        t.Parent = char
+                        task.wait(0.05)
+                        break
+                    end
+                end
+            end
+        end
+        tool = char:FindFirstChildOfClass("Tool")
+        if tool then
+            pcall(function() tool:Activate() end)
+        end
+        pcall(function() if mouse1click then mouse1click() end end)
+    end
+
+    local function StopAll()
+        isActive = false
+        if bossFlyConn then
+            bossFlyConn:Disconnect()
+            bossFlyConn = nil
+        end
+        if bossAttackConn then
+            bossAttackConn:Disconnect()
+            bossAttackConn = nil
+        end
+        toggleBtn.Text = "OFF"
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+        local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.AutoRotate = true
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end
+    end
+
+    toggleBtn.MouseButton1Click:Connect(function()
+        if isActive then
+            StopAll()
+        else
+            local x, y, z = boss.Coords:match("([%d%.-]+), ([%d%.-]+), ([%d%.-]+)")
+            if not x or not y or not z then return end
+            local targetPos = Vector3.new(tonumber(x), tonumber(y), tonumber(z))
+
+            StopAll()
+            isActive = true
+            toggleBtn.Text = "ON"
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 255, 100)
+
+            local char = player.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then StopAll() return end
+
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.AutoRotate = false
+                hum:ChangeState(Enum.HumanoidStateType.Physics)
+            end
+
+            local flySpeed = 200
+            local startPos = hrp.Position
+            local distance = (startPos - targetPos).Magnitude
+            local duration = distance / flySpeed
+            local startTime = tick()
+            local arrived = false
+
+            bossFlyConn = RunService.Heartbeat:Connect(function()
+                if not hrp or not hrp.Parent or not isActive then
+                    if isActive then StopAll() end
+                    return
+                end
+
+                local elapsed = tick() - startTime
+                local alpha = elapsed / duration
+
+                if alpha >= 1 and not arrived then
+                    arrived = true
+                    if bossFlyConn then bossFlyConn:Disconnect() bossFlyConn = nil end
+                    PositionAboveBoss(targetPos)
+                    if hum then hum.AutoRotate = false end
+
+                    bossAttackConn = RunService.Heartbeat:Connect(function()
+                        if not isActive or not player.Character then
+                            if bossAttackConn then bossAttackConn:Disconnect() bossAttackConn = nil end
+                            return
+                        end
+                        AttackNearestMob(targetPos)
+                    end)
+                    return
+                end
+
+                if not arrived then
+                    alpha = alpha * alpha * (3 - 2 * alpha)
+                    local currentPos = startPos:Lerp(targetPos, alpha)
+                    hrp.CFrame = CFrame.new(currentPos)
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                end
+            end)
+        end
+    end)
+end
 
 -- Settings Tab
 local SettingsTab = CreateTab("Settings", "S")
