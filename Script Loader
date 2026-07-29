@@ -1,0 +1,20 @@
+-- Auto-loader script (Place this in your executor and run it once)
+local placeId = tostring(game.PlaceId)
+local jobId = tostring(game.JobId)
+local scriptUrl = ""
+
+-- Select the appropriate script based on the map/game
+if placeId == "142823291" then  -- MM2 game
+    scriptUrl = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/fee"
+elseif placeId == "286090429" then  -- Arsenal game
+    scriptUrl = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/NAZK%20hub%20arsenal"
+elseif placeId == "6918802270" or jobId == "99664616626491" or jobId == "14979402479" then  -- Haze Seas maps
+    scriptUrl = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween"
+else
+    print("❌ This map/game is not supported, the script will not run.")
+    return
+end
+
+-- Load and execute the required script
+loadstring(game:HttpGet(scriptUrl))()
+print("✅ Successfully loaded the script for this game/map!")
