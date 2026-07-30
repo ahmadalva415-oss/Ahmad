@@ -1,11 +1,10 @@
 -- ═══════════════════════════════════════
---  FRUIT ESP | Auto Play -> Auto Fruit Bag
+--  FRUIT ESP | Auto Play -> Auto Fruit Bag -> Auto Equip -> Tap -> Fruit Bag
 --  Delta Auto-Execute Ready
 -- ═══════════════════════════════════════
 
 -- ═══════════════════════════════════════
 --  STEP 1: AUTO CLICK PLAY BUTTON
---  يضغط PLAY تلقائيًا لين تختفي الكلمة
 -- ═══════════════════════════════════════
 
 local Players = game:GetService("Players")
@@ -96,7 +95,7 @@ local MAX_DISTANCE = 25000
 local TWEEN_SPEED = 200
 local TAKE_DISTANCE = 7
 local HOP_DELAY = 30
-local MIN_Y_LEVEL = 2.86  -- ⬅️ أي فاكهة تحت هذا المستوى يتجاهلها
+local MIN_Y_LEVEL = 2.86
 
 -- Paths
 local FRUIT_DROPS_PATH
@@ -128,6 +127,7 @@ local State = {
     AutoTween = true,
     AutoTake = true,
     AutoServerHop = true,
+    AutoEquip = true,
 }
 
 local ESPObjects = { Drops = {}, Spawns = {} }
@@ -228,7 +228,7 @@ pcall(function() ScreenGui.Parent = CoreGui end)
 if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 280, 0, 270)
+MainFrame.Size = UDim2.new(0, 280, 0, 310)
 MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 MainFrame.BorderSizePixel = 0
@@ -312,7 +312,8 @@ CreateToggle("ESP Fruit Drop",  64, "DropEnabled",  Color3.fromRGB(0, 180, 90))
 CreateToggle("ESP Fruit Spawn", 104, "SpawnEnabled", Color3.fromRGB(60, 150, 255))
 CreateToggle("Auto Tween (200)", 144, "AutoTween", Color3.fromRGB(255, 180, 0))
 CreateToggle("Auto Fruit Bag", 184, "AutoTake", Color3.fromRGB(180, 80, 255))
-CreateToggle("Auto Server Hop", 224, "AutoServerHop", Color3.fromRGB(255, 100, 100))
+CreateToggle("Auto Equip Fruit", 224, "AutoEquip", Color3.fromRGB(255, 140, 0))
+CreateToggle("Auto Server Hop", 264, "AutoServerHop", Color3.fromRGB(255, 100, 100))
 
 -- ═══════════════════════════════════════
 --  ESP SYSTEM
@@ -395,20 +396,6 @@ end
 -- ═══════════════════════════════════════
 --  AUTO FRUIT BAG
 -- ═══════════════════════════════════════
-local function ClickButton(btn)
-    if not btn then return false end
-    pcall(function() btn.MouseButton1Click:Fire() end)
-    pcall(function() if btn.Activated then btn.Activated:Fire() end end)
-    local absPos = btn.AbsolutePosition
-    local absSize = btn.AbsoluteSize
-    local cx = absPos.X + absSize.X / 2
-    local cy = absPos.Y + absSize.Y / 2
-    VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
-    task.wait(0.05)
-    VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
-    return true
-end
-
 local function FindAndClickFruitBag()
     local pg = LocalPlayer:WaitForChild("PlayerGui")
     for _, gui in pairs(pg:GetChildren()) do
@@ -459,6 +446,71 @@ local function OpenFruitMenu(fruitObj)
     return true
 end
 
+-- ═══════════════════════════════════════
+--  AUTO EQUIP FRUIT + TAP + FRUIT BAG
+-- ═══════════════════════════════════════
+local function TapScreen()
+    local screenSize = Workspace.CurrentCamera.ViewportSize
+    VirtualInputManager:SendTouchEvent(screenSize.X / 2, screenSize.Y / 2, 0, true, game, 1)
+    task.wait(0.05)
+    VirtualInputManager:SendTouchEvent(screenSize.X / 2, screenSize.Y / 2, 0, false, game, 1)
+end
+
+local function AutoEquipFruit(fruitName)
+    if not State.AutoEquip then return end
+    
+    local char = LocalPlayer.Character
+    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+    local backpack = LocalPlayer:WaitForChild("Backpack")
+    
+    if not humanoid then return end
+    
+    task.wait(0.6)
+    
+    local targetTool = nil
+    
+    if fruitName and fruitName ~= "🍎 Fruit" then
+        for _, tool in pairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") then
+                if tool.Name == fruitName or tool.Name:find(fruitName) then
+                    targetTool = tool
+                    break
+                end
+            end
+        end
+    end
+    
+    if not targetTool then
+        local tools = {}
+        for _, tool in pairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") then
+                table.insert(tools, tool)
+            end
+        end
+        if #tools > 0 then
+            targetTool = tools[#tools]
+        end
+    end
+    
+    if targetTool then
+        pcall(function()
+            humanoid:EquipTool(targetTool)
+            print("⚔️ تم تجهيز الفاكهة في اليد: " .. targetTool.Name)
+        end)
+        
+        -- ⬅️ بعد ما يجهز الفاكهة في اليد:
+        -- 1. يضغط Tap على الشاشة
+        task.wait(0.3)
+        TapScreen()
+        print("👆 تم الضغط على الشاشة")
+        
+        -- 2. يضغط Fruit Bag
+        task.wait(0.4)
+        FindAndClickFruitBag()
+        print("🎒 تم الضغط على Fruit Bag بعد الـ Equip")
+    end
+end
+
 local function TakeFruit(fruitObj)
     if not fruitObj or not fruitObj.Parent then return end
     OpenFruitMenu(fruitObj)
@@ -467,6 +519,13 @@ local function TakeFruit(fruitObj)
     if CollectFruitEvent then
         pcall(function() CollectFruitEvent:FireServer(fruitObj) end)
     end
+    
+    -- بعد ما يجمع الفاكهة، نجهزها في اليد + Tap + Fruit Bag
+    local fruitName = GetFruitName(fruitObj)
+    task.spawn(function()
+        AutoEquipFruit(fruitName)
+    end)
+    
     task.wait(0.3)
     for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
         if gui:IsA("ScreenGui") then
@@ -480,7 +539,7 @@ local function TakeFruit(fruitObj)
 end
 
 local function TweenToFruit(targetPos)
-    if targetPos.Y < MIN_Y_LEVEL then return end  -- ⬅️ حماية إضافية
+    if targetPos.Y < MIN_Y_LEVEL then return end
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
@@ -521,7 +580,6 @@ local function ScanDrops()
         if obj:IsA("BasePart") and depth > 1 then continue end
 
         local pos = GetPosition(obj)
-        -- ⬅️ فلتر Y < 2.86
         if not pos or pos.Y < MIN_Y_LEVEL then continue end
 
         local dist = (pos - hrp.Position).Magnitude
@@ -604,7 +662,6 @@ local function ScanSpawns()
     for _, obj in pairs(FRUIT_SPAWNS_PATH:GetDescendants()) do
         if obj:IsA("Folder") then continue end
         local pos = GetPosition(obj)
-        -- ⬅️ فلتر Y < 2.86
         if not pos or pos.Y < MIN_Y_LEVEL then continue end
 
         local dist = (pos - hrp.Position).Magnitude
@@ -653,6 +710,8 @@ LocalPlayer.CharacterAdded:Connect(function()
     IsHopping = false
 end)
 
-print("✅ Fruit ESP + Auto Play Loaded!")
+print("✅ Fruit ESP + Auto Play + Auto Equip + Tap + Fruit Bag Loaded!")
 print("   Auto Play: يضغط PLAY لين تختفي الكلمة")
+print("   Auto Equip: يجهز الفاكهة في اليد فوراً بعد الجمع")
+print("   Tap -> Fruit Bag: بعد الـ Equip يضغط شاشة ثم Fruit Bag")
 print("   Y Filter: يتجاهل أي فاكهة تحت Y = " .. MIN_Y_LEVEL)
