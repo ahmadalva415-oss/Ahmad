@@ -1,6 +1,7 @@
 -- ============================================================
--- NAZK HUB v8.1 Delta Full Edition + Fruit ESP (Improved)
+-- NAZK HUB v8.1 Delta Full Edition + Chest System (v7.1 Logic)
 -- Tabs: Main, Farm, Stats, Chest, M1, Visual, ServerHop, SeaBeast, Misc, Settings
+-- Chest System: Speed 210, No Cooldown, Auto-reset visited list
 -- Compatible: Delta, Fluxus, Hydrogen, Codex
 -- ============================================================
 local Players = game:GetService('Players')
@@ -42,6 +43,9 @@ local HazeConfig = {
     AutoFruit = false,
 }
 
+-- ============================================================
+-- CHEST CONFIG (v7.1 Logic)
+-- ============================================================
 local ChestConfig = {
     FarmSpeed = 210,
     AutoChest = false,
@@ -341,10 +345,18 @@ local function getHumanoid()
     return nil
 end
 
+--// ============================================================
+--// CHEST FARM SYSTEM (v7.1 Logic)
+--// ============================================================
+
 local function getChestPos(chest)
     if not chest or not chest.Parent then return nil end
     if chest:IsA('Model') then
         if chest.PrimaryPart then return chest.PrimaryPart.Position end
+        local hitbox = chest:FindFirstChild('Hitbox')
+        if hitbox and hitbox:IsA('BasePart') then return hitbox.Position end
+        local aura = chest:FindFirstChild('Chest Aura')
+        if aura and aura:IsA('BasePart') then return aura.Position end
         for _, part in ipairs(chest:GetDescendants()) do
             if part:IsA('BasePart') then return part.Position end
         end
@@ -442,18 +454,22 @@ local function startChestAuto()
     ChestConfig.AutoChest = true
     ChestConfig.visitedChests = {}
     ChestConfig.farmedCount = 0
+
     local function nextChest()
         if not ChestConfig.AutoChest then return end
         local chests = getChests()
         if #chests == 0 then
+            task.wait(2)
             task.defer(nextChest)
             return
         end
         local hrp = getHRP()
         if not hrp then
+            task.wait(1)
             task.defer(nextChest)
             return
         end
+
         local bestChest = nil
         local bestDist = math.huge
         for _, chest in ipairs(chests) do
@@ -466,6 +482,7 @@ local function startChestAuto()
                 end
             end
         end
+
         if not bestChest then
             ChestConfig.visitedChests = {}
             for _, chest in ipairs(chests) do
@@ -479,7 +496,13 @@ local function startChestAuto()
                 end
             end
         end
-        if not bestChest then bestChest = chests[1] end
+
+        if not bestChest then
+            task.wait(2)
+            task.defer(nextChest)
+            return
+        end
+
         local pos = getChestPos(bestChest)
         if pos then
             table.insert(ChestConfig.visitedChests, pos)
@@ -489,12 +512,16 @@ local function startChestAuto()
                 task.defer(nextChest)
             end)
         else
+            task.wait(1)
             task.defer(nextChest)
         end
     end
     nextChest()
 end
 
+--// ============================================================
+--// M1 ATTACK
+--// ============================================================
 local function M1Attack()
     local char = player.Character
     if not char then return end
@@ -857,7 +884,7 @@ DashBtn.MouseButton1Click:Connect(DoDash)
 MakeDraggable(DashFrame, DashFrame)
 
 --// ============================================================
---// 🍎 IMPROVED FRUIT ESP (No duplicates, uses official folders)
+--// 🍎 IMPROVED FRUIT ESP
 --// ============================================================
 local ESP_MAX_DISTANCE = 25000
 local ESP_MIN_Y_LEVEL = 2.86
@@ -916,15 +943,6 @@ local function GetFruitName(Object)
     return IsValidName(Object.Name) and Object.Name or (Object.Parent and IsValidName(Object.Parent.Name) and Object.Parent.Name) or 'Fruit'
 end
 
-local function GetFruitRoot(Object, Folder)
-    if not Object or not Folder then return nil end
-    local Current = Object
-    while Current.Parent and Current.Parent ~= Folder do
-        Current = Current.Parent
-    end
-    return Current.Parent == Folder and Current or nil
-end
-
 local function GetPosition(Object)
     if not Object then return nil end
     if Object:IsA('BasePart') then return Object.Position end
@@ -957,7 +975,6 @@ end
 
 local function CreateESP(Part, Color, Name, Distance)
     if not Part then return nil end
-    -- Remove old ESP on same part
     for _, Child in ipairs(Part:GetChildren()) do
         if Child.Name == 'FruitESP_Billboard' or Child.Name == 'FruitESP_Highlight' then
             Child:Destroy()
@@ -997,7 +1014,6 @@ local function CreateESP(Part, Color, Name, Distance)
     return { Highlight = Highlight, Billboard = Billboard, Label = Label, Name = Name, Part = Part }
 end
 
--- Global toggles (controlled by Visual Tab)
 ESPFruitDropEnabled = false
 ESPFruitSpawnEnabled = false
 
@@ -1031,7 +1047,6 @@ local function ScanFolder(Folder, Storage, Color, Prefix)
         end
     end
 
-    -- Cleanup disappeared fruits
     for Fruit, Data in pairs(Storage) do
         if not Current[Fruit] or not Fruit.Parent then
             RemoveESP(Data)
@@ -1082,7 +1097,6 @@ function SetFruitSpawnESP(state)
     RefreshESPConnection()
 end
 
--- Cleanup on character respawn
 player.CharacterAdded:Connect(function()
     for _, storage in pairs(ESPObjects) do
         for obj, data in pairs(storage) do
@@ -1151,17 +1165,21 @@ local function CreateSection(parent, title)
     return section, container
 end
 
+-- ============================================================
+-- 🔧 FIXED SLIDER (Active + Touch support)
+-- ============================================================
 local function CreateSlider(parent, name, min, max, default, callback, suffix)
     local frame = Create('Frame', {Parent = parent, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 50)})
     Create('TextLabel', {Parent = frame, BackgroundTransparency = 1, Size = UDim2.new(0.5, 0, 0, 20), Font = Enum.Font.Gotham, Text = name, TextColor3 = CONFIG.Theme.Text, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left})
     local valueLabel = Create('TextLabel', {Parent = frame, BackgroundTransparency = 1, Size = UDim2.new(0.5, 0, 0, 20), Position = UDim2.new(0.5, 0, 0, 0), Font = Enum.Font.GothamBold, Text = tostring(default) .. (suffix or ''), TextColor3 = CONFIG.Theme.Accent, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Right})
-    local sliderBg = Create('Frame', {Parent = frame, BackgroundColor3 = CONFIG.Theme.Background, Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 30)})
+    local sliderBg = Create('Frame', {Parent = frame, BackgroundColor3 = CONFIG.Theme.Background, Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 30), Active = true})  -- <-- HERE FIXED
     AddCorner(sliderBg, 4)
     local fill = Create('Frame', {Parent = sliderBg, BackgroundColor3 = CONFIG.Theme.Accent, Size = UDim2.new((default - min) / (max - min), 0, 1, 0)})
     AddCorner(fill, 4)
     AddGradient(fill, CONFIG.Theme.Accent, CONFIG.Theme.Accent2)
     local knob = Create('Frame', {Parent = fill, BackgroundColor3 = CONFIG.Theme.Text, Size = UDim2.new(0, 14, 0, 14), Position = UDim2.new(1, -7, 0.5, -7), ZIndex = 2})
     AddCorner(knob, 7)
+
     local dragging = false
     local function update(input)
         local pos = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
@@ -1170,22 +1188,26 @@ local function CreateSlider(parent, name, min, max, default, callback, suffix)
         valueLabel.Text = tostring(value) .. (suffix or '')
         if callback then callback(value) end
     end
+
     sliderBg.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             update(input)
         end
     end)
+
     UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             update(input)
         end
     end)
+
     UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
         end
     end)
+
     return frame
 end
 
@@ -1219,7 +1241,7 @@ local function CreateButton(parent, name, callback)
 end
 
 --// ============================================================
---// TABS
+--// TABS (v8.1)
 --// ============================================================
 local MainTab = CreateTab('Main', '>')
 local _, mainContainer = CreateSection(MainTab, 'Dash Settings')
@@ -1382,12 +1404,21 @@ CreateToggle(statsContainer, 'Auto Defense', false, function(state) HazeConfig.A
 CreateToggle(statsContainer, 'Auto Sword', false, function(state) HazeConfig.AutoSword = state end)
 CreateToggle(statsContainer, 'Auto Fruit', false, function(state) HazeConfig.AutoFruit = state end)
 
+-- ============================================================
+-- CHEST TAB (v8.1 GUI with v7.1 Logic)
+-- ============================================================
 local ChestTab = CreateTab('Chest', 'C')
-local _, chestContainer = CreateSection(ChestTab, 'Chest Farm')
+local _, chestContainer = CreateSection(ChestTab, 'Chest Farm (v7.1 Logic)')
+
 local ChestToggleBtn = Create('TextButton', {Parent = chestContainer, BackgroundColor3 = Color3.fromRGB(200, 50, 50), Size = UDim2.new(1, 0, 0, 42), Font = Enum.Font.GothamBold, Text = 'START CHEST FARM', TextColor3 = CONFIG.Theme.Text, TextSize = 14, AutoButtonColor = false})
 AddCorner(ChestToggleBtn, 8)
+
 local ChestCountLabel = Create('TextLabel', {Parent = chestContainer, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 20), Font = Enum.Font.GothamBold, Text = 'Chests: 0', TextColor3 = CONFIG.Theme.Accent, TextSize = 12})
-CreateSlider(chestContainer, 'Farm Speed', 50, 500, 210, function(val) ChestConfig.FarmSpeed = val end, ' Studs/s')
+
+CreateSlider(chestContainer, 'Farm Speed', 50, 500, 210, function(val)
+    ChestConfig.FarmSpeed = val
+end, ' Studs/s')
+
 ChestToggleBtn.MouseButton1Click:Connect(function()
     ChestConfig.AutoChest = not ChestConfig.AutoChest
     if ChestConfig.AutoChest then
@@ -1401,6 +1432,7 @@ ChestToggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+-- M1 Tab
 local M1Tab = CreateTab('M1', 'M')
 local _, m1Container = CreateSection(M1Tab, 'Auto Click')
 local M1ToggleBtn = Create('TextButton', {Parent = m1Container, BackgroundColor3 = Color3.fromRGB(200, 50, 50), Size = UDim2.new(1, 0, 0, 42), Font = Enum.Font.GothamBold, Text = 'START AUTO CLICK', TextColor3 = CONFIG.Theme.Text, TextSize = 14, AutoButtonColor = false})
@@ -1419,12 +1451,8 @@ end)
 
 local VisualTab = CreateTab('Visual', 'V')
 local _, visualContainer = CreateSection(VisualTab, 'Visual Settings')
-CreateToggle(visualContainer, 'ESP Fruit Drop', false, function(enabled)
-    SetFruitDropESP(enabled)
-end)
-CreateToggle(visualContainer, 'ESP Fruit Spawn', false, function(enabled)
-    SetFruitSpawnESP(enabled)
-end)
+CreateToggle(visualContainer, 'ESP Fruit Drop', false, function(enabled) SetFruitDropESP(enabled) end)
+CreateToggle(visualContainer, 'ESP Fruit Spawn', false, function(enabled) SetFruitSpawnESP(enabled) end)
 CreateToggle(visualContainer, 'Full Bright', false, function(enabled)
     if enabled then
         Lighting.Ambient = Color3.fromRGB(255, 255, 255)
@@ -1767,4 +1795,4 @@ player.CharacterAdded:Connect(function(char)
     end)
 end)
 
-print('[NAZK HUB v8.1 Delta Full + Fruit ESP] Loaded! Welcome, ' .. player.Name)
+print('[NAZK HUB v8.1 + Chest v7.1 Logic + Fixed Sliders] Loaded! Welcome, ' .. player.Name)
