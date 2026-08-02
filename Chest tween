@@ -1,9 +1,8 @@
 -- ============================================================
--- NAZK HUB v8.1 Delta Full Edition
+-- NAZK HUB v8.1 Delta Full Edition + Fruit ESP (Improved)
 -- Tabs: Main, Farm, Stats, Chest, M1, Visual, ServerHop, SeaBeast, Misc, Settings
 -- Compatible: Delta, Fluxus, Hydrogen, Codex
 -- ============================================================
-
 local Players = game:GetService('Players')
 local TweenService = game:GetService('TweenService')
 local RunService = game:GetService('RunService')
@@ -40,7 +39,7 @@ local HazeConfig = {
     AutoCombat = false,
     AutoDefense = false,
     AutoSword = false,
-    AutoFruit = false
+    AutoFruit = false,
 }
 
 local ChestConfig = {
@@ -74,13 +73,24 @@ local SH_Config = {
 }
 
 local QuestData = {
-    [1]  = {1, 10, 25}, [2]  = {40, 60}, [3]  = {90, 120},
-    [4]  = {160, 200}, [5]  = {250, 300}, [6]  = {350, 400},
-    [7]  = {450, 500, 550}, [8]  = {600, 650}, [9]  = {700, 750},
-    [10] = {800, 850, 900}, [11] = {950, 1000}, [12] = {1050, 1100},
-    [13] = {1150, 1200, 1250}, [14] = {1300, 1350, 1400},
-    [15] = {1450, 1500, 1550}, [16] = {1600, 1650, 1700},
-    [17] = {1750, 1800, 1850}, [18] = {1900, 1950, 2000},
+    [1] = {1, 10, 25},
+    [2] = {40, 60},
+    [3] = {90, 120},
+    [4] = {160, 200},
+    [5] = {250, 300},
+    [6] = {350, 400},
+    [7] = {450, 500, 550},
+    [8] = {600, 650},
+    [9] = {700, 750},
+    [10] = {800, 850, 900},
+    [11] = {950, 1000},
+    [12] = {1050, 1100},
+    [13] = {1150, 1200, 1250},
+    [14] = {1300, 1350, 1400},
+    [15] = {1450, 1500, 1550},
+    [16] = {1600, 1650, 1700},
+    [17] = {1750, 1800, 1850},
+    [18] = {1900, 1950, 2000},
     [19] = {2050, 2100, 2150}
 }
 
@@ -134,6 +144,9 @@ local LevelLocations = {
     {2100,2150, Vector3.new(5505.52,119.59,6178.21)}
 }
 
+--// ============================================================
+--// HELPERS
+--// ============================================================
 local function Create(instanceType, properties)
     local instance = Instance.new(instanceType)
     for property, value in pairs(properties) do
@@ -200,7 +213,9 @@ end
 
 local function GetLevelLocation(level)
     for _, data in ipairs(LevelLocations) do
-        if level >= data[1] and level < data[2] then return data[3] end
+        if level >= data[1] and level < data[2] then
+            return data[3]
+        end
     end
     if level >= 2100 then return Vector3.new(5505.52,119.59,6178.21) end
     return nil
@@ -213,7 +228,10 @@ local function TweenTo(position)
     if not root then return false end
     local distance = (root.Position - position).Magnitude
     local duration = distance / HazeConfig.TweenSpeed
-    if duration < 0.05 then root.CFrame = CFrame.new(position) return true end
+    if duration < 0.05 then
+        root.CFrame = CFrame.new(position)
+        return true
+    end
     local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {CFrame = CFrame.new(position)})
     tween:Play()
     tween.Completed:Wait()
@@ -245,7 +263,10 @@ local function GetNearestTarget()
             local valid, hrp = IsValidTarget(obj)
             if valid and hrp then
                 local dist = (root.Position - hrp.Position).Magnitude
-                if dist <= nearestDistance then nearestDistance = dist nearestHRP = hrp end
+                if dist <= nearestDistance then
+                    nearestDistance = dist
+                    nearestHRP = hrp
+                end
             end
         end
     end
@@ -257,7 +278,9 @@ local function FindQuestRemote()
     for _, parent in ipairs(places) do
         if parent then
             local remote = parent:FindFirstChild('QuestFunction', true)
-            if remote and remote:IsA('RemoteFunction') then return remote end
+            if remote and remote:IsA('RemoteFunction') then
+                return remote
+            end
         end
     end
     return nil
@@ -270,7 +293,10 @@ local function GetBestQuest(level)
     for giverID, levels in pairs(QuestData) do
         for _, questLevel in ipairs(levels) do
             if questLevel <= level then
-                if not bestQuest or questLevel > bestQuest then bestQuest = questLevel bestGiver = giverID end
+                if not bestQuest or questLevel > bestQuest then
+                    bestQuest = questLevel
+                    bestGiver = giverID
+                end
             end
         end
     end
@@ -290,13 +316,17 @@ local function TakeBestQuest()
     local npc = questGivers:FindFirstChild(tostring(giverID))
     if not npc then return end
     local questName = 'Level ' .. tostring(questLevel)
-    pcall(function() QuestRemote:InvokeServer(npc, questName) end)
+    pcall(function()
+        QuestRemote:InvokeServer(npc, questName)
+    end)
 end
 
 local function UpgradeStat(statName)
     local args = {statName, 1}
     local remote = ReplicatedStorage:WaitForChild('Replication'):WaitForChild('ClientEvents'):WaitForChild('Stats_Event')
-    pcall(function() remote:FireServer(unpack(args)) end)
+    pcall(function()
+        remote:FireServer(unpack(args))
+    end)
 end
 
 local function getHRP()
@@ -318,14 +348,18 @@ local function getChestPos(chest)
         for _, part in ipairs(chest:GetDescendants()) do
             if part:IsA('BasePart') then return part.Position end
         end
-    elseif chest:IsA('BasePart') then return chest.Position end
+    elseif chest:IsA('BasePart') then
+        return chest.Position
+    end
     return nil
 end
 
 local function getChests()
     local chests = {}
     for _, obj in ipairs(workspace:GetChildren()) do
-        if obj:IsA('Model') and obj.Name == 'Chest' then table.insert(chests, obj) end
+        if obj:IsA('Model') and obj.Name == 'Chest' then
+            table.insert(chests, obj)
+        end
     end
     return chests
 end
@@ -333,29 +367,51 @@ end
 local function isVisited(chestPos)
     if not chestPos then return true end
     for _, visitedPos in ipairs(ChestConfig.visitedChests) do
-        if (visitedPos - chestPos).Magnitude < 25 then return true end
+        if (visitedPos - chestPos).Magnitude < 25 then
+            return true
+        end
     end
     return false
 end
 
 local function smoothFlyTo(targetPos, onComplete)
     local hrp = getHRP()
-    if not hrp then if onComplete then task.defer(onComplete) end return end
-    if ChestConfig.currentConnection then ChestConfig.currentConnection:Disconnect() ChestConfig.currentConnection = nil end
+    if not hrp then
+        if onComplete then task.defer(onComplete) end
+        return
+    end
+    if ChestConfig.currentConnection then
+        ChestConfig.currentConnection:Disconnect()
+        ChestConfig.currentConnection = nil
+    end
     local startCF = hrp.CFrame
     local targetCF = CFrame.new(targetPos + Vector3.new(0, 3, 0))
     local distance = (startCF.Position - targetCF.Position).Magnitude
     local duration = math.max(distance / ChestConfig.FarmSpeed, 0.01)
     local startTime = tick()
-    if distance < 5 then hrp.CFrame = targetCF hrp.AssemblyLinearVelocity = Vector3.zero if onComplete then task.defer(onComplete) end return end
+    if distance < 5 then
+        hrp.CFrame = targetCF
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        if onComplete then task.defer(onComplete) end
+        return
+    end
     ChestConfig.currentConnection = RunService.Heartbeat:Connect(function()
-        if not hrp or not hrp.Parent then if ChestConfig.currentConnection then ChestConfig.currentConnection:Disconnect() ChestConfig.currentConnection = nil end return end
+        if not hrp or not hrp.Parent then
+            if ChestConfig.currentConnection then
+                ChestConfig.currentConnection:Disconnect()
+                ChestConfig.currentConnection = nil
+            end
+            return
+        end
         local elapsed = tick() - startTime
         local alpha = elapsed / duration
         if alpha >= 1 then
             hrp.CFrame = targetCF
             hrp.AssemblyLinearVelocity = Vector3.zero
-            if ChestConfig.currentConnection then ChestConfig.currentConnection:Disconnect() ChestConfig.currentConnection = nil end
+            if ChestConfig.currentConnection then
+                ChestConfig.currentConnection:Disconnect()
+                ChestConfig.currentConnection = nil
+            end
             if onComplete then task.defer(onComplete) end
             return
         end
@@ -370,9 +426,15 @@ local function stopChestAuto()
     ChestConfig.AutoChest = false
     ChestConfig.visitedChests = {}
     ChestConfig.farmedCount = 0
-    if ChestConfig.currentConnection then ChestConfig.currentConnection:Disconnect() ChestConfig.currentConnection = nil end
+    if ChestConfig.currentConnection then
+        ChestConfig.currentConnection:Disconnect()
+        ChestConfig.currentConnection = nil
+    end
     local humanoid = getHumanoid()
-    if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) humanoid.AutoRotate = true end
+    if humanoid then
+        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        humanoid.AutoRotate = true
+    end
 end
 
 local function startChestAuto()
@@ -383,23 +445,38 @@ local function startChestAuto()
     local function nextChest()
         if not ChestConfig.AutoChest then return end
         local chests = getChests()
-        if #chests == 0 then task.defer(nextChest) return end
+        if #chests == 0 then
+            task.defer(nextChest)
+            return
+        end
         local hrp = getHRP()
-        if not hrp then task.defer(nextChest) return end
+        if not hrp then
+            task.defer(nextChest)
+            return
+        end
         local bestChest = nil
         local bestDist = math.huge
         for _, chest in ipairs(chests) do
             local pos = getChestPos(chest)
             if pos and not isVisited(pos) then
                 local d = (hrp.Position - pos).Magnitude
-                if d < bestDist then bestDist = d bestChest = chest end
+                if d < bestDist then
+                    bestDist = d
+                    bestChest = chest
+                end
             end
         end
         if not bestChest then
             ChestConfig.visitedChests = {}
             for _, chest in ipairs(chests) do
                 local pos = getChestPos(chest)
-                if pos then local d = (hrp.Position - pos).Magnitude if d < bestDist then bestDist = d bestChest = chest end end
+                if pos then
+                    local d = (hrp.Position - pos).Magnitude
+                    if d < bestDist then
+                        bestDist = d
+                        bestChest = chest
+                    end
+                end
             end
         end
         if not bestChest then bestChest = chests[1] end
@@ -407,8 +484,13 @@ local function startChestAuto()
         if pos then
             table.insert(ChestConfig.visitedChests, pos)
             ChestConfig.farmedCount = ChestConfig.farmedCount + 1
-            smoothFlyTo(pos, function() if not ChestConfig.AutoChest then return end task.defer(nextChest) end)
-        else task.defer(nextChest) end
+            smoothFlyTo(pos, function()
+                if not ChestConfig.AutoChest then return end
+                task.defer(nextChest)
+            end)
+        else
+            task.defer(nextChest)
+        end
     end
     nextChest()
 end
@@ -417,10 +499,17 @@ local function M1Attack()
     local char = player.Character
     if not char then return end
     local tool = char:FindFirstChildOfClass('Tool')
-    if tool then pcall(function() tool:Activate() end) end
-    pcall(function() if mouse1click then mouse1click() end end)
+    if tool then
+        pcall(function() tool:Activate() end)
+    end
+    pcall(function()
+        if mouse1click then mouse1click() end
+    end)
 end
 
+--// ============================================================
+--// SEA BEAST
+--// ============================================================
 local SB_Running = false
 local SB_CurrentTarget = nil
 local SB_ChaseConn = nil
@@ -431,12 +520,19 @@ local function IsRealSeaBeast(obj)
     local name = obj.Name
     local isBeast = false
     for _, pattern in ipairs(SB_Config.BeastNames) do
-        if name == pattern or name:find('Sea Beast') or name:find('SeaBeast') or name:find('Sea_Beast') then isBeast = true break end
+        if name == pattern or name:find('Sea Beast') or name:find('SeaBeast') or name:find('Sea_Beast') then
+            isBeast = true
+            break
+        end
     end
     if not isBeast then return false end
-    if name:find('SpawnPoint') or name:find('Spawn') or name:find('Spawner') or name:find('Indicator') then return false end
+    if name:find('SpawnPoint') or name:find('Spawn') or name:find('Spawner') or name:find('Indicator') then
+        return false
+    end
     if obj.PrimaryPart then return true end
-    for _, p in ipairs(obj:GetDescendants()) do if p:IsA('BasePart') then return true end end
+    for _, p in ipairs(obj:GetDescendants()) do
+        if p:IsA('BasePart') then return true end
+    end
     return false
 end
 
@@ -444,10 +540,16 @@ local function SB_Scan()
     local beasts = {}
     local checked = {}
     for _, obj in ipairs(workspace:GetChildren()) do
-        if IsRealSeaBeast(obj) and not checked[obj] then checked[obj] = true table.insert(beasts, obj) end
+        if IsRealSeaBeast(obj) and not checked[obj] then
+            checked[obj] = true
+            table.insert(beasts, obj)
+        end
     end
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if IsRealSeaBeast(obj) and not checked[obj] then checked[obj] = true table.insert(beasts, obj) end
+        if IsRealSeaBeast(obj) and not checked[obj] then
+            checked[obj] = true
+            table.insert(beasts, obj)
+        end
     end
     return beasts
 end
@@ -455,11 +557,15 @@ end
 local function SB_GetBodyPart(obj)
     if not obj or not obj.Parent then return nil end
     if obj.PrimaryPart then return obj.PrimaryPart end
-    local biggest = nil local maxSize = 0
+    local biggest = nil
+    local maxSize = 0
     for _, p in ipairs(obj:GetDescendants()) do
         if p:IsA('BasePart') then
             local size = p.Size.X * p.Size.Y * p.Size.Z
-            if size > maxSize then maxSize = size biggest = p end
+            if size > maxSize then
+                maxSize = size
+                biggest = p
+            end
         end
     end
     return biggest
@@ -480,21 +586,36 @@ local function SB_Attack()
             local bp = player:FindFirstChild('Backpack')
             if bp then
                 for _, t in ipairs(bp:GetChildren()) do
-                    if t:IsA('Tool') then t.Parent = char task.wait(0.05) break end
+                    if t:IsA('Tool') then
+                        t.Parent = char
+                        task.wait(0.05)
+                        break
+                    end
                 end
             end
         end
     end
     local tool = char:FindFirstChildOfClass('Tool')
-    if tool then pcall(function() tool:Activate() end) end
-    pcall(function() if mouse1click then mouse1click() end end)
+    if tool then
+        pcall(function() tool:Activate() end)
+    end
+    pcall(function()
+        if mouse1click then mouse1click() end
+    end)
 end
 
 local function SB_StartChase(beastPart)
     if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
     SB_ChaseConn = RunService.Heartbeat:Connect(function()
-        if not SB_Running or not SB_Config.Enabled then if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end return end
-        if not beastPart or not beastPart.Parent then SB_CurrentTarget = nil if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end return end
+        if not SB_Running or not SB_Config.Enabled then
+            if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
+            return
+        end
+        if not beastPart or not beastPart.Parent then
+            SB_CurrentTarget = nil
+            if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
+            return
+        end
         local char = player.Character
         local hrp = char and char:FindFirstChild('HumanoidRootPart')
         if not hrp or not hrp.Parent then return end
@@ -519,23 +640,40 @@ local function SB_Loop()
     while SB_Running and SB_Config.Enabled do
         if SB_CurrentTarget and SB_CurrentTarget.Parent then
             local beastPos = SB_GetBeastPos(SB_CurrentTarget)
-            if beastPos then task.wait(0.5)
-            else SB_CurrentTarget = nil if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end task.wait(0.5) end
+            if beastPos then
+                task.wait(0.5)
+            else
+                SB_CurrentTarget = nil
+                if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
+                task.wait(0.5)
+            end
         else
             if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
             SB_CurrentTarget = nil
             local beasts = SB_Scan()
-            if #beasts == 0 then task.wait(1)
+            if #beasts == 0 then
+                task.wait(1)
             else
                 local hrp = player.Character and player.Character:FindFirstChild('HumanoidRootPart')
-                local closest = nil local minD = math.huge
+                local closest = nil
+                local minD = math.huge
                 for _, b in ipairs(beasts) do
                     local part = SB_GetBodyPart(b)
-                    if part and hrp then local d = (hrp.Position - part.Position).Magnitude if d < minD then minD = d closest = b end end
+                    if part and hrp then
+                        local d = (hrp.Position - part.Position).Magnitude
+                        if d < minD then
+                            minD = d
+                            closest = b
+                        end
+                    end
                 end
                 if closest then
                     local bodyPart = SB_GetBodyPart(closest)
-                    if bodyPart then SB_CurrentTarget = closest SB_StartChase(bodyPart) SB_StartAttack() end
+                    if bodyPart then
+                        SB_CurrentTarget = closest
+                        SB_StartChase(bodyPart)
+                        SB_StartAttack()
+                    end
                 end
                 task.wait(0.5)
             end
@@ -559,14 +697,21 @@ function StopSeaBeastFarm()
     if SB_AttackConn then SB_AttackConn:Disconnect() SB_AttackConn = nil end
 end
 
+--// ============================================================
+--// SERVER HOPPER
+--// ============================================================
 local placeId = game.PlaceId
 local jobId = game.JobId
 
 local function getServers(cursor)
     local url = ('https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100'):format(placeId)
     if cursor then url = url .. '&cursor=' .. cursor end
-    local success, result = pcall(function() return game:HttpGet(url) end)
-    if success then return HttpService:JSONDecode(result) end
+    local success, result = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if success then
+        return HttpService:JSONDecode(result)
+    end
     warn('[NAZK] Failed to fetch servers: ' .. tostring(result))
     return nil
 end
@@ -580,14 +725,18 @@ local function findLowPlayerServer()
         if not data then break end
         for _, server in ipairs(data.data) do
             if server.id ~= jobId and server.playing <= SH_Config.MaxPlayers then
-                if not SH_Config.visitedServers[server.id] then table.insert(allServers, server) end
+                if not SH_Config.visitedServers[server.id] then
+                    table.insert(allServers, server)
+                end
             end
         end
         cursor = data.nextPageCursor
         pages = pages + 1
         task.wait(0.1)
     until not cursor or pages >= 5 or #allServers >= 20
-    table.sort(allServers, function(a, b) return a.playing < b.playing end)
+    table.sort(allServers, function(a, b)
+        return a.playing < b.playing
+    end)
     return allServers
 end
 
@@ -599,7 +748,9 @@ local function serverHop()
     repeat
         servers = findLowPlayerServer()
         tries = tries + 1
-        if #servers == 0 then task.wait(SH_Config.RetryDelay) end
+        if #servers == 0 then
+            task.wait(SH_Config.RetryDelay)
+        end
     until #servers > 0 or tries >= SH_Config.RetryLimit
     if #servers > 0 then
         local target = servers[1]
@@ -622,7 +773,9 @@ local function serverHopRandom()
         local data = getServers(cursor)
         if not data then break end
         for _, server in ipairs(data.data) do
-            if server.id ~= jobId and not SH_Config.visitedServers[server.id] then table.insert(allServers, server) end
+            if server.id ~= jobId and not SH_Config.visitedServers[server.id] then
+                table.insert(allServers, server)
+            end
         end
         cursor = data.nextPageCursor
         pages = pages + 1
@@ -639,9 +792,9 @@ local function serverHopRandom()
     end
 end
 
--- ============================================================
--- DASH BUTTON
--- ============================================================
+--// ============================================================
+--// DASH BUTTON
+--// ============================================================
 local DashGui = Create('ScreenGui', {Name = 'DashButtonGUI', Parent = player:WaitForChild('PlayerGui'), ResetOnSpawn = false})
 local DashFrame = Create('Frame', {Name = 'DashFrame', Parent = DashGui, BackgroundColor3 = CONFIG.Theme.Background, BorderSizePixel = 0, Size = UDim2.new(0, 50, 0, 50), Position = UDim2.new(1, -140, 1, -240)})
 AddCorner(DashFrame, 12)
@@ -651,6 +804,7 @@ AddCorner(DashBtn, 10)
 AddGradient(DashBtn, CONFIG.Theme.Accent, CONFIG.Theme.Accent2)
 local CooldownFrame = Create('Frame', {Name = 'Cooldown', Parent = DashBtn, BackgroundColor3 = Color3.fromRGB(0,0,0), BackgroundTransparency = 0.6, BorderSizePixel = 0, Size = UDim2.new(0, 0, 1, 0)})
 AddCorner(CooldownFrame, 10)
+
 local dashCooldown = false
 local function DoDash()
     if dashCooldown then return end
@@ -666,7 +820,10 @@ local function DoDash()
     local cam = workspace.CurrentCamera
     local lookDir = cam.CFrame.LookVector
     lookDir = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
-    if lookDir.Magnitude == 0 then lookDir = root.CFrame.LookVector lookDir = Vector3.new(lookDir.X, 0, lookDir.Z).Unit end
+    if lookDir.Magnitude == 0 then
+        lookDir = root.CFrame.LookVector
+        lookDir = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
+    end
     local dashVel = Instance.new('BodyVelocity')
     dashVel.Velocity = lookDir * CONFIG.DashPower
     dashVel.MaxForce = Vector3.new(500000, 0, 500000)
@@ -678,8 +835,12 @@ local function DoDash()
     trail.Color = ColorSequence.new(CONFIG.Theme.Accent, CONFIG.Theme.Accent2)
     trail.LightEmission = 1
     trail.Parent = root
-    local att0 = Instance.new('Attachment') att0.Position = Vector3.new(0, -2, 0) att0.Parent = root
-    local att1 = Instance.new('Attachment') att1.Position = Vector3.new(0, 2, 0) att1.Parent = root
+    local att0 = Instance.new('Attachment')
+    att0.Position = Vector3.new(0, -2, 0)
+    att0.Parent = root
+    local att1 = Instance.new('Attachment')
+    att1.Position = Vector3.new(0, 2, 0)
+    att1.Parent = root
     trail.Attachment0 = att0
     trail.Attachment1 = att1
     task.delay(CONFIG.DashDuration, function()
@@ -688,18 +849,257 @@ local function DoDash()
         if att0 then att0:Destroy() end
         if att1 then att1:Destroy() end
     end)
-    task.delay(CONFIG.DashCooldown, function() dashCooldown = false end)
+    task.delay(CONFIG.DashCooldown, function()
+        dashCooldown = false
+    end)
 end
 DashBtn.MouseButton1Click:Connect(DoDash)
 MakeDraggable(DashFrame, DashFrame)
 
--- ============================================================
--- MAIN GUI
--- ============================================================
+--// ============================================================
+--// 🍎 IMPROVED FRUIT ESP (No duplicates, uses official folders)
+--// ============================================================
+local ESP_MAX_DISTANCE = 25000
+local ESP_MIN_Y_LEVEL = 2.86
+local ESP_Logic
+local ESP_FruitDrops
+local ESP_FruitSpawns
+
+task.spawn(function()
+    ESP_Logic = workspace:WaitForChild('Logic', 15)
+    if ESP_Logic then
+        ESP_FruitDrops = ESP_Logic:WaitForChild('FruitDrops', 15)
+        ESP_FruitSpawns = ESP_Logic:WaitForChild('FruitSpawns', 15)
+    end
+end)
+
+local KNOWN_FRUITS = {
+    Bomb = true, Buddha = true, Combat = true, Darkness = true, Flame = true,
+    Sand = true, Smoke = true, Spike = true, String = true, Vanish = true,
+    Venom = true, Zenith = true, Gum = true, Electricity = true, Dragon = true,
+    Ice = true, Light = true, Magma = true, Quake = true, Rumble = true,
+    Shadow = true, Gravity = true, Phoenix = true, Dough = true, Leopard = true,
+    Yeti = true, ['T-Rex'] = true, Mammoth = true, Kitsune = true, DragonV2 = true,
+}
+
+local BAD_NAMES = {
+    Meshes = true, Parts = true, Handle = true, Part = true, Union = true,
+    Model = true, Workspace = true, Logic = true, FruitDrops = true,
+    FruitSpawns = true, Clear = true, Script = true, LocalScript = true,
+    Folder = true, Accessories = true, Accessory = true, Animation = true,
+    Animate = true, Humanoid = true, Head = true, Torso = true,
+}
+
+local function IsValidName(Name)
+    if not Name or Name == '' then return false end
+    if BAD_NAMES[Name] then return false end
+    if Name:match('^Meshes/') or Name:match('^Parts/') or Name:match('^Union') or
+       Name:match('^Part%d*$') or Name:match('^Handle%d*$') or Name:match('^Mesh%d*$') or
+       Name:match('^%d+$') then
+        return false
+    end
+    return true
+end
+
+local function GetFruitName(Object)
+    if not Object then return 'Fruit' end
+    if IsValidName(Object.Name) and KNOWN_FRUITS[Object.Name] then return Object.Name end
+    if Object.Parent and IsValidName(Object.Parent.Name) and KNOWN_FRUITS[Object.Parent.Name] then
+        return Object.Parent.Name
+    end
+    for _, Child in ipairs(Object:GetChildren()) do
+        if IsValidName(Child.Name) and KNOWN_FRUITS[Child.Name] then return Child.Name end
+    end
+    for _, Desc in ipairs(Object:GetDescendants()) do
+        if IsValidName(Desc.Name) and KNOWN_FRUITS[Desc.Name] then return Desc.Name end
+    end
+    return IsValidName(Object.Name) and Object.Name or (Object.Parent and IsValidName(Object.Parent.Name) and Object.Parent.Name) or 'Fruit'
+end
+
+local function GetFruitRoot(Object, Folder)
+    if not Object or not Folder then return nil end
+    local Current = Object
+    while Current.Parent and Current.Parent ~= Folder do
+        Current = Current.Parent
+    end
+    return Current.Parent == Folder and Current or nil
+end
+
+local function GetPosition(Object)
+    if not Object then return nil end
+    if Object:IsA('BasePart') then return Object.Position end
+    if Object:IsA('Model') then
+        if Object.PrimaryPart then return Object.PrimaryPart.Position end
+        local Part = Object:FindFirstChildWhichIsA('BasePart', true)
+        if Part then return Part.Position end
+    end
+    local Part = Object:FindFirstChildWhichIsA('BasePart', true)
+    return Part and Part.Position or nil
+end
+
+local function GetTargetPart(Object)
+    if not Object then return nil end
+    if Object:IsA('BasePart') then return Object end
+    if Object:IsA('Model') then
+        if Object.PrimaryPart then return Object.PrimaryPart end
+        return Object:FindFirstChildWhichIsA('BasePart', true)
+    end
+    return Object:FindFirstChildWhichIsA('BasePart', true)
+end
+
+local ESPObjects = { Drops = {}, Spawns = {} }
+
+local function RemoveESP(Data)
+    if not Data then return end
+    if Data.Billboard then pcall(function() Data.Billboard:Destroy() end) end
+    if Data.Highlight then pcall(function() Data.Highlight:Destroy() end) end
+end
+
+local function CreateESP(Part, Color, Name, Distance)
+    if not Part then return nil end
+    -- Remove old ESP on same part
+    for _, Child in ipairs(Part:GetChildren()) do
+        if Child.Name == 'FruitESP_Billboard' or Child.Name == 'FruitESP_Highlight' then
+            Child:Destroy()
+        end
+    end
+    local Highlight = Instance.new('Highlight')
+    Highlight.Name = 'FruitESP_Highlight'
+    Highlight.Adornee = Part
+    Highlight.FillColor = Color
+    Highlight.OutlineColor = Color3.new(1,1,1)
+    Highlight.FillTransparency = 0.5
+    Highlight.OutlineTransparency = 0
+    Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    Highlight.Parent = Part
+
+    local Billboard = Instance.new('BillboardGui')
+    Billboard.Name = 'FruitESP_Billboard'
+    Billboard.Size = UDim2.new(0, 190, 0, 42)
+    Billboard.StudsOffset = Vector3.new(0, 3.2, 0)
+    Billboard.AlwaysOnTop = true
+    Billboard.MaxDistance = ESP_MAX_DISTANCE
+    Billboard.Parent = Part
+
+    local Label = Instance.new('TextLabel')
+    Label.Name = 'FruitESP_Label'
+    Label.Size = UDim2.new(1, 0, 1, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = Name .. '\n[' .. math.floor(Distance) .. 'm]'
+    Label.TextColor3 = Color
+    Label.TextStrokeTransparency = 0
+    Label.TextStrokeColor3 = Color3.new(0,0,0)
+    Label.TextSize = 17
+    Label.Font = Enum.Font.GothamBold
+    Label.TextWrapped = true
+    Label.Parent = Billboard
+
+    return { Highlight = Highlight, Billboard = Billboard, Label = Label, Name = Name, Part = Part }
+end
+
+-- Global toggles (controlled by Visual Tab)
+ESPFruitDropEnabled = false
+ESPFruitSpawnEnabled = false
+
+local function ScanFolder(Folder, Storage, Color, Prefix)
+    if not Folder then return end
+    local Character = player.Character
+    local HRP = Character and Character:FindFirstChild('HumanoidRootPart')
+    if not HRP then return end
+
+    local Current = {}
+    for _, Fruit in ipairs(Folder:GetChildren()) do
+        local Position = GetPosition(Fruit)
+        if Position and Position.Y >= ESP_MIN_Y_LEVEL then
+            local Distance = (Position - HRP.Position).Magnitude
+            if Distance <= ESP_MAX_DISTANCE then
+                Current[Fruit] = true
+                local Part = GetTargetPart(Fruit)
+                if Part then
+                    local Data = Storage[Fruit]
+                    if not Data then
+                        local FruitName = GetFruitName(Fruit)
+                        local ESP = CreateESP(Part, Color, Prefix .. FruitName, Distance)
+                        if ESP then Storage[Fruit] = ESP end
+                    else
+                        if Data.Label then
+                            Data.Label.Text = Data.Name .. '\n[' .. math.floor(Distance) .. 'm]'
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Cleanup disappeared fruits
+    for Fruit, Data in pairs(Storage) do
+        if not Current[Fruit] or not Fruit.Parent then
+            RemoveESP(Data)
+            Storage[Fruit] = nil
+        end
+    end
+end
+
+local ESP_Connection
+local function UpdateESP()
+    if ESPFruitDropEnabled then
+        ScanFolder(ESP_FruitDrops, ESPObjects.Drops, Color3.fromRGB(255,60,60), '🍎 ')
+    end
+    if ESPFruitSpawnEnabled then
+        ScanFolder(ESP_FruitSpawns, ESPObjects.Spawns, Color3.fromRGB(60,150,255), '📍 ')
+    end
+end
+
+local function RefreshESPConnection()
+    if ESP_Connection then
+        ESP_Connection:Disconnect()
+        ESP_Connection = nil
+    end
+    if ESPFruitDropEnabled or ESPFruitSpawnEnabled then
+        ESP_Connection = RunService.RenderStepped:Connect(UpdateESP)
+    end
+end
+
+function SetFruitDropESP(state)
+    ESPFruitDropEnabled = state
+    if not state then
+        for obj, data in pairs(ESPObjects.Drops) do
+            RemoveESP(data)
+            ESPObjects.Drops[obj] = nil
+        end
+    end
+    RefreshESPConnection()
+end
+
+function SetFruitSpawnESP(state)
+    ESPFruitSpawnEnabled = state
+    if not state then
+        for obj, data in pairs(ESPObjects.Spawns) do
+            RemoveESP(data)
+            ESPObjects.Spawns[obj] = nil
+        end
+    end
+    RefreshESPConnection()
+end
+
+-- Cleanup on character respawn
+player.CharacterAdded:Connect(function()
+    for _, storage in pairs(ESPObjects) do
+        for obj, data in pairs(storage) do
+            RemoveESP(data)
+            storage[obj] = nil
+        end
+    end
+end)
+
+--// ============================================================
+--// MAIN GUI
+--// ============================================================
 local ScreenGui = Create('ScreenGui', {Name = 'NAZK_Hub', Parent = player:WaitForChild('PlayerGui'), ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling})
 local MainFrame = Create('Frame', {Name = 'MainFrame', Parent = ScreenGui, BackgroundColor3 = CONFIG.Theme.Background, BorderSizePixel = 0, Size = UDim2.new(0, 520, 0, 380), Position = UDim2.new(0.5, -260, 0.5, -190), ClipsDescendants = true, Visible = false})
 AddCorner(MainFrame, 12)
 AddStroke(MainFrame, CONFIG.Theme.Border, 2)
+
 local TopBar = Create('Frame', {Name = 'TopBar', Parent = MainFrame, BackgroundColor3 = CONFIG.Theme.Secondary, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 40)})
 local gradLine = Create('Frame', {Parent = TopBar, BackgroundColor3 = CONFIG.Theme.Accent, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2)})
 AddGradient(gradLine, CONFIG.Theme.Accent, CONFIG.Theme.Accent2)
@@ -715,11 +1115,12 @@ local TabScroll = Create('ScrollingFrame', {Parent = TabHolder, BackgroundTransp
 local tabListLayout = Create('UIListLayout', {Parent = TabScroll, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4)})
 Create('UIPadding', {Parent = TabScroll, PaddingLeft = UDim.new(0, 2), PaddingRight = UDim.new(0, 2), PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 2)})
 local TabContent = Create('Frame', {Parent = MainFrame, BackgroundTransparency = 1, Size = UDim2.new(1, -130, 1, -50), Position = UDim2.new(0, 125, 0, 45)})
+
 local Tabs = {}
 local CurrentTab = nil
 
 local function CreateTab(name, icon)
-    local btn = Create('TextButton', {Parent = TabScroll, BackgroundColor3 = CONFIG.Theme.Secondary, BorderSizePixel = 0, Size = UDim2.new(1, -4, 0, 32), Font = Enum.Font.GothamSemibold, Text = '  ' .. (icon or '!') .. '  ' .. name, TextColor3 = CONFIG.Theme.TextDark, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false})
+    local btn = Create('TextButton', {Parent = TabScroll, BackgroundColor3 = CONFIG.Theme.Secondary, BorderSizePixel = 0, Size = UDim2.new(1, -4, 0, 32), Font = Enum.Font.GothamSemibold, Text = ' ' .. (icon or '!') .. ' ' .. name, TextColor3 = CONFIG.Theme.TextDark, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false})
     AddCorner(btn, 6)
     local content = Create('ScrollingFrame', {Parent = TabContent, BackgroundTransparency = 1, BorderSizePixel = 0, Size = UDim2.new(1, 0, 1, 0), ScrollBarThickness = 4, ScrollBarImageColor3 = CONFIG.Theme.Accent, CanvasSize = UDim2.new(0, 0, 0, 0), Visible = false})
     local layout = Create('UIListLayout', {Parent = content, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10)})
@@ -770,13 +1171,20 @@ local function CreateSlider(parent, name, min, max, default, callback, suffix)
         if callback then callback(value) end
     end
     sliderBg.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true update(input) end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            update(input)
+        end
     end)
     UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then update(input) end
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            update(input)
+        end
     end)
     UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
     end)
     return frame
 end
@@ -802,16 +1210,17 @@ local function CreateButton(parent, name, callback)
     AddGradient(btn, CONFIG.Theme.Accent, CONFIG.Theme.Accent2)
     btn.MouseButton1Click:Connect(function()
         Tween(btn, {BackgroundColor3 = Color3.fromRGB(255, 255, 255)}, 0.1)
-        task.delay(0.1, function() Tween(btn, {BackgroundColor3 = CONFIG.Theme.Accent}, 0.1) end)
+        task.delay(0.1, function()
+            Tween(btn, {BackgroundColor3 = CONFIG.Theme.Accent}, 0.1)
+        end)
         if callback then callback() end
     end)
     return btn
 end
 
--- ============================================================
--- TABS
--- ============================================================
-
+--// ============================================================
+--// TABS
+--// ============================================================
 local MainTab = CreateTab('Main', '>')
 local _, mainContainer = CreateSection(MainTab, 'Dash Settings')
 CreateSlider(mainContainer, 'Dash Power', 100, 1000, 300, function(val) CONFIG.DashPower = val end, ' Power')
@@ -832,6 +1241,7 @@ AddStroke(TargetCard, CONFIG.Theme.Border, 1)
 local TargetDot = Create('Frame', {Parent = TargetCard, BackgroundColor3 = Color3.fromRGB(150, 150, 150), BorderSizePixel = 0, Size = UDim2.new(0, 6, 0, 6), Position = UDim2.new(0, 8, 0.5, -3)})
 AddCorner(TargetDot, 3)
 local TargetStatus = Create('TextLabel', {Parent = TargetCard, BackgroundTransparency = 1, Size = UDim2.new(1, -24, 1, 0), Position = UDim2.new(0, 20, 0, 0), Font = Enum.Font.Gotham, Text = 'Target: IDLE', TextColor3 = CONFIG.Theme.TextDark, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left})
+
 local _, invContainer = CreateSection(FarmTab, 'Inventory & Auto Use')
 local InvScroll = Create('ScrollingFrame', {Parent = invContainer, BackgroundColor3 = CONFIG.Theme.Background, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 120), ScrollBarThickness = 4, ScrollBarImageColor3 = CONFIG.Theme.Accent, AutomaticCanvasSize = Enum.AutomaticSize.Y})
 AddCorner(InvScroll, 6)
@@ -843,25 +1253,44 @@ local hasArrived = false
 local isTargetingEnemy = false
 local currentTarget = nil
 local itemButtons = {}
+
 local function createItemButton(tool)
-    local btn = Create('TextButton', {Name = tool.Name, Parent = InvScroll, BackgroundColor3 = CONFIG.Theme.Secondary, Size = UDim2.new(1, -6, 0, 28), Font = Enum.Font.Gotham, Text = '  ' .. tool.Name, TextColor3 = CONFIG.Theme.Text, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false})
+    local btn = Create('TextButton', {Name = tool.Name, Parent = InvScroll, BackgroundColor3 = CONFIG.Theme.Secondary, Size = UDim2.new(1, -6, 0, 28), Font = Enum.Font.Gotham, Text = ' ' .. tool.Name, TextColor3 = CONFIG.Theme.Text, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false})
     AddCorner(btn, 5)
     btn.MouseButton1Click:Connect(function()
         HazeConfig.SelectedItem = tool
-        for _, b in pairs(itemButtons) do b.BackgroundColor3 = CONFIG.Theme.Secondary end
+        for _, b in pairs(itemButtons) do
+            b.BackgroundColor3 = CONFIG.Theme.Secondary
+        end
         btn.BackgroundColor3 = CONFIG.Theme.Accent
     end)
     table.insert(itemButtons, btn)
     return btn
 end
+
 local function updateInventory()
-    for _, btn in pairs(itemButtons) do btn:Destroy() end
+    for _, btn in pairs(itemButtons) do
+        btn:Destroy()
+    end
     itemButtons = {}
     local Backpack = player:WaitForChild('Backpack')
     local Character = player.Character or player.CharacterAdded:Wait()
-    for _, tool in pairs(Backpack:GetChildren()) do if tool:IsA('Tool') then createItemButton(tool) end end
-    if Character then for _, tool in pairs(Character:GetChildren()) do if tool:IsA('Tool') then local btn = createItemButton(tool) btn.BackgroundColor3 = Color3.fromRGB(0, 150, 100) btn.Text = '  [Held] ' .. tool.Name end end end
+    for _, tool in pairs(Backpack:GetChildren()) do
+        if tool:IsA('Tool') then
+            createItemButton(tool)
+        end
+    end
+    if Character then
+        for _, tool in pairs(Character:GetChildren()) do
+            if tool:IsA('Tool') then
+                local btn = createItemButton(tool)
+                btn.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
+                btn.Text = ' [Held] ' .. tool.Name
+            end
+        end
+    end
 end
+
 local function autoUseItem()
     if not HazeConfig.SelectedItem then return end
     local Character = player.Character
@@ -869,39 +1298,80 @@ local function autoUseItem()
     local Humanoid = Character:FindFirstChild('Humanoid')
     if not Humanoid then return end
     local tool = HazeConfig.SelectedItem
-    if tool.Parent == player:WaitForChild('Backpack') then Humanoid:EquipTool(tool) task.wait(0.15) end
-    if tool.Parent == Character then tool:Activate() end
+    if tool.Parent == player:WaitForChild('Backpack') then
+        Humanoid:EquipTool(tool)
+        task.wait(0.15)
+    end
+    if tool.Parent == Character then
+        tool:Activate()
+    end
 end
+
 AutoUseToggle.MouseButton1Click:Connect(function()
-    if not HazeConfig.SelectedItem then AutoUseToggle.Text = 'Pick an item first!' task.wait(1) AutoUseToggle.Text = 'Auto Use: OFF' return end
+    if not HazeConfig.SelectedItem then
+        AutoUseToggle.Text = 'Pick an item first!'
+        task.wait(1)
+        AutoUseToggle.Text = 'Auto Use: OFF'
+        return
+    end
     HazeConfig.AutoUse = not HazeConfig.AutoUse
-    if HazeConfig.AutoUse then AutoUseToggle.BackgroundColor3 = Color3.fromRGB(0, 200, 100) AutoUseToggle.Text = 'Auto Use: ON' AutoUseToggle.TextColor3 = CONFIG.Theme.Text
-    else AutoUseToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 75) AutoUseToggle.Text = 'Auto Use: OFF' AutoUseToggle.TextColor3 = CONFIG.Theme.TextDark end
+    if HazeConfig.AutoUse then
+        AutoUseToggle.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+        AutoUseToggle.Text = 'Auto Use: ON'
+        AutoUseToggle.TextColor3 = CONFIG.Theme.Text
+    else
+        AutoUseToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+        AutoUseToggle.Text = 'Auto Use: OFF'
+        AutoUseToggle.TextColor3 = CONFIG.Theme.TextDark
+    end
 end)
+
 local Backpack = player:WaitForChild('Backpack')
 Backpack.ChildAdded:Connect(updateInventory)
 Backpack.ChildRemoved:Connect(updateInventory)
 player.CharacterAdded:Connect(function(char)
     updateInventory()
-    char.ChildAdded:Connect(function(c) if c:IsA('Tool') then updateInventory() end end)
-    char.ChildRemoved:Connect(function(c) if c:IsA('Tool') then updateInventory() end end)
+    char.ChildAdded:Connect(function(c)
+        if c:IsA('Tool') then updateInventory() end
+    end)
+    char.ChildRemoved:Connect(function(c)
+        if c:IsA('Tool') then updateInventory() end
+    end)
 end)
 if player.Character then
-    player.Character.ChildAdded:Connect(function(c) if c:IsA('Tool') then updateInventory() end end)
-    player.Character.ChildRemoved:Connect(function(c) if c:IsA('Tool') then updateInventory() end end)
+    player.Character.ChildAdded:Connect(function(c)
+        if c:IsA('Tool') then updateInventory() end
+    end)
+    player.Character.ChildRemoved:Connect(function(c)
+        if c:IsA('Tool') then updateInventory() end
+    end)
 end
+
 FarmToggleBtn.MouseButton1Click:Connect(function()
     HazeConfig.AutoFarm = not HazeConfig.AutoFarm
     if HazeConfig.AutoFarm then
         FarmToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
         FarmToggleBtn.Text = 'AUTO FARM RUNNING'
-        if HazeConfig.SelectedItem and not HazeConfig.AutoUse then HazeConfig.AutoUse = true AutoUseToggle.BackgroundColor3 = Color3.fromRGB(0, 200, 100) AutoUseToggle.Text = 'Auto Use: ON' AutoUseToggle.TextColor3 = CONFIG.Theme.Text end
+        if HazeConfig.SelectedItem and not HazeConfig.AutoUse then
+            HazeConfig.AutoUse = true
+            AutoUseToggle.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+            AutoUseToggle.Text = 'Auto Use: ON'
+            AutoUseToggle.TextColor3 = CONFIG.Theme.Text
+        end
     else
-        hasArrived = false isTargetingEnemy = false currentTarget = nil
+        hasArrived = false
+        isTargetingEnemy = false
+        currentTarget = nil
         FarmToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
         FarmToggleBtn.Text = 'START AUTO FARM'
         local char = player.Character
-        if char then local humanoid = char:FindFirstChild('Humanoid') if humanoid then humanoid.PlatformStand = false humanoid.AutoRotate = true end end
+        if char then
+            local humanoid = char:FindFirstChild('Humanoid')
+            if humanoid then
+                humanoid.PlatformStand = false
+                humanoid.AutoRotate = true
+            end
+        end
     end
 end)
 
@@ -949,6 +1419,12 @@ end)
 
 local VisualTab = CreateTab('Visual', 'V')
 local _, visualContainer = CreateSection(VisualTab, 'Visual Settings')
+CreateToggle(visualContainer, 'ESP Fruit Drop', false, function(enabled)
+    SetFruitDropESP(enabled)
+end)
+CreateToggle(visualContainer, 'ESP Fruit Spawn', false, function(enabled)
+    SetFruitSpawnESP(enabled)
+end)
 CreateToggle(visualContainer, 'Full Bright', false, function(enabled)
     if enabled then
         Lighting.Ambient = Color3.fromRGB(255, 255, 255)
@@ -1029,7 +1505,13 @@ CreateToggle(miscContainer, 'No Clip', false, function(enabled)
     if enabled then
         _G.NoclipConnection = RunService.Stepped:Connect(function()
             local char = player.Character
-            if char then for _, part in ipairs(char:GetDescendants()) do if part:IsA('BasePart') then part.CanCollide = false end end end
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA('BasePart') then
+                        part.CanCollide = false
+                    end
+                end
+            end
         end)
     else
         if _G.NoclipConnection then _G.NoclipConnection:Disconnect() end
@@ -1063,15 +1545,26 @@ CreateToggle(miscContainer, 'Water Barrier', false, function(enabled)
             end
         end)
     else
-        if _G.WaterBarrierConn then _G.WaterBarrierConn:Disconnect() _G.WaterBarrierConn = nil end
-        if _G.WaterBarrier then _G.WaterBarrier:Destroy() _G.WaterBarrier = nil end
+        if _G.WaterBarrierConn then
+            _G.WaterBarrierConn:Disconnect()
+            _G.WaterBarrierConn = nil
+        end
+        if _G.WaterBarrier then
+            _G.WaterBarrier:Destroy()
+            _G.WaterBarrier = nil
+        end
     end
 end)
 
 local SettingsTab = CreateTab('Settings', 'S')
 local _, settingsContainer = CreateSection(SettingsTab, 'UI Settings')
-CreateButton(settingsContainer, 'Destroy UI', function() ScreenGui:Destroy() DashGui:Destroy() end)
-CreateButton(settingsContainer, 'Rejoin Server', function() game:GetService('TeleportService'):Teleport(game.PlaceId, player) end)
+CreateButton(settingsContainer, 'Destroy UI', function()
+    ScreenGui:Destroy()
+    DashGui:Destroy()
+end)
+CreateButton(settingsContainer, 'Rejoin Server', function()
+    game:GetService('TeleportService'):Teleport(game.PlaceId, player)
+end)
 
 if Tabs[1] then
     Tabs[1].Button.BackgroundColor3 = CONFIG.Theme.Accent
@@ -1104,10 +1597,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- ============================================================
--- LOOPS
--- ============================================================
-
+--// ============================================================
+--// LOOPS
+--// ============================================================
 task.spawn(function()
     while task.wait(0.5) do
         local level = GetLevel()
@@ -1120,27 +1612,49 @@ task.spawn(function()
         if HazeConfig.AutoFarm and not hasArrived then
             local level = GetLevel()
             local position = GetLevelLocation(level)
-            if position then TweenTo(position) end
+            if position then
+                TweenTo(position)
+            end
         end
     end
 end)
 
 task.spawn(function()
     while task.wait(1) do
-        if HazeConfig.AutoFarm then TakeBestQuest() end
+        if HazeConfig.AutoFarm then
+            TakeBestQuest()
+        end
     end
 end)
 
 task.spawn(function()
     while task.wait(0.3) do
-        if HazeConfig.AutoUse then pcall(autoUseItem) end
+        if HazeConfig.AutoUse then
+            pcall(autoUseItem)
+        end
     end
 end)
 
-task.spawn(function() while task.wait(0.5) do if HazeConfig.AutoCombat then UpgradeStat('Combat') end end end)
-task.spawn(function() while task.wait(0.5) do if HazeConfig.AutoDefense then UpgradeStat('Defense') end end end)
-task.spawn(function() while task.wait(0.5) do if HazeConfig.AutoSword then UpgradeStat('Sword') end end end)
-task.spawn(function() while task.wait(0.5) do if HazeConfig.AutoFruit then UpgradeStat('Fruit') end end end)
+task.spawn(function()
+    while task.wait(0.5) do
+        if HazeConfig.AutoCombat then UpgradeStat('Combat') end
+    end
+end)
+task.spawn(function()
+    while task.wait(0.5) do
+        if HazeConfig.AutoDefense then UpgradeStat('Defense') end
+    end
+end)
+task.spawn(function()
+    while task.wait(0.5) do
+        if HazeConfig.AutoSword then UpgradeStat('Sword') end
+    end
+end)
+task.spawn(function()
+    while task.wait(0.5) do
+        if HazeConfig.AutoFruit then UpgradeStat('Fruit') end
+    end
+end)
 
 task.spawn(function()
     while task.wait(0.3) do
@@ -1150,7 +1664,9 @@ end)
 
 task.spawn(function()
     while task.wait(M1Config.ClickDelay) do
-        if M1Config.AutoClick then pcall(M1Attack) end
+        if M1Config.AutoClick then
+            pcall(M1Attack)
+        end
     end
 end)
 
@@ -1159,47 +1675,66 @@ RunService.Heartbeat:Connect(function()
     local root = character and character:FindFirstChild('HumanoidRootPart')
     local humanoid = character and character:FindFirstChild('Humanoid')
     if not root or not humanoid then return end
+
     if not HazeConfig.AutoFarm then
-        hasArrived = false isTargetingEnemy = false currentTarget = nil
-        humanoid.PlatformStand = false humanoid.AutoRotate = true
+        hasArrived = false
+        isTargetingEnemy = false
+        currentTarget = nil
+        humanoid.PlatformStand = false
+        humanoid.AutoRotate = true
         TargetStatus.Text = 'Target: OFF'
         TargetStatus.TextColor3 = CONFIG.Theme.TextDark
         TargetDot.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
         return
     end
+
     local level = GetLevel()
     local targetPos = GetLevelLocation(level)
     if hasArrived and targetPos then
         local distToLoc = (root.Position - targetPos).Magnitude
         if distToLoc > 100 then
-            hasArrived = false isTargetingEnemy = false currentTarget = nil
-            humanoid.PlatformStand = false humanoid.AutoRotate = true
+            hasArrived = false
+            isTargetingEnemy = false
+            currentTarget = nil
+            humanoid.PlatformStand = false
+            humanoid.AutoRotate = true
             return
         end
     end
+
     if not hasArrived then
         if targetPos then
             local dist = (root.Position - targetPos).Magnitude
-            if dist <= HazeConfig.ArrivalDistance then hasArrived = true
+            if dist <= HazeConfig.ArrivalDistance then
+                hasArrived = true
             else
                 TargetStatus.Text = 'En Route (' .. math.floor(dist) .. ')'
                 TargetStatus.TextColor3 = Color3.fromRGB(255, 200, 0)
                 TargetDot.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
                 return
             end
-        else return end
+        else
+            return
+        end
     end
+
     local targetHRP = nil
     if currentTarget and currentTarget.Parent then
         if not Players:GetPlayerFromCharacter(currentTarget.Parent) then
             local targetHumanoid = currentTarget.Parent:FindFirstChild('Humanoid')
             if targetHumanoid and targetHumanoid.Health > 0 then
                 local dist = (root.Position - currentTarget.Position).Magnitude
-                if dist <= HazeConfig.TargetRange * 2 then targetHRP = currentTarget end
+                if dist <= HazeConfig.TargetRange * 2 then
+                    targetHRP = currentTarget
+                end
             end
         end
     end
-    if not targetHRP then targetHRP = GetNearestTarget() currentTarget = targetHRP end
+    if not targetHRP then
+        targetHRP = GetNearestTarget()
+        currentTarget = targetHRP
+    end
+
     if targetHRP then
         isTargetingEnemy = true
         humanoid.PlatformStand = true
@@ -1223,11 +1758,13 @@ RunService.Heartbeat:Connect(function()
 end)
 
 updateInventory()
-
 player.CharacterAdded:Connect(function(char)
-    task.delay(0.5, function() if ChestConfig.AutoChest then startChestAuto() end end)
-    task.delay(1, function() if SB_Config.Enabled then StartSeaBeastFarm() end end)
+    task.delay(0.5, function()
+        if ChestConfig.AutoChest then startChestAuto() end
+    end)
+    task.delay(1, function()
+        if SB_Config.Enabled then StartSeaBeastFarm() end
+    end)
 end)
 
-print('[NAZK HUB v8.1 Delta Full] Loaded! Welcome, ' .. player.Name)
-
+print('[NAZK HUB v8.1 Delta Full + Fruit ESP] Loaded! Welcome, ' .. player.Name)
