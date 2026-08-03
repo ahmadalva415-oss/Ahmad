@@ -1,37 +1,49 @@
---// NAZK HUB - Auto Game Loader
+--// NAZK HUB - Delta Loader
 
 local placeId = tostring(game.PlaceId)
-local scriptUrl
 
-if placeId == "142823291" then
-    -- MM2
-    scriptUrl = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/fee"
+local scripts = {
+    ["142823291"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/fee",
+    ["286090429"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/NAZK%20hub%20arsenal",
+    ["99664616626491"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween",
+    ["14979402479"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween",
+    ["6918802270"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween",
+    ["109509029034984"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/+1%20Aura%20per%20click",
+    ["89625393697373"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Arabian%20keyboard"
+}
 
-elseif placeId == "286090429" then
-    -- Arsenal
-    scriptUrl = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/NAZK%20hub%20arsenal"
+local url = scripts[placeId]
 
-elseif placeId == "99664616626491"
-    or placeId == "14979402479"
-    or placeId == "6918802270" then
-    -- Haze Seas
-    scriptUrl = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween"
-
-elseif placeId == "109509029034984" then
-    -- +1 Aura per Click
-    scriptUrl = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/+1%20Aura%20per%20click"
-
-else
-    warn("❌ Unsupported game | PlaceId: " .. placeId)
+if not url then
+    warn("❌ Unsupported PlaceId: " .. placeId)
     return
 end
 
-local success, result = pcall(function()
-    loadstring(game:HttpGet(scriptUrl))()
+local ok, response = pcall(function()
+    return game:HttpGet(url)
 end)
 
-if success then
-    print("✅ NAZK HUB loaded successfully!")
+if not ok then
+    warn("❌ HttpGet failed: " .. tostring(response))
+    return
+end
+
+if not response or response == "" then
+    warn("❌ Script returned empty content")
+    return
+end
+
+local execute, err = loadstring(response)
+
+if not execute then
+    warn("❌ loadstring failed: " .. tostring(err))
+    return
+end
+
+local run, result = pcall(execute)
+
+if not run then
+    warn("❌ Script execution failed: " .. tostring(result))
 else
-    warn("❌ Script failed to load: " .. tostring(result))
+    print("✅ NAZK HUB loaded successfully!")
 end
