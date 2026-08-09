@@ -1,202 +1,518 @@
--- =====================================================
--- سكربت جمع العسل + تفادي الجدران (ذكي جداً)
--- مناسب للعبة Bee Swarm Simulator
--- =====================================================
+--// NAZK SMART HONEY WALKER
+--// Walking + Pathfinding + Anti-Stuck + Smart Target
+--// No Teleport / No Tween
 
-local player = game.Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-local rootPart = character:WaitForChild("HumanoidRootPart")
+local Players = game:GetService("Players")
+local PathfindingService = game:GetService("PathfindingService")
+local CoreGui = game:GetService("CoreGui")
 
--- الإعدادات
-local SEARCH_RADIUS = 25          -- مدى البحث عن العسل
-local RAY_LENGTH = 5              -- طول الشعاع لكشف الجدار
-local MOVE_SPEED = 16             -- سرعة الحركة
-local STUCK_TIME_LIMIT = 1.5      -- إذا ظل ثابت لأكثر من 1.5 ثانية يعتبر عالق
+local LocalPlayer = Players.LocalPlayer
 
--- متغيرات التشغيل
-local running = false
-local target = nil
-local lastPos = rootPart.Position
-local stuckTimer = 0
+--==================================================
+-- SETTINGS
+--==================================================
 
--- ========== إنشاء الواجهة (GUI) ==========
-local screenGui = Instance.new("ScreenGui")
-screenGui.Parent = player.PlayerGui
+local Enabled = false
+local SearchDistance = 1500
+local ReachDistance = 6
 
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 200, 0, 90)
-frame.Position = UDim2.new(0.5, -100, 0.5, -45)
-frame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-frame.BackgroundTransparency = 0.2
-frame.BorderSizePixel = 0
-frame.Active = true
-frame.Draggable = true
-frame.Parent = screenGui
+local AgentRadius = 2.5
+local AgentHeight = 5
+local WaypointSpacing = 3
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0.35, 0)
-title.BackgroundTransparency = 1
-title.Text = "🍯 الذكي للعسل"
-title.TextColor3 = Color3.fromRGB(255, 200, 50)
-title.TextScaled = true
-title.Font = Enum.Font.GothamBold
-title.Parent = frame
+local RepathDelay = 0.15
+local MoveTimeout = 3
 
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0.7, 0, 0.4, 0)
-toggleBtn.Position = UDim2.new(0.15, 0, 0.45, 0)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-toggleBtn.Text = "إيقاف"
-toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleBtn.TextScaled = true
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.Parent = frame
+local CurrentTarget = nil
 
--- ========== دوال البحث والذكاء ==========
+--==================================================
+-- CHARACTER
+--==================================================
 
--- 1. البحث عن أقرب عسل (يشمل Honey و HoneyWisp)
-local function findNearestHoney()
-	local best = nil
-	local bestDist = math.huge
-	local pos = rootPart.Position
-
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("BasePart") and obj.Name:lower():find("honey") then
-			-- نتأكد إنه مرئي وقابل للجمع (غير مخفي)
-			if obj.Transparency < 0.7 and obj.CanCollide == false then
-				local dist = (obj.Position - pos).Magnitude
-				if dist < bestDist and dist < SEARCH_RADIUS then
-					bestDist = dist
-					best = obj
-				end
-			end
-		end
-	end
-	return best
+local function GetCharacter()
+    return LocalPlayer.Character
+        or LocalPlayer.CharacterAdded:Wait()
 end
 
--- 2. حساب اتجاه آمن (بتفادي الجدران بذكاء)
-local function getSafeDirection(targetPos)
-	local myPos = rootPart.Position
-	local dir = (targetPos - myPos).Unit
-
-	-- إعدادات الأشعة
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-	rayParams.FilterDescendantsInstances = {character}
-
-	-- نختبر الاتجاه الأساسي
-	local origin = myPos + Vector3.new(0, 1, 0) -- نرفع الشعاع قليلاً لتجنب أرضية اللعبة
-	local ray = RaycastParams.new()
-	ray.FilterType = Enum.RaycastFilterType.Blacklist
-	ray.FilterDescendantsInstances = {character}
-	
-	local hit = workspace:Raycast(origin, dir * RAY_LENGTH, ray)
-	
-	if not hit then
-		return dir -- الطريق سالك
-	end
-
-	-- هناك جدار! نجرب 8 اتجاهات حولنا (دائرة 360 درجة)
-	local angles = {0, 45, -45, 90, -90, 135, -135, 180}
-	for _, angle in ipairs(angles) do
-		local rad = math.rad(angle)
-		-- تدوير الاتجاه حول محور Y
-		local newDir = Vector3.new(
-			dir.X * math.cos(rad) - dir.Z * math.sin(rad),
-			0,
-			dir.X * math.sin(rad) + dir.Z * math.cos(rad)
-		).Unit
-		
-		local testHit = workspace:Raycast(origin, newDir * RAY_LENGTH, ray)
-		if not testHit then
-			return newDir -- وجدنا ممراً
-		end
-	end
-
-	-- إذا كل الاتجاهات مسدودة، نعيد اتجاه عشوائي ونقفز
-	humanoid.Jump = true
-	return Vector3.new(math.random(-1,1), 0, math.random(-1,1)).Unit
+local function GetRoot()
+    local Character = GetCharacter()
+    return Character:FindFirstChild("HumanoidRootPart")
 end
 
--- ========== الحلقة الرئيسية ==========
-local function mainLoop()
-	while running do
-		task.wait(0.2)
-
-		-- تحديث الشخصية إن ماتت أو تغيرت
-		if not character or not character.Parent then
-			character = player.Character
-			if not character then break end
-			humanoid = character:WaitForChild("Humanoid")
-			rootPart = character:WaitForChild("HumanoidRootPart")
-		end
-
-		-- *** نظام كشف التعليق (Stuck Detection) ***
-		local currentPos = rootPart.Position
-		local distMoved = (currentPos - lastPos).Magnitude
-		if distMoved < 0.3 then
-			stuckTimer = stuckTimer + 0.2
-		else
-			stuckTimer = 0
-		end
-		lastPos = currentPos
-
-		-- إذا كان عالقاً أكثر من المدة المحددة، اقفز بقوة وغير اتجاهك
-		if stuckTimer > STUCK_TIME_LIMIT then
-			humanoid.Jump = true
-			humanoid:MoveTo(currentPos + Vector3.new(math.random(-5,5), 0, math.random(-5,5)))
-			stuckTimer = 0
-		end
-
-		-- 1. البحث عن أقرب عسل
-		target = findNearestHoney()
-
-		if target then
-			-- 2. حساب اتجاه آمن تماماً
-			local safeDir = getSafeDirection(target.Position)
-			
-			-- 3. نقطة الوجهة (نضرب الاتجاه في سرعة معقولة)
-			local destination = rootPart.Position + safeDir * MOVE_SPEED
-			humanoid:MoveTo(destination)
-
-			-- 4. لو وصلنا قريب جداً، نوقف الحركة عشان يلتقطه تلقائياً
-			if (target.Position - rootPart.Position).Magnitude < 3 then
-				humanoid:MoveTo(rootPart.Position) -- ثبت مكانك
-			end
-		else
-			-- ما فيه عسل قريب، نقف في مكاننا بدل التيه
-			humanoid:MoveTo(rootPart.Position)
-		end
-	end
+local function GetHumanoid()
+    local Character = GetCharacter()
+    return Character:FindFirstChildOfClass("Humanoid")
 end
 
--- ========== تشغيل / إيقاف ==========
-toggleBtn.MouseButton1Click:Connect(function()
-	running = not running
-	toggleBtn.Text = running and "تشغيل ✅" or "إيقاف ❌"
-	toggleBtn.BackgroundColor3 = running and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(200, 50, 50)
+--==================================================
+-- GUI
+--==================================================
 
-	if running then
-		task.spawn(mainLoop)
-	else
-		humanoid:MoveTo(rootPart.Position) -- وقف فوري
-	end
+pcall(function()
+    CoreGui:FindFirstChild("NAZK_HONEY_WALKER"):Destroy()
 end)
 
--- إعادة الربط عند ظهور الشخصية من جديد
-player.CharacterAdded:Connect(function(newChar)
-	character = newChar
-	humanoid = character:WaitForChild("Humanoid")
-	rootPart = character:WaitForChild("HumanoidRootPart")
-	lastPos = rootPart.Position
-	stuckTimer = 0
-	if running then
-		task.spawn(mainLoop)
-	end
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "NAZK_HONEY_WALKER"
+Gui.ResetOnSpawn = false
+Gui.IgnoreGuiInset = true
+Gui.Parent = CoreGui
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 240, 0, 165)
+Main.Position = UDim2.new(0.5, -120, 0.18, 0)
+Main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
+Main.Parent = Gui
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 12)
+Corner.Parent = Main
+
+local Stroke = Instance.new("UIStroke")
+Stroke.Color = Color3.fromRGB(80, 80, 95)
+Stroke.Thickness = 1
+Stroke.Parent = Main
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -20, 0, 35)
+Title.Position = UDim2.new(0, 10, 0, 5)
+Title.BackgroundTransparency = 1
+Title.Text = "🍯 NAZK SMART HONEY"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 17
+Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Main
+
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.new(1, -20, 0, 22)
+Status.Position = UDim2.new(0, 10, 0, 43)
+Status.BackgroundTransparency = 1
+Status.Text = "Status: OFF"
+Status.TextColor3 = Color3.fromRGB(255, 80, 80)
+Status.TextSize = 13
+Status.Font = Enum.Font.Gotham
+Status.TextXAlignment = Enum.TextXAlignment.Left
+Status.Parent = Main
+
+local TargetLabel = Instance.new("TextLabel")
+TargetLabel.Size = UDim2.new(1, -20, 0, 22)
+TargetLabel.Position = UDim2.new(0, 10, 0, 66)
+TargetLabel.BackgroundTransparency = 1
+TargetLabel.Text = "Target: None"
+TargetLabel.TextColor3 = Color3.fromRGB(210, 210, 215)
+TargetLabel.TextSize = 13
+TargetLabel.Font = Enum.Font.Gotham
+TargetLabel.TextXAlignment = Enum.TextXAlignment.Left
+TargetLabel.Parent = Main
+
+local DistanceLabel = Instance.new("TextLabel")
+DistanceLabel.Size = UDim2.new(1, -20, 0, 22)
+DistanceLabel.Position = UDim2.new(0, 10, 0, 88)
+DistanceLabel.BackgroundTransparency = 1
+DistanceLabel.Text = "Distance: --"
+DistanceLabel.TextColor3 = Color3.fromRGB(170, 170, 180)
+DistanceLabel.TextSize = 12
+DistanceLabel.Font = Enum.Font.Gotham
+DistanceLabel.TextXAlignment = Enum.TextXAlignment.Left
+DistanceLabel.Parent = Main
+
+local Toggle = Instance.new("TextButton")
+Toggle.Size = UDim2.new(1, -20, 0, 38)
+Toggle.Position = UDim2.new(0, 10, 1, -48)
+Toggle.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
+Toggle.BorderSizePixel = 0
+Toggle.Text = "START"
+Toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+Toggle.TextSize = 14
+Toggle.Font = Enum.Font.GothamBold
+Toggle.Parent = Main
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(0, 8)
+ToggleCorner.Parent = Toggle
+
+--==================================================
+-- FIND HONEY PART
+--==================================================
+
+local function GetHoneyPart(Object)
+
+    if not Object or not Object.Parent then
+        return nil
+    end
+
+    if Object:IsA("BasePart") then
+        return Object
+    end
+
+    if Object:IsA("Model") then
+        return Object.PrimaryPart
+            or Object:FindFirstChildWhichIsA("BasePart", true)
+    end
+
+    return nil
+end
+
+--==================================================
+-- FIND NEAREST HONEY
+--==================================================
+
+local function FindNearestHoney()
+
+    local Root = GetRoot()
+
+    if not Root then
+        return nil
+    end
+
+    local Nearest = nil
+    local NearestDistance = SearchDistance
+
+    for _, Object in ipairs(workspace:GetDescendants()) do
+
+        if Object.Name == "Honey" then
+
+            local Part = GetHoneyPart(Object)
+
+            if Part then
+
+                local Distance =
+                    (Root.Position - Part.Position).Magnitude
+
+                if Distance <= SearchDistance
+                    and Distance < NearestDistance then
+
+                    Nearest = Part
+                    NearestDistance = Distance
+                end
+            end
+        end
+    end
+
+    return Nearest
+end
+
+--==================================================
+-- CREATE PATH
+--==================================================
+
+local function CreatePath(StartPosition, EndPosition)
+
+    local Path = PathfindingService:CreatePath({
+        AgentRadius = AgentRadius,
+        AgentHeight = AgentHeight,
+        AgentCanJump = true,
+        AgentCanClimb = true,
+        WaypointSpacing = WaypointSpacing
+    })
+
+    local Success = pcall(function()
+        Path:ComputeAsync(
+            StartPosition,
+            EndPosition
+        )
+    end)
+
+    if Success
+        and Path.Status == Enum.PathStatus.Success then
+
+        return Path
+    end
+
+    return nil
+end
+
+--==================================================
+-- MOVE TO WAYPOINT
+--==================================================
+
+local function MoveToWaypoint(Humanoid, Position)
+
+    Humanoid:MoveTo(Position)
+
+    local StartTime = tick()
+
+    while Enabled do
+
+        local Root = GetRoot()
+
+        if not Root then
+            return false
+        end
+
+        local Distance =
+            (Root.Position - Position).Magnitude
+
+        if Distance <= 4 then
+            return true
+        end
+
+        if tick() - StartTime >= MoveTimeout then
+            return false
+        end
+
+        task.wait(0.05)
+    end
+
+    return false
+end
+
+--==================================================
+-- WALK TO HONEY
+--==================================================
+
+local function WalkToHoney(Honey)
+
+    if not Honey
+        or not Honey.Parent then
+
+        return false
+    end
+
+    local Humanoid = GetHumanoid()
+    local Root = GetRoot()
+
+    if not Humanoid or not Root then
+        return false
+    end
+
+    local Path = CreatePath(
+        Root.Position,
+        Honey.Position
+    )
+
+    if not Path then
+        return false
+    end
+
+    local Waypoints = Path:GetWaypoints()
+
+    if #Waypoints == 0 then
+        return false
+    end
+
+    for Index, Waypoint in ipairs(Waypoints) do
+
+        if not Enabled then
+            return false
+        end
+
+        if not Honey.Parent then
+            return false
+        end
+
+        local CurrentRoot = GetRoot()
+
+        if not CurrentRoot then
+            return false
+        end
+
+        -- وصل للعسل
+        local TargetDistance =
+            (CurrentRoot.Position - Honey.Position).Magnitude
+
+        if TargetDistance <= ReachDistance then
+            return true
+        end
+
+        -- تحديث المسافة في GUI
+        DistanceLabel.Text =
+            "Distance: "
+            .. math.floor(TargetDistance)
+            .. " studs"
+
+        -- قفز إذا احتاج الطريق
+        if Waypoint.Action ==
+            Enum.PathWaypointAction.Jump then
+
+            Humanoid.Jump = true
+        end
+
+        -- امشِ للنقطة
+        local Reached =
+            MoveToWaypoint(
+                Humanoid,
+                Waypoint.Position
+            )
+
+        -- إذا ما وصل للنقطة
+        -- أعد حساب الطريق
+        if not Reached then
+            return false
+        end
+
+        -- كل عدة نقاط نتحقق أن الطريق ما زال مناسبًا
+        if Index % 3 == 0 then
+
+            local NewRoot = GetRoot()
+
+            if NewRoot then
+
+                local NewDistance =
+                    (NewRoot.Position - Honey.Position).Magnitude
+
+                if NewDistance <= ReachDistance then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+--==================================================
+-- TOGGLE
+--==================================================
+
+Toggle.MouseButton1Click:Connect(function()
+
+    Enabled = not Enabled
+
+    if Enabled then
+
+        Toggle.Text = "STOP"
+
+        Toggle.BackgroundColor3 =
+            Color3.fromRGB(170, 55, 55)
+
+        Status.Text = "Status: ON"
+
+        Status.TextColor3 =
+            Color3.fromRGB(80, 255, 120)
+
+    else
+
+        Toggle.Text = "START"
+
+        Toggle.BackgroundColor3 =
+            Color3.fromRGB(55, 55, 65)
+
+        Status.Text = "Status: OFF"
+
+        Status.TextColor3 =
+            Color3.fromRGB(255, 80, 80)
+
+        TargetLabel.Text =
+            "Target: None"
+
+        DistanceLabel.Text =
+            "Distance: --"
+
+        CurrentTarget = nil
+
+        local Humanoid = GetHumanoid()
+
+        if Humanoid then
+            Humanoid:MoveTo(
+                GetRoot() and GetRoot().Position
+                or Vector3.zero
+            )
+        end
+    end
 end)
 
--- البداية تكون إيقاف
-toggleBtn.Text = "إيقاف ❌"
-toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+--==================================================
+-- MAIN SMART LOOP
+--==================================================
+
+task.spawn(function()
+
+    while true do
+
+        if Enabled then
+
+            local Root = GetRoot()
+
+            if Root then
+
+                -- إذا الهدف الحالي اختفى أو صار بعيد
+                if CurrentTarget then
+
+                    if not CurrentTarget.Parent then
+                        CurrentTarget = nil
+
+                    else
+
+                        local Distance =
+                            (Root.Position -
+                            CurrentTarget.Position).Magnitude
+
+                        if Distance > SearchDistance then
+                            CurrentTarget = nil
+                        end
+                    end
+                end
+
+                -- اختيار أقرب عسل
+                if not CurrentTarget then
+
+                    CurrentTarget =
+                        FindNearestHoney()
+                end
+
+                -- المشي للعسل
+                if CurrentTarget then
+
+                    TargetLabel.Text =
+                        "Target: Honey"
+
+                    local Distance =
+                        (Root.Position -
+                        CurrentTarget.Position).Magnitude
+
+                    DistanceLabel.Text =
+                        "Distance: "
+                        .. math.floor(Distance)
+                        .. " studs"
+
+                    local Success =
+                        WalkToHoney(CurrentTarget)
+
+                    -- إذا فشل المسار
+                    -- نحذف الهدف ونبحث عن هدف جديد
+                    if not Success then
+                        task.wait(RepathDelay)
+                    else
+                        task.wait(0.1)
+                    end
+
+                    -- العسل ممكن يكون اختفى بعد الوصول
+                    if CurrentTarget
+                        and not CurrentTarget.Parent then
+
+                        CurrentTarget = nil
+                    end
+
+                else
+
+                    TargetLabel.Text =
+                        "Target: No Honey"
+
+                    DistanceLabel.Text =
+                        "Distance: --"
+
+                    task.wait(0.5)
+                end
+            end
+
+        else
+            task.wait(0.2)
+        end
+    end
+end)
+
+--==================================================
+-- RESPAWN SUPPORT
+--==================================================
+
+LocalPlayer.CharacterAdded:Connect(function()
+
+    CurrentTarget = nil
+
+    task.wait(1)
+end)
