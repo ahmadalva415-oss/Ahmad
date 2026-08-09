@@ -1,12 +1,26 @@
 --// NAZK SMART HONEY WALKER
 --// Walking + Pathfinding + Anti-Stuck + Smart Target
 --// No Teleport / No Tween
+--// ACCOUNT LOCK: powercucaracha + QWA8N
 
 local Players = game:GetService("Players")
 local PathfindingService = game:GetService("PathfindingService")
 local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
+
+--==================================================
+-- ACCOUNT LOCK
+--==================================================
+
+local AllowedUsers = {
+    ["powercucaracha"] = true,
+    ["QWA8N"] = true
+}
+
+if not LocalPlayer or not AllowedUsers[LocalPlayer.Name] then
+    return
+end
 
 --==================================================
 -- SETTINGS
@@ -49,7 +63,10 @@ end
 --==================================================
 
 pcall(function()
-    CoreGui:FindFirstChild("NAZK_HONEY_WALKER"):Destroy()
+    local OldGui = CoreGui:FindFirstChild("NAZK_HONEY_WALKER")
+    if OldGui then
+        OldGui:Destroy()
+    end
 end)
 
 local Gui = Instance.new("ScreenGui")
@@ -311,7 +328,6 @@ local function WalkToHoney(Honey)
             return false
         end
 
-        -- وصل للعسل
         local TargetDistance =
             (CurrentRoot.Position - Honey.Position).Magnitude
 
@@ -319,33 +335,27 @@ local function WalkToHoney(Honey)
             return true
         end
 
-        -- تحديث المسافة في GUI
         DistanceLabel.Text =
             "Distance: "
             .. math.floor(TargetDistance)
             .. " studs"
 
-        -- قفز إذا احتاج الطريق
         if Waypoint.Action ==
             Enum.PathWaypointAction.Jump then
 
             Humanoid.Jump = true
         end
 
-        -- امشِ للنقطة
         local Reached =
             MoveToWaypoint(
                 Humanoid,
                 Waypoint.Position
             )
 
-        -- إذا ما وصل للنقطة
-        -- أعد حساب الطريق
         if not Reached then
             return false
         end
 
-        -- كل عدة نقاط نتحقق أن الطريق ما زال مناسبًا
         if Index % 3 == 0 then
 
             local NewRoot = GetRoot()
@@ -408,10 +418,11 @@ Toggle.MouseButton1Click:Connect(function()
         local Humanoid = GetHumanoid()
 
         if Humanoid then
-            Humanoid:MoveTo(
-                GetRoot() and GetRoot().Position
-                or Vector3.zero
-            )
+            local Root = GetRoot()
+
+            if Root then
+                Humanoid:MoveTo(Root.Position)
+            end
         end
     end
 end)
@@ -430,7 +441,6 @@ task.spawn(function()
 
             if Root then
 
-                -- إذا الهدف الحالي اختفى أو صار بعيد
                 if CurrentTarget then
 
                     if not CurrentTarget.Parent then
@@ -448,14 +458,10 @@ task.spawn(function()
                     end
                 end
 
-                -- اختيار أقرب عسل
                 if not CurrentTarget then
-
-                    CurrentTarget =
-                        FindNearestHoney()
+                    CurrentTarget = FindNearestHoney()
                 end
 
-                -- المشي للعسل
                 if CurrentTarget then
 
                     TargetLabel.Text =
@@ -473,15 +479,12 @@ task.spawn(function()
                     local Success =
                         WalkToHoney(CurrentTarget)
 
-                    -- إذا فشل المسار
-                    -- نحذف الهدف ونبحث عن هدف جديد
                     if not Success then
                         task.wait(RepathDelay)
                     else
                         task.wait(0.1)
                     end
 
-                    -- العسل ممكن يكون اختفى بعد الوصول
                     if CurrentTarget
                         and not CurrentTarget.Parent then
 
@@ -501,6 +504,7 @@ task.spawn(function()
             end
 
         else
+
             task.wait(0.2)
         end
     end
