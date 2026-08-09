@@ -1,0 +1,202 @@
+-- =====================================================
+-- سكربت جمع العسل + تفادي الجدران (ذكي جداً)
+-- مناسب للعبة Bee Swarm Simulator
+-- =====================================================
+
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+-- الإعدادات
+local SEARCH_RADIUS = 25          -- مدى البحث عن العسل
+local RAY_LENGTH = 5              -- طول الشعاع لكشف الجدار
+local MOVE_SPEED = 16             -- سرعة الحركة
+local STUCK_TIME_LIMIT = 1.5      -- إذا ظل ثابت لأكثر من 1.5 ثانية يعتبر عالق
+
+-- متغيرات التشغيل
+local running = false
+local target = nil
+local lastPos = rootPart.Position
+local stuckTimer = 0
+
+-- ========== إنشاء الواجهة (GUI) ==========
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = player.PlayerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 200, 0, 90)
+frame.Position = UDim2.new(0.5, -100, 0.5, -45)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+frame.BackgroundTransparency = 0.2
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = screenGui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0.35, 0)
+title.BackgroundTransparency = 1
+title.Text = "🍯 الذكي للعسل"
+title.TextColor3 = Color3.fromRGB(255, 200, 50)
+title.TextScaled = true
+title.Font = Enum.Font.GothamBold
+title.Parent = frame
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0.7, 0, 0.4, 0)
+toggleBtn.Position = UDim2.new(0.15, 0, 0.45, 0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+toggleBtn.Text = "إيقاف"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.TextScaled = true
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.Parent = frame
+
+-- ========== دوال البحث والذكاء ==========
+
+-- 1. البحث عن أقرب عسل (يشمل Honey و HoneyWisp)
+local function findNearestHoney()
+	local best = nil
+	local bestDist = math.huge
+	local pos = rootPart.Position
+
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") and obj.Name:lower():find("honey") then
+			-- نتأكد إنه مرئي وقابل للجمع (غير مخفي)
+			if obj.Transparency < 0.7 and obj.CanCollide == false then
+				local dist = (obj.Position - pos).Magnitude
+				if dist < bestDist and dist < SEARCH_RADIUS then
+					bestDist = dist
+					best = obj
+				end
+			end
+		end
+	end
+	return best
+end
+
+-- 2. حساب اتجاه آمن (بتفادي الجدران بذكاء)
+local function getSafeDirection(targetPos)
+	local myPos = rootPart.Position
+	local dir = (targetPos - myPos).Unit
+
+	-- إعدادات الأشعة
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+	rayParams.FilterDescendantsInstances = {character}
+
+	-- نختبر الاتجاه الأساسي
+	local origin = myPos + Vector3.new(0, 1, 0) -- نرفع الشعاع قليلاً لتجنب أرضية اللعبة
+	local ray = RaycastParams.new()
+	ray.FilterType = Enum.RaycastFilterType.Blacklist
+	ray.FilterDescendantsInstances = {character}
+	
+	local hit = workspace:Raycast(origin, dir * RAY_LENGTH, ray)
+	
+	if not hit then
+		return dir -- الطريق سالك
+	end
+
+	-- هناك جدار! نجرب 8 اتجاهات حولنا (دائرة 360 درجة)
+	local angles = {0, 45, -45, 90, -90, 135, -135, 180}
+	for _, angle in ipairs(angles) do
+		local rad = math.rad(angle)
+		-- تدوير الاتجاه حول محور Y
+		local newDir = Vector3.new(
+			dir.X * math.cos(rad) - dir.Z * math.sin(rad),
+			0,
+			dir.X * math.sin(rad) + dir.Z * math.cos(rad)
+		).Unit
+		
+		local testHit = workspace:Raycast(origin, newDir * RAY_LENGTH, ray)
+		if not testHit then
+			return newDir -- وجدنا ممراً
+		end
+	end
+
+	-- إذا كل الاتجاهات مسدودة، نعيد اتجاه عشوائي ونقفز
+	humanoid.Jump = true
+	return Vector3.new(math.random(-1,1), 0, math.random(-1,1)).Unit
+end
+
+-- ========== الحلقة الرئيسية ==========
+local function mainLoop()
+	while running do
+		task.wait(0.2)
+
+		-- تحديث الشخصية إن ماتت أو تغيرت
+		if not character or not character.Parent then
+			character = player.Character
+			if not character then break end
+			humanoid = character:WaitForChild("Humanoid")
+			rootPart = character:WaitForChild("HumanoidRootPart")
+		end
+
+		-- *** نظام كشف التعليق (Stuck Detection) ***
+		local currentPos = rootPart.Position
+		local distMoved = (currentPos - lastPos).Magnitude
+		if distMoved < 0.3 then
+			stuckTimer = stuckTimer + 0.2
+		else
+			stuckTimer = 0
+		end
+		lastPos = currentPos
+
+		-- إذا كان عالقاً أكثر من المدة المحددة، اقفز بقوة وغير اتجاهك
+		if stuckTimer > STUCK_TIME_LIMIT then
+			humanoid.Jump = true
+			humanoid:MoveTo(currentPos + Vector3.new(math.random(-5,5), 0, math.random(-5,5)))
+			stuckTimer = 0
+		end
+
+		-- 1. البحث عن أقرب عسل
+		target = findNearestHoney()
+
+		if target then
+			-- 2. حساب اتجاه آمن تماماً
+			local safeDir = getSafeDirection(target.Position)
+			
+			-- 3. نقطة الوجهة (نضرب الاتجاه في سرعة معقولة)
+			local destination = rootPart.Position + safeDir * MOVE_SPEED
+			humanoid:MoveTo(destination)
+
+			-- 4. لو وصلنا قريب جداً، نوقف الحركة عشان يلتقطه تلقائياً
+			if (target.Position - rootPart.Position).Magnitude < 3 then
+				humanoid:MoveTo(rootPart.Position) -- ثبت مكانك
+			end
+		else
+			-- ما فيه عسل قريب، نقف في مكاننا بدل التيه
+			humanoid:MoveTo(rootPart.Position)
+		end
+	end
+end
+
+-- ========== تشغيل / إيقاف ==========
+toggleBtn.MouseButton1Click:Connect(function()
+	running = not running
+	toggleBtn.Text = running and "تشغيل ✅" or "إيقاف ❌"
+	toggleBtn.BackgroundColor3 = running and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(200, 50, 50)
+
+	if running then
+		task.spawn(mainLoop)
+	else
+		humanoid:MoveTo(rootPart.Position) -- وقف فوري
+	end
+end)
+
+-- إعادة الربط عند ظهور الشخصية من جديد
+player.CharacterAdded:Connect(function(newChar)
+	character = newChar
+	humanoid = character:WaitForChild("Humanoid")
+	rootPart = character:WaitForChild("HumanoidRootPart")
+	lastPos = rootPart.Position
+	stuckTimer = 0
+	if running then
+		task.spawn(mainLoop)
+	end
+end)
+
+-- البداية تكون إيقاف
+toggleBtn.Text = "إيقاف ❌"
+toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
