@@ -1,7 +1,7 @@
 --// NAZK SMART HONEY WALKER
 --// Walking + Pathfinding + Anti-Stuck + Smart Target
 --// No Teleport / No Tween
---// ACCOUNT LOCK: powercucaracha + QWA8N
+--// ACCOUNT LOCK: powercucaracha + troopytrolly + Qwa8n
 
 local Players = game:GetService("Players")
 local PathfindingService = game:GetService("PathfindingService")
@@ -15,7 +15,8 @@ local LocalPlayer = Players.LocalPlayer
 
 local AllowedUsers = {
     ["powercucaracha"] = true,
-    ["troopytrolly"] = true
+    ["troopytrolly"] = true,
+    ["Qwa8n"] = true
 }
 
 if not LocalPlayer or not AllowedUsers[LocalPlayer.Name] then
