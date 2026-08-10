@@ -15,7 +15,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local AllowedUsers = {
     ["powercucaracha"] = true,
-    ["QWA8N"] = true
+    ["troopytrolly"] = true
 }
 
 if not LocalPlayer or not AllowedUsers[LocalPlayer.Name] then
