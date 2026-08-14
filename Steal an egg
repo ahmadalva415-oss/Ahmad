@@ -1,0 +1,2739 @@
+--========================================================--
+-- NAZK HUB - EGG FARM
+-- FULL EDITION
+-- Auto Farm / Teleport / Visual / Misc / Settings
+-- Hide / Show GUI Button
+-- Mobile Friendly
+--========================================================--
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+local Player = Players.LocalPlayer
+
+--========================================================--
+-- SETTINGS
+--========================================================--
+
+local Enabled = false
+local TweenSpeed = 200
+local SelectedRegion = "None"
+local CurrentTween = nil
+local MenuVisible = true
+
+--========================================================--
+-- REQUIRED FIRST POSITION
+--========================================================--
+
+local FirstPosition = Vector3.new(
+    507.07,
+    70.58,
+    -368.04
+)
+
+--========================================================--
+-- REGION POSITIONS
+--========================================================--
+
+local Regions = {
+
+    ["None"] = nil,
+
+    ["Forest"] = Vector3.new(
+        591.10,
+        70.58,
+        -326.28
+    ),
+
+    ["Lake"] = Vector3.new(
+        742.47,
+        70.58,
+        -410.11
+    ),
+
+    ["Desert"] = Vector3.new(
+        944.90,
+        70.58,
+        -325.24
+    ),
+
+    ["Jungle"] = Vector3.new(
+        1186.73,
+        70.58,
+        -406.46
+    ),
+
+    ["Snow"] = Vector3.new(
+        1493.05,
+        70.58,
+        -320.98
+    ),
+
+    ["Volcano"] = Vector3.new(
+        1873.64,
+        70.58,
+        -390.82
+    ),
+
+    ["Abyss Ocean"] = Vector3.new(
+        2278.86,
+        70.58,
+        -331.34
+    ),
+
+    ["Prehistoric"] = Vector3.new(
+        2811.43,
+        70.58,
+        -389.87
+    ),
+
+    ["Cosmic"] = Vector3.new(
+        3390.74,
+        70.58,
+        -328.49
+    )
+}
+
+local RegionNames = {
+    "None",
+    "Forest",
+    "Lake",
+    "Desert",
+    "Jungle",
+    "Snow",
+    "Volcano",
+    "Abyss Ocean",
+    "Prehistoric",
+    "Cosmic"
+}
+
+--========================================================--
+-- ICONS
+--========================================================--
+
+local Icons = {
+
+    -- Main Tabs
+    ["Auto Farm"] = "rbxassetid://6031071053",
+
+    ["Teleport"] = "rbxassetid://6031075938",
+
+    -- Visual = Eye / View style
+    ["Visual"] = "rbxassetid://6031073495",
+
+    -- Misc = Settings / Tools style
+    ["Misc"] = "rbxassetid://6031280882",
+
+    ["Settings"] = "rbxassetid://6031280882",
+
+    -- Sections
+    ["Farm"] = "rbxassetid://6031071053",
+
+    ["Speed"] = "rbxassetid://6031071053",
+
+    ["Region"] = "rbxassetid://6031075938",
+
+    ["Status"] = "rbxassetid://6031073495",
+
+    ["Lock"] = "rbxassetid://6031073495",
+
+    -- GUI Hide / Show
+    ["Toggle"] = "rbxassetid://6031094678"
+}
+
+--========================================================--
+-- CHARACTER
+--========================================================--
+
+local function GetCharacter()
+
+    return Player.Character
+end
+
+local function GetRoot()
+
+    local Character = GetCharacter()
+
+    if not Character then
+        return nil
+    end
+
+    return Character:FindFirstChild(
+        "HumanoidRootPart"
+    )
+end
+
+--========================================================--
+-- STOP TWEEN
+--========================================================--
+
+local function StopCurrentTween()
+
+    if CurrentTween then
+
+        pcall(function()
+            CurrentTween:Cancel()
+        end)
+
+        CurrentTween = nil
+    end
+end
+
+--========================================================--
+-- TWEEN
+--========================================================--
+
+local function TweenTo(Position)
+
+    if not Enabled then
+        return false
+    end
+
+    local Root = GetRoot()
+
+    if not Root then
+        return false
+    end
+
+    local Distance =
+        (Root.Position - Position).Magnitude
+
+    if Distance <= 2 then
+        return true
+    end
+
+    local Duration =
+        math.max(
+            Distance / math.max(TweenSpeed, 1),
+            0.05
+        )
+
+    local Tween =
+        TweenService:Create(
+            Root,
+
+            TweenInfo.new(
+                Duration,
+                Enum.EasingStyle.Linear,
+                Enum.EasingDirection.InOut
+            ),
+
+            {
+                CFrame =
+                    CFrame.new(Position)
+            }
+        )
+
+    CurrentTween = Tween
+
+    local Finished = false
+
+    local Connection
+
+    Connection =
+        Tween.Completed:Connect(
+            function()
+
+                Finished = true
+
+                if Connection then
+                    Connection:Disconnect()
+                end
+            end
+        )
+
+    Tween:Play()
+
+    while Enabled and not Finished do
+        task.wait()
+    end
+
+    if Connection then
+        Connection:Disconnect()
+    end
+
+    if not Enabled then
+
+        pcall(function()
+            Tween:Cancel()
+        end)
+
+        if CurrentTween == Tween then
+            CurrentTween = nil
+        end
+
+        return false
+    end
+
+    if CurrentTween == Tween then
+        CurrentTween = nil
+    end
+
+    return true
+end
+
+--========================================================--
+-- FIND STEAL PROMPT
+--========================================================--
+
+local function FindEggStealPrompt()
+
+    local Root = GetRoot()
+
+    if not Root then
+        return nil
+    end
+
+    local BestPrompt = nil
+    local BestDistance = math.huge
+
+    for _, Object in ipairs(
+        workspace:GetDescendants()
+    ) do
+
+        if not Enabled then
+            return nil
+        end
+
+        if Object:IsA("ProximityPrompt") then
+
+            local Action =
+                string.lower(
+                    tostring(
+                        Object.ActionText or ""
+                    )
+                )
+
+            local ObjectText =
+                string.lower(
+                    tostring(
+                        Object.ObjectText or ""
+                    )
+                )
+
+            local IsSteal =
+                string.find(
+                    Action,
+                    "steal",
+                    1,
+                    true
+                )
+
+            local IsEgg =
+                string.find(
+                    Action,
+                    "egg",
+                    1,
+                    true
+                )
+
+            local IsEggObject =
+                string.find(
+                    ObjectText,
+                    "egg",
+                    1,
+                    true
+                )
+
+            local IsStealObject =
+                string.find(
+                    ObjectText,
+                    "steal",
+                    1,
+                    true
+                )
+
+            if IsSteal
+            or IsEgg
+            or IsEggObject
+            or IsStealObject then
+
+                local Parent =
+                    Object.Parent
+
+                local Position = nil
+
+                if Parent then
+
+                    if Parent:IsA("BasePart") then
+
+                        Position =
+                            Parent.Position
+
+                    elseif Parent:IsA("Model") then
+
+                        local Part =
+                            Parent:FindFirstChildWhichIsA(
+                                "BasePart",
+                                true
+                            )
+
+                        if Part then
+                            Position =
+                                Part.Position
+                        end
+                    end
+                end
+
+                if Position then
+
+                    local Distance =
+                        (
+                            Root.Position -
+                            Position
+                        ).Magnitude
+
+                    if Distance <= 30
+                    and Distance < BestDistance then
+
+                        BestDistance =
+                            Distance
+
+                        BestPrompt =
+                            Object
+                    end
+                end
+            end
+        end
+    end
+
+    return BestPrompt
+end
+
+--========================================================--
+-- GET PROMPT POSITION
+--========================================================--
+
+local function GetPromptPosition(Prompt)
+
+    if not Prompt then
+        return nil
+    end
+
+    local Parent =
+        Prompt.Parent
+
+    if not Parent then
+        return nil
+    end
+
+    if Parent:IsA("BasePart") then
+
+        return Parent.Position
+    end
+
+    if Parent:IsA("Model") then
+
+        local Part =
+            Parent:FindFirstChildWhichIsA(
+                "BasePart",
+                true
+            )
+
+        if Part then
+            return Part.Position
+        end
+    end
+
+    return nil
+end
+
+--========================================================--
+-- STEAL EGG
+--========================================================--
+
+local function StealEgg()
+
+    if not Enabled then
+        return false
+    end
+
+    local Prompt =
+        FindEggStealPrompt()
+
+    if not Prompt then
+        return false
+    end
+
+    local Position =
+        GetPromptPosition(Prompt)
+
+    if Position then
+
+        local Root =
+            GetRoot()
+
+        if not Root then
+            return false
+        end
+
+        local Distance =
+            (
+                Root.Position -
+                Position
+            ).Magnitude
+
+        if Distance > 8 then
+
+            if not TweenTo(Position) then
+                return false
+            end
+        end
+    end
+
+    if not Enabled then
+        return false
+    end
+
+    if typeof(
+        fireproximityprompt
+    ) == "function" then
+
+        pcall(function()
+
+            fireproximityprompt(
+                Prompt,
+                0
+            )
+
+        end)
+
+    else
+
+        warn(
+            "[NAZK] fireproximityprompt is unavailable."
+        )
+
+        return false
+    end
+
+    local StartTime =
+        tick()
+
+    while Enabled do
+
+        if not Prompt
+        or not Prompt.Parent then
+
+            break
+        end
+
+        if Prompt.Enabled == false then
+            break
+        end
+
+        if tick() - StartTime >= 1.2 then
+            break
+        end
+
+        task.wait(0.05)
+    end
+
+    return Enabled
+end
+
+--========================================================--
+-- GUI
+--========================================================--
+
+local ScreenGui =
+    Instance.new("ScreenGui")
+
+ScreenGui.Name =
+    "NAZK_HUB"
+
+ScreenGui.ResetOnSpawn =
+    false
+
+ScreenGui.ZIndexBehavior =
+    Enum.ZIndexBehavior.Sibling
+
+pcall(function()
+
+    ScreenGui.Parent =
+        game:GetService("CoreGui")
+end)
+
+if not ScreenGui.Parent then
+
+    ScreenGui.Parent =
+        Player:WaitForChild(
+            "PlayerGui"
+        )
+end
+
+--========================================================--
+-- MAIN FRAME
+--========================================================--
+
+local Main =
+    Instance.new("Frame")
+
+Main.Name =
+    "Main"
+
+Main.Size =
+    UDim2.new(
+        0,
+        440,
+        0,
+        430
+    )
+
+Main.Position =
+    UDim2.new(
+        0.5,
+        -220,
+        0.5,
+        -215
+    )
+
+Main.BackgroundColor3 =
+    Color3.fromRGB(
+        18,
+        19,
+        24
+    )
+
+Main.BorderSizePixel =
+    0
+
+Main.Parent =
+    ScreenGui
+
+local MainCorner =
+    Instance.new("UICorner")
+
+MainCorner.CornerRadius =
+    UDim.new(
+        0,
+        14
+    )
+
+MainCorner.Parent =
+    Main
+
+--========================================================--
+-- TOP BAR
+--========================================================--
+
+local TopBar =
+    Instance.new("Frame")
+
+TopBar.Size =
+    UDim2.new(
+        1,
+        0,
+        0,
+        58
+    )
+
+TopBar.BackgroundTransparency =
+    1
+
+TopBar.Parent =
+    Main
+
+--========================================================--
+-- TITLE ICON
+--========================================================--
+
+local TitleIcon =
+    Instance.new("ImageLabel")
+
+TitleIcon.Size =
+    UDim2.new(
+        0,
+        30,
+        0,
+        30
+    )
+
+TitleIcon.Position =
+    UDim2.new(
+        0,
+        15,
+        0,
+        14
+    )
+
+TitleIcon.BackgroundTransparency =
+    1
+
+TitleIcon.Image =
+    Icons["Farm"]
+
+TitleIcon.ImageColor3 =
+    Color3.fromRGB(
+        90,
+        145,
+        255
+    )
+
+TitleIcon.Parent =
+    TopBar
+
+--========================================================--
+-- TITLE
+--========================================================--
+
+local Title =
+    Instance.new("TextLabel")
+
+Title.Size =
+    UDim2.new(
+        0,
+        220,
+        0,
+        30
+    )
+
+Title.Position =
+    UDim2.new(
+        0,
+        55,
+        0,
+        13
+    )
+
+Title.BackgroundTransparency =
+    1
+
+Title.Text =
+    "NAZK HUB"
+
+Title.TextColor3 =
+    Color3.fromRGB(
+        245,
+        245,
+        248
+    )
+
+Title.TextSize =
+    21
+
+Title.Font =
+    Enum.Font.GothamBold
+
+Title.TextXAlignment =
+    Enum.TextXAlignment.Left
+
+Title.Parent =
+    TopBar
+
+--========================================================--
+-- VERSION
+--========================================================--
+
+local Version =
+    Instance.new("TextLabel")
+
+Version.Size =
+    UDim2.new(
+        0,
+        80,
+        0,
+        22
+    )
+
+Version.Position =
+    UDim2.new(
+        1,
+        -95,
+        0,
+        18
+    )
+
+Version.BackgroundTransparency =
+    1
+
+Version.Text =
+    "v1.0"
+
+Version.TextColor3 =
+    Color3.fromRGB(
+        110,
+        130,
+        180
+    )
+
+Version.TextSize =
+    12
+
+Version.Font =
+    Enum.Font.GothamBold
+
+Version.TextXAlignment =
+    Enum.TextXAlignment.Right
+
+Version.Parent =
+    TopBar
+
+--========================================================--
+-- TAB BAR
+--========================================================--
+
+local TabBar =
+    Instance.new("Frame")
+
+TabBar.Size =
+    UDim2.new(
+        1,
+        -20,
+        0,
+        50
+    )
+
+TabBar.Position =
+    UDim2.new(
+        0,
+        10,
+        0,
+        58
+    )
+
+TabBar.BackgroundColor3 =
+    Color3.fromRGB(
+        25,
+        26,
+        33
+    )
+
+TabBar.BorderSizePixel =
+    0
+
+TabBar.Parent =
+    Main
+
+local TabCorner =
+    Instance.new("UICorner")
+
+TabCorner.CornerRadius =
+    UDim.new(
+        0,
+        10
+    )
+
+TabCorner.Parent =
+    TabBar
+
+local TabLayout =
+    Instance.new("UIListLayout")
+
+TabLayout.FillDirection =
+    Enum.FillDirection.Horizontal
+
+TabLayout.HorizontalAlignment =
+    Enum.HorizontalAlignment.Center
+
+TabLayout.VerticalAlignment =
+    Enum.VerticalAlignment.Center
+
+TabLayout.Padding =
+    UDim.new(
+        0,
+        5
+    )
+
+TabLayout.Parent =
+    TabBar
+
+--========================================================--
+-- CONTENT
+--========================================================--
+
+local Content =
+    Instance.new("Frame")
+
+Content.Size =
+    UDim2.new(
+        1,
+        -20,
+        1,
+        -120
+    )
+
+Content.Position =
+    UDim2.new(
+        0,
+        10,
+        0,
+        115
+    )
+
+Content.BackgroundColor3 =
+    Color3.fromRGB(
+        22,
+        23,
+        29
+    )
+
+Content.BorderSizePixel =
+    0
+
+Content.Parent =
+    Main
+
+local ContentCorner =
+    Instance.new("UICorner")
+
+ContentCorner.CornerRadius =
+    UDim.new(
+        0,
+        10
+    )
+
+ContentCorner.Parent =
+    Content
+
+--========================================================--
+-- TAB SYSTEM
+--========================================================--
+
+local Tabs = {}
+local TabButtons = {}
+
+local function CreateTab(Name)
+
+    local Button =
+        Instance.new("TextButton")
+
+    Button.Size =
+        UDim2.new(
+            0,
+            77,
+            0,
+            38
+        )
+
+    Button.BackgroundColor3 =
+        Color3.fromRGB(
+            35,
+            36,
+            45
+        )
+
+    Button.BorderSizePixel =
+        0
+
+    Button.Text =
+        ""
+
+    Button.Parent =
+        TabBar
+
+    local Corner =
+        Instance.new("UICorner")
+
+    Corner.CornerRadius =
+        UDim.new(
+            0,
+            8
+        )
+
+    Corner.Parent =
+        Button
+
+    local Icon =
+        Instance.new("ImageLabel")
+
+    Icon.Size =
+        UDim2.new(
+            0,
+            18,
+            0,
+            18
+        )
+
+    Icon.Position =
+        UDim2.new(
+            0,
+            7,
+            0.5,
+            -9
+        )
+
+    Icon.BackgroundTransparency =
+        1
+
+    Icon.Image =
+        Icons[Name]
+
+    Icon.ImageColor3 =
+        Color3.fromRGB(
+            200,
+            205,
+            215
+        )
+
+    Icon.Parent =
+        Button
+
+    local Label =
+        Instance.new("TextLabel")
+
+    Label.Size =
+        UDim2.new(
+            1,
+            -28,
+            1,
+            0
+        )
+
+    Label.Position =
+        UDim2.new(
+            0,
+            27,
+            0,
+            0
+        )
+
+    Label.BackgroundTransparency =
+        1
+
+    Label.Text =
+        Name
+
+    Label.TextColor3 =
+        Color3.fromRGB(
+            200,
+            200,
+            210
+        )
+
+    Label.TextSize =
+        10
+
+    Label.Font =
+        Enum.Font.GothamBold
+
+    Label.TextXAlignment =
+        Enum.TextXAlignment.Left
+
+    Label.Parent =
+        Button
+
+    local Page =
+        Instance.new("ScrollingFrame")
+
+    Page.Size =
+        UDim2.new(
+            1,
+            -16,
+            1,
+            -16
+        )
+
+    Page.Position =
+        UDim2.new(
+            0,
+            8,
+            0,
+            8
+        )
+
+    Page.BackgroundTransparency =
+        1
+
+    Page.BorderSizePixel =
+        0
+
+    Page.ScrollBarThickness =
+        3
+
+    Page.ScrollBarImageTransparency =
+        0.3
+
+    Page.Visible =
+        false
+
+    Page.Parent =
+        Content
+
+    local Layout =
+        Instance.new("UIListLayout")
+
+    Layout.Padding =
+        UDim.new(
+            0,
+            8
+        )
+
+    Layout.Parent =
+        Page
+
+    Layout:GetPropertyChangedSignal(
+        "AbsoluteContentSize"
+    ):Connect(function()
+
+        Page.CanvasSize =
+            UDim2.new(
+                0,
+                0,
+                0,
+                Layout.AbsoluteContentSize.Y + 12
+            )
+    end)
+
+    Tabs[Name] =
+        Page
+
+    TabButtons[Name] =
+        {
+            Button = Button,
+            Icon = Icon,
+            Label = Label
+        }
+
+    Button.MouseButton1Click:Connect(
+        function()
+
+            for TabName, TabPage in pairs(Tabs) do
+
+                TabPage.Visible =
+                    false
+
+                TabButtons[TabName].Button.BackgroundColor3 =
+                    Color3.fromRGB(
+                        35,
+                        36,
+                        45
+                    )
+
+                TabButtons[TabName].Icon.ImageColor3 =
+                    Color3.fromRGB(
+                        200,
+                        205,
+                        215
+                    )
+
+                TabButtons[TabName].Label.TextColor3 =
+                    Color3.fromRGB(
+                        200,
+                        200,
+                        210
+                    )
+            end
+
+            Page.Visible =
+                true
+
+            Button.BackgroundColor3 =
+                Color3.fromRGB(
+                    65,
+                    105,
+                    190
+                )
+
+            Icon.ImageColor3 =
+                Color3.fromRGB(
+                    255,
+                    255,
+                    255
+                )
+
+            Label.TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    255,
+                    255
+                )
+        end
+    )
+
+    return Page
+end
+
+--========================================================--
+-- TABS
+--========================================================--
+
+local AutoFarmPage =
+    CreateTab("Auto Farm")
+
+local TeleportPage =
+    CreateTab("Teleport")
+
+local VisualPage =
+    CreateTab("Visual")
+
+local MiscPage =
+    CreateTab("Misc")
+
+local SettingsPage =
+    CreateTab("Settings")
+
+--========================================================--
+-- SECTION
+--========================================================--
+
+local function CreateSection(
+    Page,
+    Text,
+    IconId
+)
+
+    local Section =
+        Instance.new("Frame")
+
+    Section.Size =
+        UDim2.new(
+            1,
+            -5,
+            0,
+            38
+        )
+
+    Section.BackgroundTransparency =
+        1
+
+    Section.Parent =
+        Page
+
+    local Icon =
+        Instance.new("ImageLabel")
+
+    Icon.Size =
+        UDim2.new(
+            0,
+            20,
+            0,
+            20
+        )
+
+    Icon.Position =
+        UDim2.new(
+            0,
+            2,
+            0.5,
+            -10
+        )
+
+    Icon.BackgroundTransparency =
+        1
+
+    Icon.Image =
+        IconId
+
+    Icon.ImageColor3 =
+        Color3.fromRGB(
+            90,
+            145,
+            255
+        )
+
+    Icon.Parent =
+        Section
+
+    local Label =
+        Instance.new("TextLabel")
+
+    Label.Size =
+        UDim2.new(
+            1,
+            -32,
+            1,
+            0
+        )
+
+    Label.Position =
+        UDim2.new(
+            0,
+            30,
+            0,
+            0
+        )
+
+    Label.BackgroundTransparency =
+        1
+
+    Label.Text =
+        Text
+
+    Label.TextColor3 =
+        Color3.fromRGB(
+            230,
+            232,
+            238
+        )
+
+    Label.TextSize =
+        16
+
+    Label.Font =
+        Enum.Font.GothamBold
+
+    Label.TextXAlignment =
+        Enum.TextXAlignment.Left
+
+    Label.Parent =
+        Section
+
+    return Section
+end
+
+--========================================================--
+-- AUTO FARM SECTION
+--========================================================--
+
+CreateSection(
+    AutoFarmPage,
+    "Egg Auto Farm",
+    Icons["Farm"]
+)
+
+local Info =
+    Instance.new("TextLabel")
+
+Info.Size =
+    UDim2.new(
+        1,
+        -5,
+        0,
+        40
+    )
+
+Info.BackgroundTransparency =
+    1
+
+Info.Text =
+    "Required Position > Region > Steal Egg > Return"
+
+Info.TextColor3 =
+    Color3.fromRGB(
+        145,
+        148,
+        158
+    )
+
+Info.TextSize =
+    12
+
+Info.Font =
+    Enum.Font.Gotham
+
+Info.TextWrapped =
+    true
+
+Info.TextXAlignment =
+    Enum.TextXAlignment.Left
+
+Info.Parent =
+    AutoFarmPage
+
+--========================================================--
+-- SPEED ROW
+--========================================================--
+
+local SpeedRow =
+    Instance.new("Frame")
+
+SpeedRow.Size =
+    UDim2.new(
+        1,
+        -5,
+        0,
+        28
+    )
+
+SpeedRow.BackgroundTransparency =
+    1
+
+SpeedRow.Parent =
+    AutoFarmPage
+
+local SpeedTitle =
+    Instance.new("TextLabel")
+
+SpeedTitle.Size =
+    UDim2.new(
+        0,
+        105,
+        1,
+        0
+    )
+
+SpeedTitle.BackgroundTransparency =
+    1
+
+SpeedTitle.Text =
+    "Tween Speed"
+
+SpeedTitle.TextColor3 =
+    Color3.fromRGB(
+        225,
+        227,
+        233
+    )
+
+SpeedTitle.TextSize =
+    13
+
+SpeedTitle.Font =
+    Enum.Font.GothamBold
+
+SpeedTitle.TextXAlignment =
+    Enum.TextXAlignment.Left
+
+SpeedTitle.Parent =
+    SpeedRow
+
+local SpeedValue =
+    Instance.new("TextLabel")
+
+SpeedValue.Size =
+    UDim2.new(
+        0,
+        55,
+        1,
+        0
+    )
+
+SpeedValue.Position =
+    UDim2.new(
+        1,
+        -55,
+        0,
+        0
+    )
+
+SpeedValue.BackgroundTransparency =
+    1
+
+SpeedValue.Text =
+    tostring(TweenSpeed)
+
+SpeedValue.TextColor3 =
+    Color3.fromRGB(
+        100,
+        155,
+        255
+    )
+
+SpeedValue.TextSize =
+    14
+
+SpeedValue.Font =
+    Enum.Font.GothamBold
+
+SpeedValue.TextXAlignment =
+    Enum.TextXAlignment.Right
+
+SpeedValue.Parent =
+    SpeedRow
+
+--========================================================--
+-- SPEED SLIDER
+--========================================================--
+
+local SliderBack =
+    Instance.new("Frame")
+
+SliderBack.Size =
+    UDim2.new(
+        1,
+        -5,
+        0,
+        8
+    )
+
+SliderBack.BackgroundColor3 =
+    Color3.fromRGB(
+        50,
+        51,
+        60
+    )
+
+SliderBack.BorderSizePixel =
+    0
+
+SliderBack.Parent =
+    AutoFarmPage
+
+local SliderCorner =
+    Instance.new("UICorner")
+
+SliderCorner.CornerRadius =
+    UDim.new(
+        1,
+        0
+    )
+
+SliderCorner.Parent =
+    SliderBack
+
+local InitialPercent =
+    (TweenSpeed - 50) / 450
+
+local SliderFill =
+    Instance.new("Frame")
+
+SliderFill.Size =
+    UDim2.new(
+        InitialPercent,
+        0,
+        1,
+        0
+    )
+
+SliderFill.BackgroundColor3 =
+    Color3.fromRGB(
+        75,
+        125,
+        230
+    )
+
+SliderFill.BorderSizePixel =
+    0
+
+SliderFill.Parent =
+    SliderBack
+
+local FillCorner =
+    Instance.new("UICorner")
+
+FillCorner.CornerRadius =
+    UDim.new(
+        1,
+        0
+    )
+
+FillCorner.Parent =
+    SliderFill
+
+local SliderButton =
+    Instance.new("TextButton")
+
+SliderButton.Size =
+    UDim2.new(
+        0,
+        18,
+        0,
+        18
+    )
+
+SliderButton.AnchorPoint =
+    Vector2.new(
+        0.5,
+        0.5
+    )
+
+SliderButton.Position =
+    UDim2.new(
+        InitialPercent,
+        0,
+        0.5,
+        0
+    )
+
+SliderButton.BackgroundColor3 =
+    Color3.fromRGB(
+        245,
+        245,
+        245
+    )
+
+SliderButton.BorderSizePixel =
+    0
+
+SliderButton.Text =
+    ""
+
+SliderButton.Parent =
+    SliderBack
+
+local SliderButtonCorner =
+    Instance.new("UICorner")
+
+SliderButtonCorner.CornerRadius =
+    UDim.new(
+        1,
+        0
+    )
+
+SliderButtonCorner.Parent =
+    SliderButton
+
+local SliderDragging =
+    false
+
+local function UpdateSlider(X)
+
+    local StartX =
+        SliderBack.AbsolutePosition.X
+
+    local Width =
+        SliderBack.AbsoluteSize.X
+
+    local Percent =
+        math.clamp(
+            (X - StartX) / Width,
+            0,
+            1
+        )
+
+    TweenSpeed =
+        math.floor(
+            50 +
+            Percent * 450
+        )
+
+    SliderFill.Size =
+        UDim2.new(
+            Percent,
+            0,
+            1,
+            0
+        )
+
+    SliderButton.Position =
+        UDim2.new(
+            Percent,
+            0,
+            0.5,
+            0
+        )
+
+    SpeedValue.Text =
+        tostring(TweenSpeed)
+end
+
+SliderButton.InputBegan:Connect(
+    function(Input)
+
+        if Input.UserInputType ==
+            Enum.UserInputType.MouseButton1
+        or Input.UserInputType ==
+            Enum.UserInputType.Touch then
+
+            SliderDragging =
+                true
+        end
+    end
+)
+
+SliderBack.InputBegan:Connect(
+    function(Input)
+
+        if Input.UserInputType ==
+            Enum.UserInputType.MouseButton1
+        or Input.UserInputType ==
+            Enum.UserInputType.Touch then
+
+            UpdateSlider(
+                Input.Position.X
+            )
+
+            SliderDragging =
+                true
+        end
+    end
+)
+
+--========================================================--
+-- REGION
+--========================================================--
+
+local RegionLabel =
+    Instance.new("TextLabel")
+
+RegionLabel.Size =
+    UDim2.new(
+        1,
+        -5,
+        0,
+        25
+    )
+
+RegionLabel.BackgroundTransparency =
+    1
+
+RegionLabel.Text =
+    "Region: None"
+
+RegionLabel.TextColor3 =
+    Color3.fromRGB(
+        225,
+        227,
+        233
+    )
+
+RegionLabel.TextSize =
+    13
+
+RegionLabel.Font =
+    Enum.Font.GothamBold
+
+RegionLabel.TextXAlignment =
+    Enum.TextXAlignment.Left
+
+RegionLabel.Parent =
+    AutoFarmPage
+
+local RegionButton =
+    Instance.new("TextButton")
+
+RegionButton.Size =
+    UDim2.new(
+        1,
+        -5,
+        0,
+        40
+    )
+
+RegionButton.BackgroundColor3 =
+    Color3.fromRGB(
+        38,
+        39,
+        48
+    )
+
+RegionButton.BorderSizePixel =
+    0
+
+RegionButton.Text =
+    "Select Region"
+
+RegionButton.TextColor3 =
+    Color3.fromRGB(
+        230,
+        230,
+        235
+    )
+
+RegionButton.TextSize =
+    13
+
+RegionButton.Font =
+    Enum.Font.GothamBold
+
+RegionButton.Parent =
+    AutoFarmPage
+
+local RegionCorner =
+    Instance.new("UICorner")
+
+RegionCorner.CornerRadius =
+    UDim.new(
+        0,
+        8
+    )
+
+RegionCorner.Parent =
+    RegionButton
+
+--========================================================--
+-- REGION LIST
+--========================================================--
+
+local RegionList =
+    Instance.new("ScrollingFrame")
+
+RegionList.Size =
+    UDim2.new(
+        1,
+        -5,
+        0,
+        125
+    )
+
+RegionList.BackgroundColor3 =
+    Color3.fromRGB(
+        28,
+        29,
+        36
+    )
+
+RegionList.BorderSizePixel =
+    0
+
+RegionList.Visible =
+    false
+
+RegionList.ScrollBarThickness =
+    3
+
+RegionList.ZIndex =
+    100
+
+RegionList.Parent =
+    AutoFarmPage
+
+local RegionLayout =
+    Instance.new("UIListLayout")
+
+RegionLayout.Padding =
+    UDim.new(
+        0,
+        3
+    )
+
+RegionLayout.Parent =
+    RegionList
+
+for _, Name in ipairs(
+    RegionNames
+) do
+
+    local Button =
+        Instance.new("TextButton")
+
+    Button.Size =
+        UDim2.new(
+            1,
+            -6,
+            0,
+            29
+        )
+
+    Button.BackgroundColor3 =
+        Color3.fromRGB(
+            42,
+            43,
+            52
+        )
+
+    Button.BorderSizePixel =
+        0
+
+    Button.Text =
+        Name
+
+    Button.TextColor3 =
+        Color3.fromRGB(
+            225,
+            225,
+            230
+        )
+
+    Button.TextSize =
+        12
+
+    Button.Font =
+        Enum.Font.Gotham
+
+    Button.ZIndex =
+        101
+
+    Button.Parent =
+        RegionList
+
+    local Corner =
+        Instance.new("UICorner")
+
+    Corner.CornerRadius =
+        UDim.new(
+            0,
+            6
+        )
+
+    Corner.Parent =
+        Button
+
+    Button.MouseButton1Click:Connect(
+        function()
+
+            SelectedRegion =
+                Name
+
+            RegionLabel.Text =
+                "Region: " ..
+                Name
+
+            RegionButton.Text =
+                Name
+
+            RegionList.Visible =
+                false
+        end
+    )
+end
+
+RegionButton.MouseButton1Click:Connect(
+    function()
+
+        RegionList.Visible =
+            not RegionList.Visible
+    end
+)
+
+--========================================================--
+-- STATUS
+--========================================================--
+
+local StatusBox =
+    Instance.new("Frame")
+
+StatusBox.Size =
+    UDim2.new(
+        1,
+        -5,
+        0,
+        38
+    )
+
+StatusBox.BackgroundColor3 =
+    Color3.fromRGB(
+        28,
+        29,
+        36
+    )
+
+StatusBox.BorderSizePixel =
+    0
+
+StatusBox.Parent =
+    AutoFarmPage
+
+local StatusCorner =
+    Instance.new("UICorner")
+
+StatusCorner.CornerRadius =
+    UDim.new(
+        0,
+        8
+    )
+
+StatusCorner.Parent =
+    StatusBox
+
+local StatusIcon =
+    Instance.new("ImageLabel")
+
+StatusIcon.Size =
+    UDim2.new(
+        0,
+        18,
+        0,
+        18
+    )
+
+StatusIcon.Position =
+    UDim2.new(
+        0,
+        10,
+        0.5,
+        -9
+    )
+
+StatusIcon.BackgroundTransparency =
+    1
+
+StatusIcon.Image =
+    Icons["Status"]
+
+StatusIcon.ImageColor3 =
+    Color3.fromRGB(
+        100,
+        150,
+        255
+    )
+
+StatusIcon.Parent =
+    StatusBox
+
+local StatusLabel =
+    Instance.new("TextLabel")
+
+StatusLabel.Size =
+    UDim2.new(
+        1,
+        -40,
+        1,
+        0
+    )
+
+StatusLabel.Position =
+    UDim2.new(
+        0,
+        36,
+        0,
+        0
+    )
+
+StatusLabel.BackgroundTransparency =
+    1
+
+StatusLabel.Text =
+    "Status: OFF"
+
+StatusLabel.TextColor3 =
+    Color3.fromRGB(
+        160,
+        163,
+        173
+    )
+
+StatusLabel.TextSize =
+    12
+
+StatusLabel.Font =
+    Enum.Font.Gotham
+
+StatusLabel.TextXAlignment =
+    Enum.TextXAlignment.Left
+
+StatusLabel.Parent =
+    StatusBox
+
+--========================================================--
+-- START / STOP
+--========================================================--
+
+local StartButton =
+    Instance.new("TextButton")
+
+StartButton.Size =
+    UDim2.new(
+        1,
+        -5,
+        0,
+        45
+    )
+
+StartButton.BackgroundColor3 =
+    Color3.fromRGB(
+        45,
+        165,
+        90
+    )
+
+StartButton.BorderSizePixel =
+    0
+
+StartButton.Text =
+    "START AUTO FARM"
+
+StartButton.TextColor3 =
+    Color3.fromRGB(
+        255,
+        255,
+        255
+    )
+
+StartButton.TextSize =
+    14
+
+StartButton.Font =
+    Enum.Font.GothamBold
+
+StartButton.Parent =
+    AutoFarmPage
+
+local StartCorner =
+    Instance.new("UICorner")
+
+StartCorner.CornerRadius =
+    UDim.new(
+        0,
+        9
+    )
+
+StartCorner.Parent =
+    StartButton
+
+--========================================================--
+-- STOP ROUTE
+--========================================================--
+
+local function StopRoute()
+
+    Enabled =
+        false
+
+    StopCurrentTween()
+
+    StartButton.Text =
+        "START AUTO FARM"
+
+    StartButton.BackgroundColor3 =
+        Color3.fromRGB(
+            45,
+            165,
+            90
+        )
+
+    StatusLabel.Text =
+        "Status: OFF"
+end
+
+--========================================================--
+-- AUTO FARM LOOP
+--========================================================--
+
+local function StartRoute()
+
+    if Enabled then
+        return
+    end
+
+    Enabled =
+        true
+
+    StartButton.Text =
+        "STOP AUTO FARM"
+
+    StartButton.BackgroundColor3 =
+        Color3.fromRGB(
+            185,
+            65,
+            65
+        )
+
+    task.spawn(function()
+
+        while Enabled do
+
+            StatusLabel.Text =
+                "Status: Going to Required Position"
+
+            if not TweenTo(
+                FirstPosition
+            ) then
+
+                break
+            end
+
+            local RegionPosition =
+                Regions[
+                    SelectedRegion
+                ]
+
+            if RegionPosition then
+
+                StatusLabel.Text =
+                    "Status: Going to " ..
+                    SelectedRegion
+
+                if not TweenTo(
+                    RegionPosition
+                ) then
+
+                    break
+                end
+            end
+
+            if not Enabled then
+                break
+            end
+
+            StatusLabel.Text =
+                "Status: Searching for Egg"
+
+            local Stolen =
+                StealEgg()
+
+            if not Stolen then
+
+                task.wait(0.1)
+
+                if not Enabled then
+                    break
+                end
+
+                continue
+            end
+
+            if not Enabled then
+                break
+            end
+
+            StatusLabel.Text =
+                "Status: Returning"
+
+            if not TweenTo(
+                FirstPosition
+            ) then
+
+                break
+            end
+
+            task.wait(0.1)
+        end
+
+        if not Enabled then
+            StopRoute()
+        end
+    end)
+end
+
+StartButton.MouseButton1Click:Connect(
+    function()
+
+        if Enabled then
+            StopRoute()
+        else
+            StartRoute()
+        end
+    end
+)
+
+--========================================================--
+-- COMING SOON
+--========================================================--
+
+local function CreateComingSoon(
+    Page,
+    Name,
+    IconId
+)
+
+    local Box =
+        Instance.new("Frame")
+
+    Box.Size =
+        UDim2.new(
+            1,
+            -5,
+            0,
+            170
+        )
+
+    Box.BackgroundColor3 =
+        Color3.fromRGB(
+            30,
+            31,
+            39
+        )
+
+    Box.BorderSizePixel =
+        0
+
+    Box.Parent =
+        Page
+
+    local Corner =
+        Instance.new("UICorner")
+
+    Corner.CornerRadius =
+        UDim.new(
+            0,
+            12
+        )
+
+    Corner.Parent =
+        Box
+
+    local Icon =
+        Instance.new("ImageLabel")
+
+    Icon.Size =
+        UDim2.new(
+            0,
+            45,
+            0,
+            45
+        )
+
+    Icon.Position =
+        UDim2.new(
+            0.5,
+            -22,
+            0,
+            25
+        )
+
+    Icon.BackgroundTransparency =
+        1
+
+    Icon.Image =
+        IconId
+
+    Icon.ImageColor3 =
+        Color3.fromRGB(
+            90,
+            120,
+            190
+        )
+
+    Icon.Parent =
+        Box
+
+    local Label =
+        Instance.new("TextLabel")
+
+    Label.Size =
+        UDim2.new(
+            1,
+            -20,
+            0,
+            30
+        )
+
+    Label.Position =
+        UDim2.new(
+            0,
+            10,
+            0,
+            82
+        )
+
+    Label.BackgroundTransparency =
+        1
+
+    Label.Text =
+        "COMING SOON"
+
+    Label.TextColor3 =
+        Color3.fromRGB(
+            225,
+            227,
+            233
+        )
+
+    Label.TextSize =
+        17
+
+    Label.Font =
+        Enum.Font.GothamBold
+
+    Label.Parent =
+        Box
+
+    local Sub =
+        Instance.new("TextLabel")
+
+    Sub.Size =
+        UDim2.new(
+            1,
+            -20,
+            0,
+            25
+        )
+
+    Sub.Position =
+        UDim2.new(
+            0,
+            10,
+            0,
+            115
+        )
+
+    Sub.BackgroundTransparency =
+        1
+
+    Sub.Text =
+        Name ..
+        " features will be added soon."
+
+    Sub.TextColor3 =
+        Color3.fromRGB(
+            135,
+            138,
+            148
+        )
+
+    Sub.TextSize =
+        11
+
+    Sub.Font =
+        Enum.Font.Gotham
+
+    Sub.Parent =
+        Box
+end
+
+CreateComingSoon(
+    TeleportPage,
+    "Teleport",
+    Icons["Teleport"]
+)
+
+CreateComingSoon(
+    VisualPage,
+    "Visual",
+    Icons["Visual"]
+)
+
+CreateComingSoon(
+    MiscPage,
+    "Misc",
+    Icons["Misc"]
+)
+
+CreateComingSoon(
+    SettingsPage,
+    "Settings",
+    Icons["Settings"]
+)
+
+--========================================================--
+-- DEFAULT TAB
+--========================================================--
+
+Tabs["Auto Farm"].Visible =
+    true
+
+TabButtons["Auto Farm"].Button.BackgroundColor3 =
+    Color3.fromRGB(
+        65,
+        105,
+        190
+    )
+
+TabButtons["Auto Farm"].Icon.ImageColor3 =
+    Color3.fromRGB(
+        255,
+        255,
+        255
+    )
+
+TabButtons["Auto Farm"].Label.TextColor3 =
+    Color3.fromRGB(
+        255,
+        255,
+        255
+    )
+
+--========================================================--
+-- SLIDER INPUT
+--========================================================--
+
+UserInputService.InputChanged:Connect(
+    function(Input)
+
+        if not SliderDragging then
+            return
+        end
+
+        if Input.UserInputType ==
+            Enum.UserInputType.MouseMovement
+        or Input.UserInputType ==
+            Enum.UserInputType.Touch then
+
+            UpdateSlider(
+                Input.Position.X
+            )
+        end
+    end
+)
+
+UserInputService.InputEnded:Connect(
+    function(Input)
+
+        if Input.UserInputType ==
+            Enum.UserInputType.MouseButton1
+        or Input.UserInputType ==
+            Enum.UserInputType.Touch then
+
+            SliderDragging =
+                false
+        end
+    end
+)
+
+--========================================================--
+-- DRAG GUI
+--========================================================--
+
+local Dragging =
+    false
+
+local DragStart =
+    nil
+
+local StartPosition =
+    nil
+
+TopBar.InputBegan:Connect(
+    function(Input)
+
+        if Input.UserInputType ==
+            Enum.UserInputType.MouseButton1
+        or Input.UserInputType ==
+            Enum.UserInputType.Touch then
+
+            Dragging =
+                true
+
+            DragStart =
+                Input.Position
+
+            StartPosition =
+                Main.Position
+
+            Input.Changed:Connect(
+                function()
+
+                    if Input.UserInputState ==
+                        Enum.UserInputState.End then
+
+                        Dragging =
+                            false
+                    end
+                end
+            )
+        end
+    end
+)
+
+UserInputService.InputChanged:Connect(
+    function(Input)
+
+        if not Dragging then
+            return
+        end
+
+        if Input.UserInputType ==
+            Enum.UserInputType.MouseMovement
+        or Input.UserInputType ==
+            Enum.UserInputType.Touch then
+
+            local Delta =
+                Input.Position -
+                DragStart
+
+            Main.Position =
+                UDim2.new(
+                    StartPosition.X.Scale,
+                    StartPosition.X.Offset +
+                        Delta.X,
+
+                    StartPosition.Y.Scale,
+                    StartPosition.Y.Offset +
+                        Delta.Y
+                )
+        end
+    end
+)
+
+--========================================================--
+-- HIDE / SHOW BUTTON
+--========================================================--
+
+local ToggleButton =
+    Instance.new("ImageButton")
+
+ToggleButton.Name =
+    "ToggleMenu"
+
+ToggleButton.Size =
+    UDim2.new(
+        0,
+        46,
+        0,
+        46
+    )
+
+ToggleButton.Position =
+    UDim2.new(
+        0,
+        15,
+        0.5,
+        -23
+    )
+
+ToggleButton.BackgroundColor3 =
+    Color3.fromRGB(
+        25,
+        27,
+        34
+    )
+
+ToggleButton.BorderSizePixel =
+    0
+
+ToggleButton.Image =
+    Icons["Toggle"]
+
+ToggleButton.ImageColor3 =
+    Color3.fromRGB(
+        110,
+        160,
+        255
+    )
+
+ToggleButton.ScaleType =
+    Enum.ScaleType.Fit
+
+ToggleButton.AutoButtonColor =
+    false
+
+ToggleButton.Visible =
+    false
+
+ToggleButton.ZIndex =
+    500
+
+ToggleButton.Parent =
+    ScreenGui
+
+local ToggleCorner =
+    Instance.new("UICorner")
+
+ToggleCorner.CornerRadius =
+    UDim.new(
+        0,
+        12
+    )
+
+ToggleCorner.Parent =
+    ToggleButton
+
+local ToggleStroke =
+    Instance.new("UIStroke")
+
+ToggleStroke.Thickness =
+    1.5
+
+ToggleStroke.Transparency =
+    0.25
+
+ToggleStroke.Color =
+    Color3.fromRGB(
+        75,
+        125,
+        230
+    )
+
+ToggleStroke.Parent =
+    ToggleButton
+
+--========================================================--
+-- TOGGLE FUNCTION
+--========================================================--
+
+local function SetMenuVisible(State)
+
+    MenuVisible =
+        State
+
+    Main.Visible =
+        State
+
+    ToggleButton.Visible =
+        not State
+end
+
+ToggleButton.MouseButton1Click:Connect(
+    function()
+
+        SetMenuVisible(true)
+    end
+)
+
+--========================================================--
+-- CLOSE / HIDE USING TOP BAR
+--========================================================--
+
+local HideButton =
+    Instance.new("ImageButton")
+
+HideButton.Name =
+    "HideButton"
+
+HideButton.Size =
+    UDim2.new(
+        0,
+        30,
+        0,
+        30
+    )
+
+HideButton.Position =
+    UDim2.new(
+        1,
+        -38,
+        0,
+        14
+    )
+
+HideButton.BackgroundTransparency =
+    1
+
+HideButton.Image =
+    Icons["Toggle"]
+
+HideButton.ImageColor3 =
+    Color3.fromRGB(
+        150,
+        155,
+        170
+    )
+
+HideButton.ScaleType =
+    Enum.ScaleType.Fit
+
+HideButton.AutoButtonColor =
+    false
+
+HideButton.ZIndex =
+    20
+
+HideButton.Parent =
+    TopBar
+
+HideButton.MouseButton1Click:Connect(
+    function()
+
+        SetMenuVisible(false)
+    end
+)
+
+--========================================================--
+-- HOVER EFFECT
+--========================================================--
+
+HideButton.MouseEnter:Connect(
+    function()
+
+        HideButton.ImageColor3 =
+            Color3.fromRGB(
+                110,
+                160,
+                255
+            )
+    end
+)
+
+HideButton.MouseLeave:Connect(
+    function()
+
+        HideButton.ImageColor3 =
+            Color3.fromRGB(
+                150,
+                155,
+                170
+            )
+    end
+)
+
+ToggleButton.MouseEnter:Connect(
+    function()
+
+        ToggleButton.ImageColor3 =
+            Color3.fromRGB(
+                150,
+                195,
+                255
+            )
+    end
+)
+
+ToggleButton.MouseLeave:Connect(
+    function()
+
+        ToggleButton.ImageColor3 =
+            Color3.fromRGB(
+                110,
+                160,
+                255
+            )
+    end
+)
+
+--========================================================--
+-- RESPAWN SAFETY
+--========================================================--
+
+Player.CharacterAdded:Connect(
+    function()
+
+        StopRoute()
+    end
+)
+
+--========================================================--
+-- END
+--========================================================--
