@@ -9,7 +9,10 @@ local scripts = {
     ["14979402479"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween",
     ["6918802270"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween",
     ["109509029034984"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/+1%20Aura%20per%20click",
-    ["89625393697373"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Arabian%20keyboard"
+    ["89625393697373"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Arabian%20keyboard",
+
+    --// Steal an egg
+    ["107778070777162"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Steal%20an%20egg"
 }
 
 local url = scripts[placeId]
