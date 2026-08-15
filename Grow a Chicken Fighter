@@ -1,7 +1,7 @@
 --========================================================--
 -- NAZK HUB
--- PITSCRAP + PLAYERS + SERVER HOP + FLING
--- Smooth Tween + Fling Toggle
+-- PITSCRAP + PLAYERS + SERVER HOP + FLING + MISC + AUTO EGG
+-- Smooth Tween + Fling Toggle + Misc Tools + Egg Collector
 --========================================================--
 
 local Players = game:GetService("Players")
@@ -11,6 +11,8 @@ local CoreGui = game:GetService("CoreGui")
 local TeleportService = game:GetService("TeleportService")
 local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -18,7 +20,6 @@ local LocalPlayer = Players.LocalPlayer
 -- SETTINGS
 --========================================================--
 
--- PitScrap Settings
 local TweenEnabled = false
 local TweenRunning = false
 local FarSpeed = 20
@@ -27,9 +28,7 @@ local CurrentTween = nil
 local CurrentTarget = nil
 local Visited = {}
 
--- Player Settings
 local PlayerTweenEnabled = false
-local PlayerTweenRunning = false
 local PlayerCurrentTween = nil
 local SelectedPlayer = nil
 local FollowEnabled = false
@@ -37,13 +36,28 @@ local FollowConnection = nil
 local FlingEnabled = false
 local FlingConnection = nil
 
+local AntiAFKEnabled = false
+local AntiAFKConnection = nil
+local AntiFlingEnabled = false
+local AntiFlingConnection = nil
+local NoClipEnabled = false
+local NoClipConnection = nil
+local AntiLagEnabled = false
+local DefaultGravity = Workspace.Gravity
+local CurrentGravity = DefaultGravity
+
+local EggEnabled = false
+local EggRunning = false
+local EggTween = nil
+local CurrentEgg = nil
+local EggCooldown = {}
+
 --========================================================--
 -- CHARACTER
 --========================================================--
 
 local function GetCharacter()
-    return LocalPlayer.Character
-        or LocalPlayer.CharacterAdded:Wait()
+    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 end
 
 local function GetRoot()
@@ -59,35 +73,19 @@ local function GetPitScrap()
     return workspace:FindFirstChild("PitScrap")
 end
 
---========================================================--
--- TARGET PART
---========================================================--
-
 local function GetTargetPart(Object)
-    if not Object then
-        return nil
-    end
-    if Object:IsA("BasePart") then
-        return Object
-    end
+    if not Object then return nil end
+    if Object:IsA("BasePart") then return Object end
     if Object:IsA("Model") then
-        return Object.PrimaryPart
-            or Object:FindFirstChild("HumanoidRootPart")
-            or Object:FindFirstChildWhichIsA("BasePart")
+        return Object.PrimaryPart or Object:FindFirstChild("HumanoidRootPart") or Object:FindFirstChildWhichIsA("BasePart")
     end
     return nil
 end
 
---========================================================--
--- ONLY LOOSE + PART INSIDE PITSCRAP
---========================================================--
-
 local function GetTargets()
     local Targets = {}
     local PitScrap = GetPitScrap()
-    if not PitScrap then
-        return Targets
-    end
+    if not PitScrap then return Targets end
     for _, Object in ipairs(PitScrap:GetDescendants()) do
         if Object.Name == "Loose" or Object.Name == "Part" then
             local Target = GetTargetPart(Object)
@@ -99,16 +97,10 @@ local function GetTargets()
     return Targets
 end
 
---========================================================--
--- NEAREST TARGET
---========================================================--
-
 local function GetNearestTarget()
     local Root = GetRoot()
     local PitScrap = GetPitScrap()
-    if not Root or not PitScrap then
-        return nil
-    end
+    if not Root or not PitScrap then return nil end
     local Nearest = nil
     local ShortestDistance = math.huge
     for _, Target in ipairs(GetTargets()) do
@@ -123,44 +115,33 @@ local function GetNearestTarget()
     return Nearest
 end
 
---========================================================--
--- RESET
---========================================================--
-
 local function ResetVisited()
     Visited = {}
 end
 
---========================================================--
--- CANCEL
---========================================================--
-
 local function CancelTween()
     if CurrentTween then
-        pcall(function()
-            CurrentTween:Cancel()
-        end)
+        pcall(function() CurrentTween:Cancel() end)
         CurrentTween = nil
     end
 end
 
 local function CancelPlayerTween()
     if PlayerCurrentTween then
-        pcall(function()
-            PlayerCurrentTween:Cancel()
-        end)
+        pcall(function() PlayerCurrentTween:Cancel() end)
         PlayerCurrentTween = nil
     end
 end
 
---========================================================--
--- SPEED
---========================================================--
+local function CancelEggTween()
+    if EggTween then
+        pcall(function() EggTween:Cancel() end)
+        EggTween = nil
+    end
+end
 
 local function CalculateSpeed(Distance)
-    if Distance > 40 then
-        return FarSpeed
-    end
+    if Distance > 40 then return FarSpeed end
     return MaxSpeed
 end
 
@@ -171,43 +152,24 @@ end
 local function TweenToTarget(Target)
     local Root = GetRoot()
     local PitScrap = GetPitScrap()
-    if not Root or not Target or not PitScrap then
-        return false
-    end
-    if not Target:IsDescendantOf(PitScrap) then
-        return false
-    end
-    if not Target.Parent then
-        return false
-    end
+    if not Root or not Target or not PitScrap then return false end
+    if not Target:IsDescendantOf(PitScrap) then return false end
+    if not Target.Parent then return false end
     local TargetPosition = Target.Position + Vector3.new(0, 3, 0)
     local Distance = (Root.Position - TargetPosition).Magnitude
-    if Distance <= 2 then
-        return true
-    end
+    if Distance <= 2 then return true end
     local Speed = CalculateSpeed(Distance)
     local Duration = math.max(Distance / Speed, 0.12)
     CancelTween()
-    CurrentTween = TweenService:Create(
-        Root,
-        TweenInfo.new(Duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-        { CFrame = CFrame.new(TargetPosition) }
-    )
+    CurrentTween = TweenService:Create(Root, TweenInfo.new(Duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { CFrame = CFrame.new(TargetPosition) })
     CurrentTween:Play()
     local Finished = false
-    local Connection = CurrentTween.Completed:Connect(function()
-        Finished = true
-    end)
+    local Connection = CurrentTween.Completed:Connect(function() Finished = true end)
     while TweenEnabled and CurrentTween and not Finished do
         task.wait(0.02)
     end
-    if Connection then
-        Connection:Disconnect()
-    end
-    if not TweenEnabled then
-        CancelTween()
-        return false
-    end
+    if Connection then Connection:Disconnect() end
+    if not TweenEnabled then CancelTween() return false end
     CurrentTween = nil
     return true
 end
@@ -218,44 +180,25 @@ end
 
 local function TweenToPlayer(TargetPlayer)
     local Root = GetRoot()
-    if not Root or not TargetPlayer then
-        return false
-    end
+    if not Root or not TargetPlayer then return false end
     local TargetCharacter = TargetPlayer.Character
-    if not TargetCharacter then
-        return false
-    end
+    if not TargetCharacter then return false end
     local TargetRoot = TargetCharacter:FindFirstChild("HumanoidRootPart")
-    if not TargetRoot then
-        return false
-    end
+    if not TargetRoot then return false end
     local TargetPosition = TargetRoot.Position + Vector3.new(0, 3, 0)
     local Distance = (Root.Position - TargetPosition).Magnitude
-    if Distance <= 3 then
-        return true
-    end
+    if Distance <= 3 then return true end
     local Duration = math.max(Distance / 35, 0.12)
     CancelPlayerTween()
-    PlayerCurrentTween = TweenService:Create(
-        Root,
-        TweenInfo.new(Duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-        { CFrame = CFrame.new(TargetPosition) }
-    )
+    PlayerCurrentTween = TweenService:Create(Root, TweenInfo.new(Duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { CFrame = CFrame.new(TargetPosition) })
     PlayerCurrentTween:Play()
     local Finished = false
-    local Connection = PlayerCurrentTween.Completed:Connect(function()
-        Finished = true
-    end)
+    local Connection = PlayerCurrentTween.Completed:Connect(function() Finished = true end)
     while PlayerTweenEnabled and PlayerCurrentTween and not Finished do
         task.wait(0.02)
     end
-    if Connection then
-        Connection:Disconnect()
-    end
-    if not PlayerTweenEnabled then
-        CancelPlayerTween()
-        return false
-    end
+    if Connection then Connection:Disconnect() end
+    if not PlayerTweenEnabled then CancelPlayerTween() return false end
     PlayerCurrentTween = nil
     return true
 end
@@ -265,24 +208,15 @@ end
 --========================================================--
 
 local function StartFollow()
-    if FollowConnection then
-        FollowConnection:Disconnect()
-        FollowConnection = nil
-    end
+    if FollowConnection then FollowConnection:Disconnect() FollowConnection = nil end
     FollowEnabled = true
     FollowConnection = RunService.Heartbeat:Connect(function()
-        if not FollowEnabled or not SelectedPlayer then
-            return
-        end
+        if not FollowEnabled or not SelectedPlayer then return end
         local Root = GetRoot()
         local TargetCharacter = SelectedPlayer.Character
-        if not Root or not TargetCharacter then
-            return
-        end
+        if not Root or not TargetCharacter then return end
         local TargetRoot = TargetCharacter:FindFirstChild("HumanoidRootPart")
-        if not TargetRoot then
-            return
-        end
+        if not TargetRoot then return end
         local Distance = (Root.Position - TargetRoot.Position).Magnitude
         if Distance > 5 then
             Root.CFrame = CFrame.new(TargetRoot.Position + Vector3.new(0, 3, 0))
@@ -292,10 +226,7 @@ end
 
 local function StopFollow()
     FollowEnabled = false
-    if FollowConnection then
-        FollowConnection:Disconnect()
-        FollowConnection = nil
-    end
+    if FollowConnection then FollowConnection:Disconnect() FollowConnection = nil end
 end
 
 --========================================================--
@@ -303,58 +234,169 @@ end
 --========================================================--
 
 local function DoFling(target)
-    if not target then
-        return
-    end
+    if not target then return end
     local targetChar = target.Character
-    if not targetChar then
-        return
-    end
+    if not targetChar then return end
     local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
-    if not targetRoot then
-        return
-    end
-
+    if not targetRoot then return end
     local bav = Instance.new("BodyAngularVelocity")
     bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
     bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
     bav.P = 999999
     bav.Parent = targetRoot
-
     local bv = Instance.new("BodyVelocity")
     bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    bv.Velocity = Vector3.new(
-        math.random(-500, 500),
-        math.random(800, 1200),
-        math.random(-500, 500)
-    )
+    bv.Velocity = Vector3.new(math.random(-500, 500), math.random(800, 1200), math.random(-500, 500))
     bv.P = 999999
     bv.Parent = targetRoot
-
     Debris:AddItem(bav, 2)
     Debris:AddItem(bv, 2)
 end
 
 local function StartFling()
-    if FlingConnection then
-        FlingConnection:Disconnect()
-        FlingConnection = nil
-    end
+    if FlingConnection then FlingConnection:Disconnect() FlingConnection = nil end
     FlingEnabled = true
     FlingConnection = RunService.Heartbeat:Connect(function()
-        if not FlingEnabled or not SelectedPlayer then
-            return
-        end
+        if not FlingEnabled or not SelectedPlayer then return end
         DoFling(SelectedPlayer)
     end)
 end
 
 local function StopFling()
     FlingEnabled = false
-    if FlingConnection then
-        FlingConnection:Disconnect()
-        FlingConnection = nil
+    if FlingConnection then FlingConnection:Disconnect() FlingConnection = nil end
+end
+
+--========================================================--
+-- EGG SYSTEM
+--========================================================--
+
+local function GetEggs()
+    local Eggs = {}
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj.Name == "NestEgg" or obj.Name == "Egg" or obj.Name == "nestEgg" or obj.Name == "egg" then
+            local eggPart = GetTargetPart(obj)
+            if eggPart and eggPart.Parent and not EggCooldown[eggPart] then
+                table.insert(Eggs, eggPart)
+            end
+        end
+        if obj:IsA("BasePart") and (obj.Name == "Egg" or obj.Name == "egg") then
+            if not EggCooldown[obj] then
+                table.insert(Eggs, obj)
+            end
+        end
     end
+    local NestEggsFolder = Workspace:FindFirstChild("NestEggs")
+    if NestEggsFolder then
+        for _, nest in ipairs(NestEggsFolder:GetDescendants()) do
+            if nest:IsA("BasePart") and (nest.Name == "Egg" or nest.Name == "egg" or nest.Name == "NestEgg") then
+                if not EggCooldown[nest] then
+                    table.insert(Eggs, nest)
+                end
+            end
+        end
+    end
+    return Eggs
+end
+
+local function GetNearestEgg()
+    local Root = GetRoot()
+    if not Root then return nil end
+    local Nearest = nil
+    local ShortestDistance = math.huge
+    for _, egg in ipairs(GetEggs()) do
+        if egg and egg.Parent then
+            local Distance = (Root.Position - egg.Position).Magnitude
+            if Distance < ShortestDistance then
+                ShortestDistance = Distance
+                Nearest = egg
+            end
+        end
+    end
+    return Nearest
+end
+
+local function TweenToEgg(Egg)
+    local Root = GetRoot()
+    if not Root or not Egg then return false end
+    if not Egg.Parent then return false end
+    local TargetPosition = Egg.Position + Vector3.new(0, 2, 0)
+    local Distance = (Root.Position - TargetPosition).Magnitude
+    if Distance <= 3 then return true end
+    local Duration = math.max(Distance / 45, 0.1)
+    CancelEggTween()
+    EggTween = TweenService:Create(Root, TweenInfo.new(Duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { CFrame = CFrame.new(TargetPosition) })
+    EggTween:Play()
+    local Finished = false
+    local Connection = EggTween.Completed:Connect(function() Finished = true end)
+    while EggEnabled and EggTween and not Finished do
+        task.wait(0.02)
+    end
+    if Connection then Connection:Disconnect() end
+    if not EggEnabled then CancelEggTween() return false end
+    EggTween = nil
+    return true
+end
+
+local function CollectEgg()
+    if EggRunning then return end
+    EggRunning = true
+    task.spawn(function()
+        while EggEnabled do
+            local Root = GetRoot()
+            if not Root then
+                task.wait(0.2)
+                continue
+            end
+            local Egg = GetNearestEgg()
+            if not Egg then
+                task.wait(0.5)
+                continue
+            end
+            CurrentEgg = Egg
+            local WasPitScrapRunning = TweenRunning
+            if WasPitScrapRunning then
+                CancelTween()
+            end
+            local Success = TweenToEgg(Egg)
+            if Success then
+                -- Wait until egg is collected (disappears) or timeout
+                local WaitTime = 0
+                while Egg and Egg.Parent and WaitTime < 5 do
+                    -- Keep touching the egg
+                    pcall(function()
+                        if Egg and Egg.Parent then
+                            firetouchinterest(Root, Egg, 0)
+                            task.wait(0.05)
+                            firetouchinterest(Root, Egg, 1)
+                        end
+                    end)
+                    task.wait(0.2)
+                    WaitTime = WaitTime + 0.2
+                end
+                -- Add cooldown even if egg still exists
+                EggCooldown[Egg] = true
+                task.delay(8, function()
+                    EggCooldown[Egg] = nil
+                end)
+                task.wait(0.5)
+            end
+            CurrentEgg = nil
+            if WasPitScrapRunning and TweenEnabled and not TweenRunning then
+                StartTween()
+            end
+            task.wait(0.3)
+        end
+        CancelEggTween()
+        CurrentEgg = nil
+        EggRunning = false
+    end)
+end
+
+local function StopEgg()
+    EggEnabled = false
+    CancelEggTween()
+    CurrentEgg = nil
 end
 
 --========================================================--
@@ -362,12 +404,14 @@ end
 --========================================================--
 
 local function StartTween()
-    if TweenRunning then
-        return
-    end
+    if TweenRunning then return end
     TweenRunning = true
     task.spawn(function()
         while TweenEnabled do
+            if EggRunning and CurrentEgg then
+                task.wait(0.2)
+                continue
+            end
             local Root = GetRoot()
             if not Root then
                 task.wait(0.2)
@@ -385,9 +429,7 @@ local function StartTween()
             end
             CurrentTarget = Target
             local Success = TweenToTarget(Target)
-            if not TweenEnabled then
-                break
-            end
+            if not TweenEnabled then break end
             if Success and Target and Target.Parent then
                 Visited[Target] = true
             end
@@ -412,14 +454,12 @@ end
 
 local function HopLowPlayersServer()
     local PlaceId = game.PlaceId
-    local success, result = pcall(function()
+    pcall(function()
         local servers = {}
         local cursor = ""
         repeat
             local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-            if cursor ~= "" then
-                url = url .. "&cursor=" .. cursor
-            end
+            if cursor ~= "" then url = url .. "&cursor=" .. cursor end
             local response = game:HttpGet(url)
             local data = game:GetService("HttpService"):JSONDecode(response)
             for _, server in ipairs(data.data) do
@@ -429,20 +469,15 @@ local function HopLowPlayersServer()
             end
             cursor = data.nextPageCursor or ""
         until cursor == "" or #servers > 0
-
         if #servers > 0 then
-            table.sort(servers, function(a, b)
-                return a.playing < b.playing
-            end)
+            table.sort(servers, function(a, b) return a.playing < b.playing end)
             TeleportService:TeleportToPlaceInstance(PlaceId, servers[1].id, LocalPlayer)
         else
             cursor = ""
             local allServers = {}
             repeat
                 local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-                if cursor ~= "" then
-                    url = url .. "&cursor=" .. cursor
-                end
+                if cursor ~= "" then url = url .. "&cursor=" .. cursor end
                 local response = game:HttpGet(url)
                 local data = game:GetService("HttpService"):JSONDecode(response)
                 for _, server in ipairs(data.data) do
@@ -452,15 +487,127 @@ local function HopLowPlayersServer()
                 end
                 cursor = data.nextPageCursor or ""
             until cursor == ""
-
             if #allServers > 0 then
-                table.sort(allServers, function(a, b)
-                    return a.playing < b.playing
-                end)
+                table.sort(allServers, function(a, b) return a.playing < b.playing end)
                 TeleportService:TeleportToPlaceInstance(PlaceId, allServers[1].id, LocalPlayer)
             end
         end
     end)
+end
+
+--========================================================--
+-- MISC FUNCTIONS
+--========================================================--
+
+local function StartAntiAFK()
+    if AntiAFKConnection then AntiAFKConnection:Disconnect() end
+    AntiAFKEnabled = true
+    AntiAFKConnection = LocalPlayer.Idled:Connect(function()
+        if AntiAFKEnabled then
+            local VirtualUser = game:GetService("VirtualUser")
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end
+    end)
+end
+
+local function StopAntiAFK()
+    AntiAFKEnabled = false
+    if AntiAFKConnection then AntiAFKConnection:Disconnect() AntiAFKConnection = nil end
+end
+
+local function StartAntiFling()
+    if AntiFlingConnection then AntiFlingConnection:Disconnect() end
+    AntiFlingEnabled = true
+    AntiFlingConnection = RunService.Heartbeat:Connect(function()
+        if not AntiFlingEnabled then return end
+        local Character = LocalPlayer.Character
+        if not Character then return end
+        local Root = Character:FindFirstChild("HumanoidRootPart")
+        if not Root then return end
+        for _, obj in ipairs(Root:GetChildren()) do
+            if obj:IsA("BodyVelocity") or obj:IsA("BodyAngularVelocity") or obj:IsA("BodyGyro") or obj:IsA("BodyForce") or obj:IsA("BodyThrust") then
+                obj:Destroy()
+            end
+        end
+        if Root.AssemblyAngularVelocity.Magnitude > 50 or Root.AssemblyLinearVelocity.Magnitude > 100 then
+            Root.AssemblyAngularVelocity = Vector3.zero
+            Root.AssemblyLinearVelocity = Vector3.zero
+            Root.CFrame = Root.CFrame
+        end
+    end)
+end
+
+local function StopAntiFling()
+    AntiFlingEnabled = false
+    if AntiFlingConnection then AntiFlingConnection:Disconnect() AntiFlingConnection = nil end
+end
+
+local function StartNoClip()
+    if NoClipConnection then NoClipConnection:Disconnect() end
+    NoClipEnabled = true
+    NoClipConnection = RunService.Stepped:Connect(function()
+        if not NoClipEnabled then return end
+        local Character = LocalPlayer.Character
+        if not Character then return end
+        for _, part in ipairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
+    end)
+end
+
+local function StopNoClip()
+    NoClipEnabled = false
+    if NoClipConnection then NoClipConnection:Disconnect() NoClipConnection = nil end
+    local Character = LocalPlayer.Character
+    if Character then
+        for _, part in ipairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = true end
+        end
+    end
+end
+
+local function StartAntiLag()
+    AntiLagEnabled = true
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") then obj.Enabled = false end
+        if obj:IsA("BasePart") and obj.Material == Enum.Material.Water then obj.Transparency = 1 end
+        if obj:IsA("Decal") or obj:IsA("Texture") then obj.Transparency = 1 end
+        if obj:IsA("Sound") then obj.Volume = 0 end
+    end
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 100000
+    Lighting.Brightness = 2
+    for _, effect in ipairs(Lighting:GetChildren()) do
+        if effect:IsA("BlurEffect") or effect:IsA("BloomEffect") or effect:IsA("SunRaysEffect") or effect:IsA("ColorCorrectionEffect") then
+            effect.Enabled = false
+        end
+    end
+    settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+end
+
+local function StopAntiLag()
+    AntiLagEnabled = false
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") then obj.Enabled = true end
+        if obj:IsA("BasePart") and obj.Material == Enum.Material.Water then obj.Transparency = 0 end
+        if obj:IsA("Decal") or obj:IsA("Texture") then obj.Transparency = 0 end
+        if obj:IsA("Sound") then obj.Volume = 0.5 end
+    end
+    Lighting.GlobalShadows = true
+    Lighting.FogEnd = 10000
+    Lighting.Brightness = 1
+    for _, effect in ipairs(Lighting:GetChildren()) do
+        if effect:IsA("BlurEffect") or effect:IsA("BloomEffect") or effect:IsA("SunRaysEffect") or effect:IsA("ColorCorrectionEffect") then
+            effect.Enabled = true
+        end
+    end
+    settings().Rendering.QualityLevel = Enum.QualityLevel.Level10
+end
+
+local function SetGravity(value)
+    CurrentGravity = value
+    Workspace.Gravity = value
 end
 
 --========================================================--
@@ -469,9 +616,7 @@ end
 
 pcall(function()
     local Old = CoreGui:FindFirstChild("NAZK_HUB")
-    if Old then
-        Old:Destroy()
-    end
+    if Old then Old:Destroy() end
 end)
 
 --========================================================--
@@ -485,8 +630,8 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = CoreGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 320, 0, 400)
-Main.Position = UDim2.new(0.5, -160, 0.5, -200)
+Main.Size = UDim2.new(0, 340, 0, 420)
+Main.Position = UDim2.new(0.5, -170, 0.5, -210)
 Main.BackgroundColor3 = Color3.fromRGB(24, 24, 29)
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
@@ -494,10 +639,6 @@ Main.Parent = ScreenGui
 local MainCorner = Instance.new("UICorner")
 MainCorner.CornerRadius = UDim.new(0, 14)
 MainCorner.Parent = Main
-
---========================================================--
--- TITLE
---========================================================--
 
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -60, 0, 38)
@@ -514,17 +655,14 @@ local Subtitle = Instance.new("TextLabel")
 Subtitle.Size = UDim2.new(1, -30, 0, 20)
 Subtitle.Position = UDim2.new(0, 15, 0, 40)
 Subtitle.BackgroundTransparency = 1
-Subtitle.Text = "PITSCRAP • PLAYERS • SERVER"
+Subtitle.Text = "PITSCRAP • PLAYERS • SERVER • MISC • EGG"
 Subtitle.TextColor3 = Color3.fromRGB(145, 145, 155)
-Subtitle.TextSize = 11
+Subtitle.TextSize = 10
 Subtitle.Font = Enum.Font.Gotham
 Subtitle.TextXAlignment = Enum.TextXAlignment.Left
 Subtitle.Parent = Main
 
---========================================================--
 -- DRAG
---========================================================--
-
 local Dragging = false
 local DragStart
 local StartPosition
@@ -544,35 +682,23 @@ UserInputService.InputEnded:Connect(function(Input)
 end)
 
 UserInputService.InputChanged:Connect(function(Input)
-    if not Dragging then
-        return
-    end
-    if Input.UserInputType ~= Enum.UserInputType.MouseMovement and Input.UserInputType ~= Enum.UserInputType.Touch then
-        return
-    end
+    if not Dragging then return end
+    if Input.UserInputType ~= Enum.UserInputType.MouseMovement and Input.UserInputType ~= Enum.UserInputType.Touch then return end
     local Delta = Input.Position - DragStart
-    Main.Position = UDim2.new(
-        StartPosition.X.Scale,
-        StartPosition.X.Offset + Delta.X,
-        StartPosition.Y.Scale,
-        StartPosition.Y.Offset + Delta.Y
-    )
+    Main.Position = UDim2.new(StartPosition.X.Scale, StartPosition.X.Offset + Delta.X, StartPosition.Y.Scale, StartPosition.Y.Offset + Delta.Y)
 end)
 
---========================================================--
 -- TABS
---========================================================--
-
 local TabContainer = Instance.new("Frame")
-TabContainer.Size = UDim2.new(1, -30, 0, 32)
-TabContainer.Position = UDim2.new(0, 15, 0, 65)
+TabContainer.Size = UDim2.new(1, -20, 0, 28)
+TabContainer.Position = UDim2.new(0, 10, 0, 65)
 TabContainer.BackgroundTransparency = 1
 TabContainer.Parent = Main
 
 local TabLayout = Instance.new("UIListLayout")
 TabLayout.FillDirection = Enum.FillDirection.Horizontal
 TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-TabLayout.Padding = UDim.new(0, 6)
+TabLayout.Padding = UDim.new(0, 4)
 TabLayout.Parent = TabContainer
 
 local Tabs = {}
@@ -581,19 +707,17 @@ local CurrentTab = "PitScrap"
 
 local function CreateTab(name)
     local TabBtn = Instance.new("TextButton")
-    TabBtn.Size = UDim2.new(0, 90, 1, 0)
+    TabBtn.Size = UDim2.new(0, 60, 1, 0)
     TabBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
     TabBtn.BorderSizePixel = 0
     TabBtn.Text = name
     TabBtn.TextColor3 = Color3.fromRGB(180, 180, 190)
-    TabBtn.TextSize = 12
+    TabBtn.TextSize = 10
     TabBtn.Font = Enum.Font.GothamBold
     TabBtn.Parent = TabContainer
-
     local TabCorner = Instance.new("UICorner")
     TabCorner.CornerRadius = UDim.new(0, 8)
     TabCorner.Parent = TabBtn
-
     TabButtons[name] = TabBtn
     return TabBtn
 end
@@ -601,41 +725,51 @@ end
 local PitScrapTab = CreateTab("PitScrap")
 local PlayersTab = CreateTab("Players")
 local ServerTab = CreateTab("Server")
+local MiscTab = CreateTab("Misc")
+local EggTab = CreateTab("Egg")
 
---========================================================--
--- TAB CONTENT CONTAINERS
---========================================================--
-
+-- TAB CONTENT
 local ContentContainer = Instance.new("Frame")
-ContentContainer.Size = UDim2.new(1, -30, 1, -115)
-ContentContainer.Position = UDim2.new(0, 15, 0, 102)
+ContentContainer.Size = UDim2.new(1, -30, 1, -110)
+ContentContainer.Position = UDim2.new(0, 15, 0, 98)
 ContentContainer.BackgroundTransparency = 1
 ContentContainer.Parent = Main
 
--- PitScrap Content
 local PitScrapContent = Instance.new("Frame")
 PitScrapContent.Size = UDim2.new(1, 0, 1, 0)
 PitScrapContent.BackgroundTransparency = 1
 PitScrapContent.Visible = true
 PitScrapContent.Parent = ContentContainer
 
--- Players Content
 local PlayersContent = Instance.new("Frame")
 PlayersContent.Size = UDim2.new(1, 0, 1, 0)
 PlayersContent.BackgroundTransparency = 1
 PlayersContent.Visible = false
 PlayersContent.Parent = ContentContainer
 
--- Server Content
 local ServerContent = Instance.new("Frame")
 ServerContent.Size = UDim2.new(1, 0, 1, 0)
 ServerContent.BackgroundTransparency = 1
 ServerContent.Visible = false
 ServerContent.Parent = ContentContainer
 
+local MiscContent = Instance.new("Frame")
+MiscContent.Size = UDim2.new(1, 0, 1, 0)
+MiscContent.BackgroundTransparency = 1
+MiscContent.Visible = false
+MiscContent.Parent = ContentContainer
+
+local EggContent = Instance.new("Frame")
+EggContent.Size = UDim2.new(1, 0, 1, 0)
+EggContent.BackgroundTransparency = 1
+EggContent.Visible = false
+EggContent.Parent = ContentContainer
+
 Tabs["PitScrap"] = PitScrapContent
 Tabs["Players"] = PlayersContent
 Tabs["Server"] = ServerContent
+Tabs["Misc"] = MiscContent
+Tabs["Egg"] = EggContent
 
 local function SwitchTab(tabName)
     CurrentTab = tabName
@@ -656,6 +790,8 @@ end
 PitScrapTab.MouseButton1Click:Connect(function() SwitchTab("PitScrap") end)
 PlayersTab.MouseButton1Click:Connect(function() SwitchTab("Players") end)
 ServerTab.MouseButton1Click:Connect(function() SwitchTab("Server") end)
+MiscTab.MouseButton1Click:Connect(function() SwitchTab("Misc") end)
+EggTab.MouseButton1Click:Connect(function() SwitchTab("Egg") end)
 
 SwitchTab("PitScrap")
 
@@ -663,7 +799,6 @@ SwitchTab("PitScrap")
 -- PITSCRAP TAB CONTENT
 --========================================================--
 
--- Tween ON/OFF Button
 local TweenButton = Instance.new("TextButton")
 TweenButton.Size = UDim2.new(1, 0, 0, 45)
 TweenButton.Position = UDim2.new(0, 0, 0, 0)
@@ -691,7 +826,6 @@ TweenButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- Speed Label
 local SpeedLabel = Instance.new("TextLabel")
 SpeedLabel.Size = UDim2.new(1, 0, 0, 25)
 SpeedLabel.Position = UDim2.new(0, 0, 0, 55)
@@ -703,7 +837,6 @@ SpeedLabel.Font = Enum.Font.GothamBold
 SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
 SpeedLabel.Parent = PitScrapContent
 
--- Slider Background
 local SliderBack = Instance.new("Frame")
 SliderBack.Size = UDim2.new(1, 0, 0, 8)
 SliderBack.Position = UDim2.new(0, 0, 0, 88)
@@ -739,7 +872,6 @@ local SliderButtonCorner = Instance.new("UICorner")
 SliderButtonCorner.CornerRadius = UDim.new(1, 0)
 SliderButtonCorner.Parent = SliderButton
 
--- Slider Logic
 local Sliding = false
 
 local function UpdateSlider(X)
@@ -769,15 +901,12 @@ UserInputService.InputEnded:Connect(function(Input)
 end)
 
 UserInputService.InputChanged:Connect(function(Input)
-    if not Sliding then
-        return
-    end
+    if not Sliding then return end
     if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
         UpdateSlider(Input.Position.X)
     end
 end)
 
--- Info
 local Info = Instance.new("TextLabel")
 Info.Size = UDim2.new(1, 0, 0, 45)
 Info.Position = UDim2.new(0, 0, 0, 108)
@@ -789,7 +918,6 @@ Info.Font = Enum.Font.Gotham
 Info.TextXAlignment = Enum.TextXAlignment.Center
 Info.Parent = PitScrapContent
 
--- Refresh Button
 local RefreshButton = Instance.new("TextButton")
 RefreshButton.Size = UDim2.new(1, 0, 0, 40)
 RefreshButton.Position = UDim2.new(0, 0, 0, 165)
@@ -810,9 +938,7 @@ RefreshButton.MouseButton1Click:Connect(function()
     CancelTween()
     if TweenEnabled then
         task.wait(0.05)
-        if not TweenRunning then
-            StartTween()
-        end
+        if not TweenRunning then StartTween() end
     end
 end)
 
@@ -820,7 +946,6 @@ end)
 -- PLAYERS TAB CONTENT
 --========================================================--
 
--- Player List Scrolling Frame
 local PlayerListFrame = Instance.new("ScrollingFrame")
 PlayerListFrame.Size = UDim2.new(1, 0, 0, 120)
 PlayerListFrame.Position = UDim2.new(0, 0, 0, 0)
@@ -850,11 +975,8 @@ ListPadding.Parent = PlayerListFrame
 local PlayerButtons = {}
 
 local function RefreshPlayerList()
-    for _, btn in ipairs(PlayerButtons) do
-        btn:Destroy()
-    end
+    for _, btn in ipairs(PlayerButtons) do btn:Destroy() end
     PlayerButtons = {}
-
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
             local PlayerBtn = Instance.new("TextButton")
@@ -866,20 +988,15 @@ local function RefreshPlayerList()
             PlayerBtn.TextSize = 11
             PlayerBtn.Font = Enum.Font.GothamBold
             PlayerBtn.Parent = PlayerListFrame
-
             local PBtnCorner = Instance.new("UICorner")
             PBtnCorner.CornerRadius = UDim.new(0, 8)
             PBtnCorner.Parent = PlayerBtn
-
             PlayerBtn.MouseButton1Click:Connect(function()
                 SelectedPlayer = player
-                for _, b in ipairs(PlayerButtons) do
-                    b.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
-                end
+                for _, b in ipairs(PlayerButtons) do b.BackgroundColor3 = Color3.fromRGB(43, 43, 51) end
                 PlayerBtn.BackgroundColor3 = Color3.fromRGB(70, 100, 140)
                 SelectedLabel.Text = "Selected: " .. player.DisplayName
             end)
-
             table.insert(PlayerButtons, PlayerBtn)
         end
     end
@@ -887,17 +1004,9 @@ end
 
 RefreshPlayerList()
 
-Players.PlayerAdded:Connect(function()
-    task.wait(0.5)
-    RefreshPlayerList()
-end)
+Players.PlayerAdded:Connect(function() task.wait(0.5) RefreshPlayerList() end)
+Players.PlayerRemoving:Connect(function() task.wait(0.5) RefreshPlayerList() end)
 
-Players.PlayerRemoving:Connect(function()
-    task.wait(0.5)
-    RefreshPlayerList()
-end)
-
--- Selected Label
 local SelectedLabel = Instance.new("TextLabel")
 SelectedLabel.Size = UDim2.new(1, 0, 0, 20)
 SelectedLabel.Position = UDim2.new(0, 0, 0, 128)
@@ -909,7 +1018,6 @@ SelectedLabel.Font = Enum.Font.GothamBold
 SelectedLabel.TextXAlignment = Enum.TextXAlignment.Left
 SelectedLabel.Parent = PlayersContent
 
--- Row 1: Tween to Player + Stop Tween
 local TweenPlayerBtn = Instance.new("TextButton")
 TweenPlayerBtn.Size = UDim2.new(0.48, 0, 0, 34)
 TweenPlayerBtn.Position = UDim2.new(0, 0, 0, 154)
@@ -926,26 +1034,14 @@ TweenPCorner.CornerRadius = UDim.new(0, 9)
 TweenPCorner.Parent = TweenPlayerBtn
 
 TweenPlayerBtn.MouseButton1Click:Connect(function()
-    if not SelectedPlayer then
-        SelectedLabel.Text = "Selected: None - Select a player!"
-        return
-    end
+    if not SelectedPlayer then SelectedLabel.Text = "Selected: None - Select a player!" return end
     PlayerTweenEnabled = true
     task.spawn(function()
         while PlayerTweenEnabled do
-            if not SelectedPlayer or not SelectedPlayer.Parent then
-                PlayerTweenEnabled = false
-                break
-            end
+            if not SelectedPlayer or not SelectedPlayer.Parent then PlayerTweenEnabled = false break end
             local success = TweenToPlayer(SelectedPlayer)
-            if not PlayerTweenEnabled then
-                break
-            end
-            if success then
-                task.wait(0.1)
-            else
-                task.wait(0.5)
-            end
+            if not PlayerTweenEnabled then break end
+            if success then task.wait(0.1) else task.wait(0.5) end
         end
         CancelPlayerTween()
     end)
@@ -971,7 +1067,6 @@ StopTweenPlayerBtn.MouseButton1Click:Connect(function()
     CancelPlayerTween()
 end)
 
--- Row 2: Follow + Fling
 local FollowBtn = Instance.new("TextButton")
 FollowBtn.Size = UDim2.new(0.48, 0, 0, 34)
 FollowBtn.Position = UDim2.new(0, 0, 0, 194)
@@ -988,10 +1083,7 @@ FollowCorner.CornerRadius = UDim.new(0, 9)
 FollowCorner.Parent = FollowBtn
 
 FollowBtn.MouseButton1Click:Connect(function()
-    if not SelectedPlayer then
-        SelectedLabel.Text = "Selected: None - Select a player!"
-        return
-    end
+    if not SelectedPlayer then SelectedLabel.Text = "Selected: None - Select a player!" return end
     FollowEnabled = not FollowEnabled
     if FollowEnabled then
         FollowBtn.Text = "Follow: ON"
@@ -1004,7 +1096,6 @@ FollowBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- FLING BUTTON - TOGGLE
 local FlingBtn = Instance.new("TextButton")
 FlingBtn.Size = UDim2.new(0.48, 0, 0, 34)
 FlingBtn.Position = UDim2.new(0.52, 0, 0, 194)
@@ -1021,10 +1112,7 @@ FlingCorner.CornerRadius = UDim.new(0, 9)
 FlingCorner.Parent = FlingBtn
 
 FlingBtn.MouseButton1Click:Connect(function()
-    if not SelectedPlayer then
-        SelectedLabel.Text = "Selected: None - Select a player!"
-        return
-    end
+    if not SelectedPlayer then SelectedLabel.Text = "Selected: None - Select a player!" return end
     FlingEnabled = not FlingEnabled
     if FlingEnabled then
         FlingBtn.Text = "Fling: ON"
@@ -1037,7 +1125,6 @@ FlingBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Row 3: Refresh List
 local RefreshPlayersBtn = Instance.new("TextButton")
 RefreshPlayersBtn.Size = UDim2.new(1, 0, 0, 34)
 RefreshPlayersBtn.Position = UDim2.new(0, 0, 0, 234)
@@ -1053,9 +1140,7 @@ local RefreshPCorner = Instance.new("UICorner")
 RefreshPCorner.CornerRadius = UDim.new(0, 9)
 RefreshPCorner.Parent = RefreshPlayersBtn
 
-RefreshPlayersBtn.MouseButton1Click:Connect(function()
-    RefreshPlayerList()
-end)
+RefreshPlayersBtn.MouseButton1Click:Connect(function() RefreshPlayerList() end)
 
 --========================================================--
 -- SERVER TAB CONTENT
@@ -1120,16 +1205,331 @@ CurrentServerLabel.Font = Enum.Font.GothamBold
 CurrentServerLabel.TextXAlignment = Enum.TextXAlignment.Center
 CurrentServerLabel.Parent = ServerContent
 
-Players.PlayerAdded:Connect(function()
-    CurrentServerLabel.Text = "Current Players: " .. tostring(#Players:GetPlayers())
+Players.PlayerAdded:Connect(function() CurrentServerLabel.Text = "Current Players: " .. tostring(#Players:GetPlayers()) end)
+Players.PlayerRemoving:Connect(function() CurrentServerLabel.Text = "Current Players: " .. tostring(#Players:GetPlayers()) end)
+
+--========================================================--
+-- MISC TAB CONTENT
+--========================================================--
+
+local AntiAFKBtn = Instance.new("TextButton")
+AntiAFKBtn.Size = UDim2.new(0.48, 0, 0, 34)
+AntiAFKBtn.Position = UDim2.new(0, 0, 0, 0)
+AntiAFKBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+AntiAFKBtn.BorderSizePixel = 0
+AntiAFKBtn.Text = "Anti AFK: OFF"
+AntiAFKBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AntiAFKBtn.TextSize = 11
+AntiAFKBtn.Font = Enum.Font.GothamBold
+AntiAFKBtn.Parent = MiscContent
+
+local AntiAFKCorner = Instance.new("UICorner")
+AntiAFKCorner.CornerRadius = UDim.new(0, 9)
+AntiAFKCorner.Parent = AntiAFKBtn
+
+AntiAFKBtn.MouseButton1Click:Connect(function()
+    AntiAFKEnabled = not AntiAFKEnabled
+    if AntiAFKEnabled then
+        AntiAFKBtn.Text = "Anti AFK: ON"
+        AntiAFKBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 70)
+        StartAntiAFK()
+    else
+        AntiAFKBtn.Text = "Anti AFK: OFF"
+        AntiAFKBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+        StopAntiAFK()
+    end
 end)
 
-Players.PlayerRemoving:Connect(function()
-    CurrentServerLabel.Text = "Current Players: " .. tostring(#Players:GetPlayers())
+local AntiFlingBtn = Instance.new("TextButton")
+AntiFlingBtn.Size = UDim2.new(0.48, 0, 0, 34)
+AntiFlingBtn.Position = UDim2.new(0.52, 0, 0, 0)
+AntiFlingBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+AntiFlingBtn.BorderSizePixel = 0
+AntiFlingBtn.Text = "Anti Fling: OFF"
+AntiFlingBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AntiFlingBtn.TextSize = 11
+AntiFlingBtn.Font = Enum.Font.GothamBold
+AntiFlingBtn.Parent = MiscContent
+
+local AntiFlingCorner = Instance.new("UICorner")
+AntiFlingCorner.CornerRadius = UDim.new(0, 9)
+AntiFlingCorner.Parent = AntiFlingBtn
+
+AntiFlingBtn.MouseButton1Click:Connect(function()
+    AntiFlingEnabled = not AntiFlingEnabled
+    if AntiFlingEnabled then
+        AntiFlingBtn.Text = "Anti Fling: ON"
+        AntiFlingBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 70)
+        StartAntiFling()
+    else
+        AntiFlingBtn.Text = "Anti Fling: OFF"
+        AntiFlingBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+        StopAntiFling()
+    end
+end)
+
+local NoClipBtn = Instance.new("TextButton")
+NoClipBtn.Size = UDim2.new(0.48, 0, 0, 34)
+NoClipBtn.Position = UDim2.new(0, 0, 0, 42)
+NoClipBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+NoClipBtn.BorderSizePixel = 0
+NoClipBtn.Text = "No Clip: OFF"
+NoClipBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+NoClipBtn.TextSize = 11
+NoClipBtn.Font = Enum.Font.GothamBold
+NoClipBtn.Parent = MiscContent
+
+local NoClipCorner = Instance.new("UICorner")
+NoClipCorner.CornerRadius = UDim.new(0, 9)
+NoClipCorner.Parent = NoClipBtn
+
+NoClipBtn.MouseButton1Click:Connect(function()
+    NoClipEnabled = not NoClipEnabled
+    if NoClipEnabled then
+        NoClipBtn.Text = "No Clip: ON"
+        NoClipBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 70)
+        StartNoClip()
+    else
+        NoClipBtn.Text = "No Clip: OFF"
+        NoClipBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+        StopNoClip()
+    end
+end)
+
+local AntiLagBtn = Instance.new("TextButton")
+AntiLagBtn.Size = UDim2.new(0.48, 0, 0, 34)
+AntiLagBtn.Position = UDim2.new(0.52, 0, 0, 42)
+AntiLagBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+AntiLagBtn.BorderSizePixel = 0
+AntiLagBtn.Text = "Anti Lag: OFF"
+AntiLagBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AntiLagBtn.TextSize = 11
+AntiLagBtn.Font = Enum.Font.GothamBold
+AntiLagBtn.Parent = MiscContent
+
+local AntiLagCorner = Instance.new("UICorner")
+AntiLagCorner.CornerRadius = UDim.new(0, 9)
+AntiLagCorner.Parent = AntiLagBtn
+
+AntiLagBtn.MouseButton1Click:Connect(function()
+    AntiLagEnabled = not AntiLagEnabled
+    if AntiLagEnabled then
+        AntiLagBtn.Text = "Anti Lag: ON"
+        AntiLagBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 70)
+        StartAntiLag()
+    else
+        AntiLagBtn.Text = "Anti Lag: OFF"
+        AntiLagBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+        StopAntiLag()
+    end
+end)
+
+local GravityLabel = Instance.new("TextLabel")
+GravityLabel.Size = UDim2.new(1, 0, 0, 22)
+GravityLabel.Position = UDim2.new(0, 0, 0, 88)
+GravityLabel.BackgroundTransparency = 1
+GravityLabel.Text = "Gravity: " .. tostring(DefaultGravity)
+GravityLabel.TextColor3 = Color3.fromRGB(230, 230, 230)
+GravityLabel.TextSize = 13
+GravityLabel.Font = Enum.Font.GothamBold
+GravityLabel.TextXAlignment = Enum.TextXAlignment.Left
+GravityLabel.Parent = MiscContent
+
+local GravitySliderBack = Instance.new("Frame")
+GravitySliderBack.Size = UDim2.new(1, 0, 0, 8)
+GravitySliderBack.Position = UDim2.new(0, 0, 0, 116)
+GravitySliderBack.BackgroundColor3 = Color3.fromRGB(55, 55, 63)
+GravitySliderBack.BorderSizePixel = 0
+GravitySliderBack.Parent = MiscContent
+
+local GravitySliderCorner = Instance.new("UICorner")
+GravitySliderCorner.CornerRadius = UDim.new(1, 0)
+GravitySliderCorner.Parent = GravitySliderBack
+
+local GravitySliderFill = Instance.new("Frame")
+GravitySliderFill.Size = UDim2.new(0.5, 0, 1, 0)
+GravitySliderFill.BackgroundColor3 = Color3.fromRGB(100, 180, 255)
+GravitySliderFill.BorderSizePixel = 0
+GravitySliderFill.Parent = GravitySliderBack
+
+local GravityFillCorner = Instance.new("UICorner")
+GravityFillCorner.CornerRadius = UDim.new(1, 0)
+GravityFillCorner.Parent = GravitySliderFill
+
+local GravitySliderButton = Instance.new("TextButton")
+GravitySliderButton.Size = UDim2.new(0, 20, 0, 20)
+GravitySliderButton.AnchorPoint = Vector2.new(0.5, 0.5)
+GravitySliderButton.Position = UDim2.new(0.5, 0, 0.5, 0)
+GravitySliderButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+GravitySliderButton.BorderSizePixel = 0
+GravitySliderButton.Text = ""
+GravitySliderButton.AutoButtonColor = false
+GravitySliderButton.Parent = GravitySliderBack
+
+local GravitySliderBtnCorner = Instance.new("UICorner")
+GravitySliderBtnCorner.CornerRadius = UDim.new(1, 0)
+GravitySliderBtnCorner.Parent = GravitySliderButton
+
+local GravitySliding = false
+
+local function UpdateGravitySlider(X)
+    local StartX = GravitySliderBack.AbsolutePosition.X
+    local Width = GravitySliderBack.AbsoluteSize.X
+    local Percent = math.clamp((X - StartX) / Width, 0, 1)
+    local GravityValue = math.floor(0 + (400 * Percent))
+    SetGravity(GravityValue)
+    GravitySliderFill.Size = UDim2.new(Percent, 0, 1, 0)
+    GravitySliderButton.Position = UDim2.new(Percent, 0, 0.5, 0)
+    GravityLabel.Text = "Gravity: " .. tostring(GravityValue)
+end
+
+local function BeginGravitySlider(Input)
+    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+        GravitySliding = true
+        UpdateGravitySlider(Input.Position.X)
+    end
+end
+
+GravitySliderButton.InputBegan:Connect(BeginGravitySlider)
+GravitySliderBack.InputBegan:Connect(BeginGravitySlider)
+
+UserInputService.InputEnded:Connect(function(Input)
+    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+        GravitySliding = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(Input)
+    if not GravitySliding then return end
+    if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
+        UpdateGravitySlider(Input.Position.X)
+    end
+end)
+
+local ResetGravityBtn = Instance.new("TextButton")
+ResetGravityBtn.Size = UDim2.new(1, 0, 0, 34)
+ResetGravityBtn.Position = UDim2.new(0, 0, 0, 136)
+ResetGravityBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+ResetGravityBtn.BorderSizePixel = 0
+ResetGravityBtn.Text = "Reset Gravity"
+ResetGravityBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ResetGravityBtn.TextSize = 11
+ResetGravityBtn.Font = Enum.Font.GothamBold
+ResetGravityBtn.Parent = MiscContent
+
+local ResetGravityCorner = Instance.new("UICorner")
+ResetGravityCorner.CornerRadius = UDim.new(0, 9)
+ResetGravityCorner.Parent = ResetGravityBtn
+
+ResetGravityBtn.MouseButton1Click:Connect(function()
+    SetGravity(DefaultGravity)
+    GravitySliderFill.Size = UDim2.new(DefaultGravity / 400, 0, 1, 0)
+    GravitySliderButton.Position = UDim2.new(DefaultGravity / 400, 0, 0.5, 0)
+    GravityLabel.Text = "Gravity: " .. tostring(DefaultGravity)
+end)
+
+local MiscInfo = Instance.new("TextLabel")
+MiscInfo.Size = UDim2.new(1, 0, 0, 50)
+MiscInfo.Position = UDim2.new(0, 0, 0, 180)
+MiscInfo.BackgroundTransparency = 1
+MiscInfo.Text = "Anti AFK: Prevents idle kick\nAnti Fling: Blocks fling attempts\nAnti Lag: Disables particles & effects"
+MiscInfo.TextColor3 = Color3.fromRGB(145, 145, 155)
+MiscInfo.TextSize = 10
+MiscInfo.Font = Enum.Font.Gotham
+MiscInfo.TextXAlignment = Enum.TextXAlignment.Center
+MiscInfo.Parent = MiscContent
+
+--========================================================--
+-- EGG TAB CONTENT
+--========================================================--
+
+local EggTitle = Instance.new("TextLabel")
+EggTitle.Size = UDim2.new(1, 0, 0, 30)
+EggTitle.Position = UDim2.new(0, 0, 0, 0)
+EggTitle.BackgroundTransparency = 1
+EggTitle.Text = "🥚 AUTO EGG COLLECTOR"
+EggTitle.TextColor3 = Color3.fromRGB(255, 220, 100)
+EggTitle.TextSize = 15
+EggTitle.Font = Enum.Font.GothamBold
+EggTitle.TextXAlignment = Enum.TextXAlignment.Center
+EggTitle.Parent = EggContent
+
+local EggDesc = Instance.new("TextLabel")
+EggDesc.Size = UDim2.new(1, 0, 0, 40)
+EggDesc.Position = UDim2.new(0, 0, 0, 32)
+EggDesc.BackgroundTransparency = 1
+EggDesc.Text = "Automatically detects and collects\neggs that spawn in the map"
+EggDesc.TextColor3 = Color3.fromRGB(180, 180, 190)
+EggDesc.TextSize = 10
+EggDesc.Font = Enum.Font.Gotham
+EggDesc.TextXAlignment = Enum.TextXAlignment.Center
+EggDesc.Parent = EggContent
+
+local EggToggleBtn = Instance.new("TextButton")
+EggToggleBtn.Size = UDim2.new(1, 0, 0, 50)
+EggToggleBtn.Position = UDim2.new(0, 0, 0, 82)
+EggToggleBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+EggToggleBtn.BorderSizePixel = 0
+EggToggleBtn.Text = "Auto Egg: OFF"
+EggToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+EggToggleBtn.TextSize = 16
+EggToggleBtn.Font = Enum.Font.GothamBold
+EggToggleBtn.Parent = EggContent
+
+local EggToggleCorner = Instance.new("UICorner")
+EggToggleCorner.CornerRadius = UDim.new(0, 12)
+EggToggleCorner.Parent = EggToggleBtn
+
+EggToggleBtn.MouseButton1Click:Connect(function()
+    EggEnabled = not EggEnabled
+    if EggEnabled then
+        EggToggleBtn.Text = "Auto Egg: ON"
+        EggToggleBtn.BackgroundColor3 = Color3.fromRGB(100, 80, 40)
+        CollectEgg()
+    else
+        EggToggleBtn.Text = "Auto Egg: OFF"
+        EggToggleBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+        StopEgg()
+    end
+end)
+
+local EggInfo = Instance.new("TextLabel")
+EggInfo.Size = UDim2.new(1, 0, 0, 60)
+EggInfo.Position = UDim2.new(0, 0, 0, 145)
+EggInfo.BackgroundTransparency = 1
+EggInfo.Text = "How it works:\n1. Monitors workspace for eggs\n2. Pauses PitScrap when egg found\n3. Tweets to egg & collects it\n4. Resumes PitScrap after collection"
+EggInfo.TextColor3 = Color3.fromRGB(145, 145, 155)
+EggInfo.TextSize = 10
+EggInfo.Font = Enum.Font.Gotham
+EggInfo.TextXAlignment = Enum.TextXAlignment.Center
+EggInfo.Parent = EggContent
+
+local EggStatusLabel = Instance.new("TextLabel")
+EggStatusLabel.Size = UDim2.new(1, 0, 0, 22)
+EggStatusLabel.Position = UDim2.new(0, 0, 0, 215)
+EggStatusLabel.BackgroundTransparency = 1
+EggStatusLabel.Text = "Status: Waiting for eggs..."
+EggStatusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+EggStatusLabel.TextSize = 11
+EggStatusLabel.Font = Enum.Font.GothamBold
+EggStatusLabel.TextXAlignment = Enum.TextXAlignment.Center
+EggStatusLabel.Parent = EggContent
+
+-- Update egg status
+RunService.Heartbeat:Connect(function()
+    if not EggEnabled then
+        EggStatusLabel.Text = "Status: Waiting for eggs..."
+        return
+    end
+    if CurrentEgg then
+        EggStatusLabel.Text = "Status: Collecting egg..."
+    else
+        EggStatusLabel.Text = "Status: Scanning for eggs..."
+    end
 end)
 
 --========================================================--
--- HIDE
+-- HIDE / OPEN
 --========================================================--
 
 local HideButton = Instance.new("TextButton")
@@ -1145,10 +1545,6 @@ HideButton.Parent = Main
 local HideCorner = Instance.new("UICorner")
 HideCorner.CornerRadius = UDim.new(0, 9)
 HideCorner.Parent = HideButton
-
---========================================================--
--- OPEN
---========================================================--
 
 local OpenButton = Instance.new("TextButton")
 OpenButton.Size = UDim2.new(0, 55, 0, 55)
@@ -1186,4 +1582,4 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
-print("NAZK HUB - PITSCRAP + PLAYERS + SERVER HOP + FLING LOADED")
+print("NAZK HUB - PITSCRAP + PLAYERS + SERVER + FLING + MISC + AUTO EGG LOADED")
