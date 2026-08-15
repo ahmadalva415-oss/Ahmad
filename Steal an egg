@@ -693,7 +693,7 @@ CreateSection(AutoFarmPage, "Egg Auto Farm", Icons["Farm"])
 local InfoLabel = Instance.new("TextLabel")
 InfoLabel.Size = UDim2.new(1, -5, 0, 34)
 InfoLabel.BackgroundTransparency = 1
-InfoLabel.Text = "Required Position → Region → Steal Egg → Return"
+InfoLabel.Text = "Required Position > Region > Steal Egg > Return"
 InfoLabel.TextColor3 = Theme.TextMuted
 InfoLabel.TextSize = 11
 InfoLabel.Font = Enum.Font.Gotham
@@ -843,7 +843,7 @@ local RegionArrow = Instance.new("TextLabel")
 RegionArrow.Size = UDim2.new(0, 20, 0, 20)
 RegionArrow.Position = UDim2.new(1, -30, 0.5, -10)
 RegionArrow.BackgroundTransparency = 1
-RegionArrow.Text = "▼"
+RegionArrow.Text = "v"
 RegionArrow.TextColor3 = Theme.TextMuted
 RegionArrow.TextSize = 10
 RegionArrow.Font = Enum.Font.GothamBold
@@ -908,13 +908,13 @@ for _, Name in ipairs(RegionNames) do
         RegionLabel.Text = "Selected Region: " .. Name
         RegionButton.Text = Name
         RegionList.Visible = false
-        RegionArrow.Text = "▼"
+        RegionArrow.Text = "v"
     end)
 end
 
 RegionButton.MouseButton1Click:Connect(function()
     RegionList.Visible = not RegionList.Visible
-    RegionArrow.Text = RegionList.Visible and "▲" or "▼"
+    RegionArrow.Text = RegionList.Visible and "^" or "v"
 end)
 
 -- Status Box
@@ -1130,7 +1130,6 @@ CreateToggle(MiscPage, "Hide Name / Anti Report", false, function(State)
             end
         end
         
-        -- Hide overhead in some games
         for _, Obj in pairs(Character:GetDescendants()) do
             if Obj:IsA("BillboardGui") then
                 if State then
@@ -1183,7 +1182,7 @@ ServerStatus.TextXAlignment = Enum.TextXAlignment.Left
 ServerStatus.Parent = ServerPage
 
 -- Hop Low Players Server
-CreateButton(ServerPage, "🌐  Hop Low Players Server", Theme.Primary, function()
+CreateButton(ServerPage, "Hop Low Players Server", Theme.Primary, function()
     ServerStatus.Text = "Status: Fetching servers..."
     
     task.spawn(function()
@@ -1217,7 +1216,7 @@ CreateButton(ServerPage, "🌐  Hop Low Players Server", Theme.Primary, function
 end)
 
 -- Hop Random Server
-CreateButton(ServerPage, "🎲  Hop Random Server", Theme.Warning, function()
+CreateButton(ServerPage, "Hop Random Server", Theme.Warning, function()
     ServerStatus.Text = "Status: Finding random server..."
     
     task.spawn(function()
@@ -1249,7 +1248,7 @@ CreateButton(ServerPage, "🎲  Hop Random Server", Theme.Warning, function()
 end)
 
 -- Rejoin Current Server
-CreateButton(ServerPage, "🔄  Rejoin Current Server", Theme.Success, function()
+CreateButton(ServerPage, "Rejoin Current Server", Theme.Success, function()
     ServerStatus.Text = "Status: Rejoining..."
     task.wait(0.3)
     TeleportService:TeleportToPlaceInstance(PlaceId, JobId, Player)
@@ -1276,7 +1275,7 @@ end)
 local Credits = Instance.new("TextLabel")
 Credits.Size = UDim2.new(1, -5, 0, 40)
 Credits.BackgroundTransparency = 1
-Credits.Text = "NAZK HUB v2.2\nMade with ❤️ for Egg Farm"
+Credits.Text = "NAZK HUB v2.2\nMade for Egg Farm"
 Credits.TextColor3 = Theme.TextMuted
 Credits.TextSize = 11
 Credits.Font = Enum.Font.Gotham
@@ -1447,7 +1446,6 @@ local function SetupAutoRejoin()
     end
     
     if Config.AutoRejoin then
-        -- Detect kick via CoreGui error messages
         local PromptGui = CoreGui:FindFirstChild("RobloxPromptGui")
         if PromptGui then
             local ErrorPrompt = PromptGui:FindFirstChild("promptOverlay")
@@ -1463,7 +1461,6 @@ local function SetupAutoRejoin()
     end
 end
 
--- Watch for AutoRejoin toggle changes
 task.spawn(function()
     while task.wait(1) do
         if Config.AutoRejoin and not AutoRejoinConnection then
@@ -1475,7 +1472,6 @@ task.spawn(function()
     end
 end)
 
--- Also handle sudden disconnection
 game:GetService("NetworkClient").ChildRemoved:Connect(function()
     if Config.AutoRejoin then
         task.wait(3)
