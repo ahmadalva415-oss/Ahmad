@@ -1,6 +1,7 @@
 --========================================================--
 -- NAZK HUB
 -- PITSCRAP LOOSE + PART
+-- Smooth Tween
 --========================================================--
 
 local Players = game:GetService("Players")
@@ -18,7 +19,7 @@ local TweenEnabled = false
 local TweenRunning = false
 
 local FarSpeed = 20
-local MaxSpeed = 67
+local MaxSpeed = 35
 
 local CurrentTween = nil
 local CurrentTarget = nil
@@ -48,7 +49,7 @@ local function GetPitScrap()
 end
 
 --========================================================--
--- GET TARGET PART
+-- TARGET PART
 --========================================================--
 
 local function GetTargetPart(Object)
@@ -71,7 +72,7 @@ local function GetTargetPart(Object)
 end
 
 --========================================================--
--- GET ONLY LOOSE + PART INSIDE PITSCRAP
+-- ONLY LOOSE + PART INSIDE PITSCRAP
 --========================================================--
 
 local function GetTargets()
@@ -109,14 +110,9 @@ end
 local function GetNearestTarget()
 
     local Root = GetRoot()
-
-    if not Root then
-        return nil
-    end
-
     local PitScrap = GetPitScrap()
 
-    if not PitScrap then
+    if not Root or not PitScrap then
         return nil
     end
 
@@ -152,7 +148,7 @@ local function ResetVisited()
 end
 
 --========================================================--
--- CANCEL TWEEN
+-- CANCEL
 --========================================================--
 
 local function CancelTween()
@@ -171,7 +167,7 @@ end
 -- SPEED
 --
 -- > 40  = 20
--- <= 40 = 67
+-- <= 40 = 35
 --========================================================--
 
 local function CalculateSpeed(Distance)
@@ -184,7 +180,7 @@ local function CalculateSpeed(Distance)
 end
 
 --========================================================--
--- TWEEN TARGET
+-- TWEEN
 --========================================================--
 
 local function TweenToTarget(Target)
@@ -195,7 +191,6 @@ local function TweenToTarget(Target)
     if not Root
     or not Target
     or not PitScrap then
-
         return false
     end
 
@@ -221,28 +216,23 @@ local function TweenToTarget(Target)
         CalculateSpeed(Distance)
 
     local Duration =
-        Distance / Speed
-
-    Duration =
-        math.max(Duration, 0.12)
+        math.max(Distance / Speed, 0.12)
 
     CancelTween()
 
-    CurrentTween =
-        TweenService:Create(
+    CurrentTween = TweenService:Create(
+        Root,
 
-            Root,
+        TweenInfo.new(
+            Duration,
+            Enum.EasingStyle.Sine,
+            Enum.EasingDirection.InOut
+        ),
 
-            TweenInfo.new(
-                Duration,
-                Enum.EasingStyle.Linear,
-                Enum.EasingDirection.Out
-            ),
-
-            {
-                CFrame = CFrame.new(TargetPosition)
-            }
-        )
+        {
+            CFrame = CFrame.new(TargetPosition)
+        }
+    )
 
     CurrentTween:Play()
 
@@ -297,8 +287,7 @@ local function StartTween()
                 continue
             end
 
-            local Target =
-                GetNearestTarget()
+            local Target = GetNearestTarget()
 
             if not Target then
 
@@ -306,8 +295,7 @@ local function StartTween()
 
                 task.wait(0.1)
 
-                Target =
-                    GetNearestTarget()
+                Target = GetNearestTarget()
 
                 if not Target then
                     task.wait(0.3)
@@ -350,9 +338,7 @@ end
 local function StopTween()
 
     TweenEnabled = false
-
     CancelTween()
-
     CurrentTarget = nil
 end
 
@@ -375,19 +361,10 @@ end)
 --========================================================--
 
 local ScreenGui = Instance.new("ScreenGui")
-
-ScreenGui.Name =
-    "NAZK_PITSCRAP_TWEEN"
-
+ScreenGui.Name = "NAZK_PITSCRAP_TWEEN"
 ScreenGui.ResetOnSpawn = false
-ScreenGui.ZIndexBehavior =
-    Enum.ZIndexBehavior.Sibling
-
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = CoreGui
-
---========================================================--
--- MAIN
---========================================================--
 
 local Main = Instance.new("Frame")
 
@@ -420,7 +397,6 @@ Title.Position =
     UDim2.new(0, 15, 0, 8)
 
 Title.BackgroundTransparency = 1
-
 Title.Text = "NAZK HUB"
 
 Title.TextColor3 =
@@ -428,10 +404,7 @@ Title.TextColor3 =
 
 Title.TextSize = 20
 Title.Font = Enum.Font.GothamBold
-
-Title.TextXAlignment =
-    Enum.TextXAlignment.Left
-
+Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = Main
 
 local Subtitle = Instance.new("TextLabel")
@@ -452,10 +425,7 @@ Subtitle.TextColor3 =
 
 Subtitle.TextSize = 11
 Subtitle.Font = Enum.Font.Gotham
-
-Subtitle.TextXAlignment =
-    Enum.TextXAlignment.Left
-
+Subtitle.TextXAlignment = Enum.TextXAlignment.Left
 Subtitle.Parent = Main
 
 --========================================================--
@@ -500,7 +470,6 @@ UserInputService.InputChanged:Connect(function(Input)
         Enum.UserInputType.MouseMovement
     and Input.UserInputType ~=
         Enum.UserInputType.Touch then
-
         return
     end
 
@@ -516,7 +485,7 @@ UserInputService.InputChanged:Connect(function(Input)
 end)
 
 --========================================================--
--- TWEEN BUTTON
+-- ON / OFF
 --========================================================--
 
 local TweenButton = Instance.new("TextButton")
@@ -531,24 +500,40 @@ TweenButton.BackgroundColor3 =
     Color3.fromRGB(43, 43, 51)
 
 TweenButton.BorderSizePixel = 0
-
-TweenButton.Text =
-    "Tween : OFF"
+TweenButton.Text = "Tween : OFF"
 
 TweenButton.TextColor3 =
     Color3.fromRGB(255, 255, 255)
 
 TweenButton.TextSize = 15
 TweenButton.Font = Enum.Font.GothamBold
-
 TweenButton.Parent = Main
 
 local TweenCorner = Instance.new("UICorner")
 TweenCorner.CornerRadius = UDim.new(0, 9)
 TweenCorner.Parent = TweenButton
 
+TweenButton.MouseButton1Click:Connect(function()
+
+    TweenEnabled = not TweenEnabled
+
+    if TweenEnabled then
+
+        TweenButton.Text = "Tween : ON"
+
+        ResetVisited()
+        StartTween()
+
+    else
+
+        TweenButton.Text = "Tween : OFF"
+
+        StopTween()
+    end
+end)
+
 --========================================================--
--- SPEED INFO
+-- SPEED LABEL
 --========================================================--
 
 local SpeedLabel = Instance.new("TextLabel")
@@ -562,17 +547,14 @@ SpeedLabel.Position =
 SpeedLabel.BackgroundTransparency = 1
 
 SpeedLabel.Text =
-    "NEAR : 67  |  FAR : 20"
+    "NEAR : 35  |  FAR : 20"
 
 SpeedLabel.TextColor3 =
     Color3.fromRGB(230, 230, 230)
 
 SpeedLabel.TextSize = 13
 SpeedLabel.Font = Enum.Font.GothamBold
-
-SpeedLabel.TextXAlignment =
-    Enum.TextXAlignment.Left
-
+SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
 SpeedLabel.Parent = Main
 
 --========================================================--
@@ -591,7 +573,6 @@ SliderBack.BackgroundColor3 =
     Color3.fromRGB(55, 55, 63)
 
 SliderBack.BorderSizePixel = 0
-
 SliderBack.Parent = Main
 
 local SliderCorner = Instance.new("UICorner")
@@ -607,7 +588,6 @@ SliderFill.BackgroundColor3 =
     Color3.fromRGB(255, 255, 255)
 
 SliderFill.BorderSizePixel = 0
-
 SliderFill.Parent = SliderBack
 
 local FillCorner = Instance.new("UICorner")
@@ -631,20 +611,14 @@ SliderButton.BackgroundColor3 =
 SliderButton.BorderSizePixel = 0
 SliderButton.Text = ""
 SliderButton.AutoButtonColor = false
-
 SliderButton.Parent = SliderBack
 
-local SliderButtonCorner =
-    Instance.new("UICorner")
-
-SliderButtonCorner.CornerRadius =
-    UDim.new(1, 0)
-
-SliderButtonCorner.Parent =
-    SliderButton
+local SliderButtonCorner = Instance.new("UICorner")
+SliderButtonCorner.CornerRadius = UDim.new(1, 0)
+SliderButtonCorner.Parent = SliderButton
 
 --========================================================--
--- SLIDER LOGIC
+-- SLIDER: 20 -> 35
 --========================================================--
 
 local Sliding = false
@@ -666,7 +640,7 @@ local function UpdateSlider(X)
 
     MaxSpeed =
         math.floor(
-            20 + ((67 - 20) * Percent)
+            20 + ((35 - 20) * Percent)
         )
 
     SliderFill.Size =
@@ -699,10 +673,7 @@ local function BeginSlider(Input)
         Enum.UserInputType.Touch then
 
         Sliding = true
-
-        UpdateSlider(
-            Input.Position.X
-        )
+        UpdateSlider(Input.Position.X)
     end
 end
 
@@ -731,9 +702,7 @@ UserInputService.InputChanged:Connect(function(Input)
     or Input.UserInputType ==
         Enum.UserInputType.Touch then
 
-        UpdateSlider(
-            Input.Position.X
-        )
+        UpdateSlider(Input.Position.X)
     end
 end)
 
@@ -752,17 +721,14 @@ Info.Position =
 Info.BackgroundTransparency = 1
 
 Info.Text =
-    "PITSCRAP ONLY\n>40 = SPEED 20   |   <=40 = NEAR SPEED"
+    "PITSCRAP ONLY\n>40 = 20 SPEED   |   <=40 = 35 MAX"
 
 Info.TextColor3 =
     Color3.fromRGB(145, 145, 155)
 
 Info.TextSize = 10
 Info.Font = Enum.Font.Gotham
-
-Info.TextXAlignment =
-    Enum.TextXAlignment.Center
-
+Info.TextXAlignment = Enum.TextXAlignment.Center
 Info.Parent = Main
 
 --========================================================--
@@ -790,7 +756,6 @@ RefreshButton.TextColor3 =
 
 RefreshButton.TextSize = 13
 RefreshButton.Font = Enum.Font.GothamBold
-
 RefreshButton.Parent = Main
 
 local RefreshCorner = Instance.new("UICorner")
@@ -803,37 +768,11 @@ RefreshButton.MouseButton1Click:Connect(function()
     CancelTween()
 
     if TweenEnabled then
-
         task.wait(0.05)
 
         if not TweenRunning then
             StartTween()
         end
-    end
-end)
-
---========================================================--
--- ON / OFF
---========================================================--
-
-TweenButton.MouseButton1Click:Connect(function()
-
-    TweenEnabled = not TweenEnabled
-
-    if TweenEnabled then
-
-        TweenButton.Text =
-            "Tween : ON"
-
-        ResetVisited()
-        StartTween()
-
-    else
-
-        TweenButton.Text =
-            "Tween : OFF"
-
-        StopTween()
     end
 end)
 
@@ -859,7 +798,6 @@ HideButton.TextColor3 =
 
 HideButton.TextSize = 20
 HideButton.Font = Enum.Font.GothamBold
-
 HideButton.Parent = Main
 
 local HideCorner = Instance.new("UICorner")
@@ -897,13 +835,11 @@ OpenCorner.CornerRadius = UDim.new(1, 0)
 OpenCorner.Parent = OpenButton
 
 HideButton.MouseButton1Click:Connect(function()
-
     Main.Visible = false
     OpenButton.Visible = true
 end)
 
 OpenButton.MouseButton1Click:Connect(function()
-
     Main.Visible = true
     OpenButton.Visible = false
 end)
@@ -923,4 +859,4 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
-print("NAZK HUB - PITSCRAP LOOSE + PART READY")
+print("NAZK HUB - PITSCRAP MAX SPEED 35 LOADED")
