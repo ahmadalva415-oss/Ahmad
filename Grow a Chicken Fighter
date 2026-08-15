@@ -1,13 +1,16 @@
 --========================================================--
 -- NAZK HUB
--- PITSCRAP LOOSE + PART
--- Smooth Tween
+-- PITSCRAP + PLAYERS + SERVER HOP + FLING
+-- Smooth Tween + Fling Toggle
 --========================================================--
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
+local TeleportService = game:GetService("TeleportService")
+local RunService = game:GetService("RunService")
+local Debris = game:GetService("Debris")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -15,16 +18,24 @@ local LocalPlayer = Players.LocalPlayer
 -- SETTINGS
 --========================================================--
 
+-- PitScrap Settings
 local TweenEnabled = false
 local TweenRunning = false
-
 local FarSpeed = 20
 local MaxSpeed = 35
-
 local CurrentTween = nil
 local CurrentTarget = nil
-
 local Visited = {}
+
+-- Player Settings
+local PlayerTweenEnabled = false
+local PlayerTweenRunning = false
+local PlayerCurrentTween = nil
+local SelectedPlayer = nil
+local FollowEnabled = false
+local FollowConnection = nil
+local FlingEnabled = false
+local FlingConnection = nil
 
 --========================================================--
 -- CHARACTER
@@ -53,21 +64,17 @@ end
 --========================================================--
 
 local function GetTargetPart(Object)
-
     if not Object then
         return nil
     end
-
     if Object:IsA("BasePart") then
         return Object
     end
-
     if Object:IsA("Model") then
         return Object.PrimaryPart
             or Object:FindFirstChild("HumanoidRootPart")
             or Object:FindFirstChildWhichIsA("BasePart")
     end
-
     return nil
 end
 
@@ -76,30 +83,19 @@ end
 --========================================================--
 
 local function GetTargets()
-
     local Targets = {}
     local PitScrap = GetPitScrap()
-
     if not PitScrap then
         return Targets
     end
-
     for _, Object in ipairs(PitScrap:GetDescendants()) do
-
-        if Object.Name == "Loose"
-        or Object.Name == "Part" then
-
+        if Object.Name == "Loose" or Object.Name == "Part" then
             local Target = GetTargetPart(Object)
-
-            if Target
-            and Target.Parent
-            and Target:IsDescendantOf(PitScrap) then
-
+            if Target and Target.Parent and Target:IsDescendantOf(PitScrap) then
                 table.insert(Targets, Target)
             end
         end
     end
-
     return Targets
 end
 
@@ -108,34 +104,22 @@ end
 --========================================================--
 
 local function GetNearestTarget()
-
     local Root = GetRoot()
     local PitScrap = GetPitScrap()
-
     if not Root or not PitScrap then
         return nil
     end
-
     local Nearest = nil
     local ShortestDistance = math.huge
-
     for _, Target in ipairs(GetTargets()) do
-
-        if Target
-        and Target.Parent
-        and Target:IsDescendantOf(PitScrap)
-        and not Visited[Target] then
-
-            local Distance =
-                (Root.Position - Target.Position).Magnitude
-
+        if Target and Target.Parent and Target:IsDescendantOf(PitScrap) and not Visited[Target] then
+            local Distance = (Root.Position - Target.Position).Magnitude
             if Distance < ShortestDistance then
                 ShortestDistance = Distance
                 Nearest = Target
             end
         end
     end
-
     return Nearest
 end
 
@@ -152,194 +136,331 @@ end
 --========================================================--
 
 local function CancelTween()
-
     if CurrentTween then
-
         pcall(function()
             CurrentTween:Cancel()
         end)
-
         CurrentTween = nil
+    end
+end
+
+local function CancelPlayerTween()
+    if PlayerCurrentTween then
+        pcall(function()
+            PlayerCurrentTween:Cancel()
+        end)
+        PlayerCurrentTween = nil
     end
 end
 
 --========================================================--
 -- SPEED
---
--- > 40  = 20
--- <= 40 = 35
 --========================================================--
 
 local function CalculateSpeed(Distance)
-
     if Distance > 40 then
         return FarSpeed
     end
-
     return MaxSpeed
 end
 
 --========================================================--
--- TWEEN
+-- TWEEN TO TARGET
 --========================================================--
 
 local function TweenToTarget(Target)
-
     local Root = GetRoot()
     local PitScrap = GetPitScrap()
-
-    if not Root
-    or not Target
-    or not PitScrap then
+    if not Root or not Target or not PitScrap then
         return false
     end
-
     if not Target:IsDescendantOf(PitScrap) then
         return false
     end
-
     if not Target.Parent then
         return false
     end
-
-    local TargetPosition =
-        Target.Position + Vector3.new(0, 3, 0)
-
-    local Distance =
-        (Root.Position - TargetPosition).Magnitude
-
+    local TargetPosition = Target.Position + Vector3.new(0, 3, 0)
+    local Distance = (Root.Position - TargetPosition).Magnitude
     if Distance <= 2 then
         return true
     end
-
-    local Speed =
-        CalculateSpeed(Distance)
-
-    local Duration =
-        math.max(Distance / Speed, 0.12)
-
+    local Speed = CalculateSpeed(Distance)
+    local Duration = math.max(Distance / Speed, 0.12)
     CancelTween()
-
     CurrentTween = TweenService:Create(
         Root,
-
-        TweenInfo.new(
-            Duration,
-            Enum.EasingStyle.Sine,
-            Enum.EasingDirection.InOut
-        ),
-
-        {
-            CFrame = CFrame.new(TargetPosition)
-        }
+        TweenInfo.new(Duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+        { CFrame = CFrame.new(TargetPosition) }
     )
-
     CurrentTween:Play()
-
     local Finished = false
-
-    local Connection =
-        CurrentTween.Completed:Connect(function()
-            Finished = true
-        end)
-
-    while TweenEnabled
-    and CurrentTween
-    and not Finished do
-
+    local Connection = CurrentTween.Completed:Connect(function()
+        Finished = true
+    end)
+    while TweenEnabled and CurrentTween and not Finished do
         task.wait(0.02)
     end
-
     if Connection then
         Connection:Disconnect()
     end
-
     if not TweenEnabled then
         CancelTween()
         return false
     end
-
     CurrentTween = nil
-
     return true
 end
 
 --========================================================--
--- MAIN LOOP
+-- TWEEN TO PLAYER
 --========================================================--
 
-local function StartTween()
+local function TweenToPlayer(TargetPlayer)
+    local Root = GetRoot()
+    if not Root or not TargetPlayer then
+        return false
+    end
+    local TargetCharacter = TargetPlayer.Character
+    if not TargetCharacter then
+        return false
+    end
+    local TargetRoot = TargetCharacter:FindFirstChild("HumanoidRootPart")
+    if not TargetRoot then
+        return false
+    end
+    local TargetPosition = TargetRoot.Position + Vector3.new(0, 3, 0)
+    local Distance = (Root.Position - TargetPosition).Magnitude
+    if Distance <= 3 then
+        return true
+    end
+    local Duration = math.max(Distance / 35, 0.12)
+    CancelPlayerTween()
+    PlayerCurrentTween = TweenService:Create(
+        Root,
+        TweenInfo.new(Duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+        { CFrame = CFrame.new(TargetPosition) }
+    )
+    PlayerCurrentTween:Play()
+    local Finished = false
+    local Connection = PlayerCurrentTween.Completed:Connect(function()
+        Finished = true
+    end)
+    while PlayerTweenEnabled and PlayerCurrentTween and not Finished do
+        task.wait(0.02)
+    end
+    if Connection then
+        Connection:Disconnect()
+    end
+    if not PlayerTweenEnabled then
+        CancelPlayerTween()
+        return false
+    end
+    PlayerCurrentTween = nil
+    return true
+end
 
-    if TweenRunning then
+--========================================================--
+-- FOLLOW PLAYER
+--========================================================--
+
+local function StartFollow()
+    if FollowConnection then
+        FollowConnection:Disconnect()
+        FollowConnection = nil
+    end
+    FollowEnabled = true
+    FollowConnection = RunService.Heartbeat:Connect(function()
+        if not FollowEnabled or not SelectedPlayer then
+            return
+        end
+        local Root = GetRoot()
+        local TargetCharacter = SelectedPlayer.Character
+        if not Root or not TargetCharacter then
+            return
+        end
+        local TargetRoot = TargetCharacter:FindFirstChild("HumanoidRootPart")
+        if not TargetRoot then
+            return
+        end
+        local Distance = (Root.Position - TargetRoot.Position).Magnitude
+        if Distance > 5 then
+            Root.CFrame = CFrame.new(TargetRoot.Position + Vector3.new(0, 3, 0))
+        end
+    end)
+end
+
+local function StopFollow()
+    FollowEnabled = false
+    if FollowConnection then
+        FollowConnection:Disconnect()
+        FollowConnection = nil
+    end
+end
+
+--========================================================--
+-- FLING PLAYER
+--========================================================--
+
+local function DoFling(target)
+    if not target then
+        return
+    end
+    local targetChar = target.Character
+    if not targetChar then
+        return
+    end
+    local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+    if not targetRoot then
         return
     end
 
+    local bav = Instance.new("BodyAngularVelocity")
+    bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
+    bav.P = 999999
+    bav.Parent = targetRoot
+
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bv.Velocity = Vector3.new(
+        math.random(-500, 500),
+        math.random(800, 1200),
+        math.random(-500, 500)
+    )
+    bv.P = 999999
+    bv.Parent = targetRoot
+
+    Debris:AddItem(bav, 2)
+    Debris:AddItem(bv, 2)
+end
+
+local function StartFling()
+    if FlingConnection then
+        FlingConnection:Disconnect()
+        FlingConnection = nil
+    end
+    FlingEnabled = true
+    FlingConnection = RunService.Heartbeat:Connect(function()
+        if not FlingEnabled or not SelectedPlayer then
+            return
+        end
+        DoFling(SelectedPlayer)
+    end)
+end
+
+local function StopFling()
+    FlingEnabled = false
+    if FlingConnection then
+        FlingConnection:Disconnect()
+        FlingConnection = nil
+    end
+end
+
+--========================================================--
+-- MAIN PITSCRAP LOOP
+--========================================================--
+
+local function StartTween()
+    if TweenRunning then
+        return
+    end
     TweenRunning = true
-
     task.spawn(function()
-
         while TweenEnabled do
-
             local Root = GetRoot()
-
             if not Root then
                 task.wait(0.2)
                 continue
             end
-
             local Target = GetNearestTarget()
-
             if not Target then
-
                 ResetVisited()
-
                 task.wait(0.1)
-
                 Target = GetNearestTarget()
-
                 if not Target then
                     task.wait(0.3)
                     continue
                 end
             end
-
             CurrentTarget = Target
-
-            local Success =
-                TweenToTarget(Target)
-
+            local Success = TweenToTarget(Target)
             if not TweenEnabled then
                 break
             end
-
-            if Success
-            and Target
-            and Target.Parent then
-
+            if Success and Target and Target.Parent then
                 Visited[Target] = true
             end
-
             CurrentTarget = nil
-
             task.wait(0.05)
         end
-
         CancelTween()
-
         CurrentTarget = nil
         TweenRunning = false
     end)
 end
 
---========================================================--
--- STOP
---========================================================--
-
 local function StopTween()
-
     TweenEnabled = false
     CancelTween()
     CurrentTarget = nil
+end
+
+--========================================================--
+-- SERVER HOP
+--========================================================--
+
+local function HopLowPlayersServer()
+    local PlaceId = game.PlaceId
+    local success, result = pcall(function()
+        local servers = {}
+        local cursor = ""
+        repeat
+            local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+            if cursor ~= "" then
+                url = url .. "&cursor=" .. cursor
+            end
+            local response = game:HttpGet(url)
+            local data = game:GetService("HttpService"):JSONDecode(response)
+            for _, server in ipairs(data.data) do
+                if server.playing <= 1 and server.id ~= game.JobId then
+                    table.insert(servers, server)
+                end
+            end
+            cursor = data.nextPageCursor or ""
+        until cursor == "" or #servers > 0
+
+        if #servers > 0 then
+            table.sort(servers, function(a, b)
+                return a.playing < b.playing
+            end)
+            TeleportService:TeleportToPlaceInstance(PlaceId, servers[1].id, LocalPlayer)
+        else
+            cursor = ""
+            local allServers = {}
+            repeat
+                local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+                if cursor ~= "" then
+                    url = url .. "&cursor=" .. cursor
+                end
+                local response = game:HttpGet(url)
+                local data = game:GetService("HttpService"):JSONDecode(response)
+                for _, server in ipairs(data.data) do
+                    if server.id ~= game.JobId then
+                        table.insert(allServers, server)
+                    end
+                end
+                cursor = data.nextPageCursor or ""
+            until cursor == ""
+
+            if #allServers > 0 then
+                table.sort(allServers, function(a, b)
+                    return a.playing < b.playing
+                end)
+                TeleportService:TeleportToPlaceInstance(PlaceId, allServers[1].id, LocalPlayer)
+            end
+        end
+    end)
 end
 
 --========================================================--
@@ -347,10 +468,7 @@ end
 --========================================================--
 
 pcall(function()
-
-    local Old =
-        CoreGui:FindFirstChild("NAZK_PITSCRAP_TWEEN")
-
+    local Old = CoreGui:FindFirstChild("NAZK_HUB")
     if Old then
         Old:Destroy()
     end
@@ -361,22 +479,15 @@ end)
 --========================================================--
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "NAZK_PITSCRAP_TWEEN"
+ScreenGui.Name = "NAZK_HUB"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = CoreGui
 
 local Main = Instance.new("Frame")
-
-Main.Size =
-    UDim2.new(0, 285, 0, 315)
-
-Main.Position =
-    UDim2.new(0.5, -142, 0.5, -157)
-
-Main.BackgroundColor3 =
-    Color3.fromRGB(24, 24, 29)
-
+Main.Size = UDim2.new(0, 320, 0, 400)
+Main.Position = UDim2.new(0.5, -160, 0.5, -200)
+Main.BackgroundColor3 = Color3.fromRGB(24, 24, 29)
 Main.BorderSizePixel = 0
 Main.Parent = ScreenGui
 
@@ -389,40 +500,22 @@ MainCorner.Parent = Main
 --========================================================--
 
 local Title = Instance.new("TextLabel")
-
-Title.Size =
-    UDim2.new(1, -60, 0, 38)
-
-Title.Position =
-    UDim2.new(0, 15, 0, 8)
-
+Title.Size = UDim2.new(1, -60, 0, 38)
+Title.Position = UDim2.new(0, 15, 0, 8)
 Title.BackgroundTransparency = 1
 Title.Text = "NAZK HUB"
-
-Title.TextColor3 =
-    Color3.fromRGB(255, 255, 255)
-
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.TextSize = 20
 Title.Font = Enum.Font.GothamBold
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = Main
 
 local Subtitle = Instance.new("TextLabel")
-
-Subtitle.Size =
-    UDim2.new(1, -30, 0, 20)
-
-Subtitle.Position =
-    UDim2.new(0, 15, 0, 40)
-
+Subtitle.Size = UDim2.new(1, -30, 0, 20)
+Subtitle.Position = UDim2.new(0, 15, 0, 40)
 Subtitle.BackgroundTransparency = 1
-
-Subtitle.Text =
-    "PITSCRAP • LOOSE + PART"
-
-Subtitle.TextColor3 =
-    Color3.fromRGB(145, 145, 155)
-
+Subtitle.Text = "PITSCRAP • PLAYERS • SERVER"
+Subtitle.TextColor3 = Color3.fromRGB(145, 145, 155)
 Subtitle.TextSize = 11
 Subtitle.Font = Enum.Font.Gotham
 Subtitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -437,12 +530,7 @@ local DragStart
 local StartPosition
 
 Title.InputBegan:Connect(function(Input)
-
-    if Input.UserInputType ==
-        Enum.UserInputType.MouseButton1
-    or Input.UserInputType ==
-        Enum.UserInputType.Touch then
-
+    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
         Dragging = true
         DragStart = Input.Position
         StartPosition = Main.Position
@@ -450,32 +538,19 @@ Title.InputBegan:Connect(function(Input)
 end)
 
 UserInputService.InputEnded:Connect(function(Input)
-
-    if Input.UserInputType ==
-        Enum.UserInputType.MouseButton1
-    or Input.UserInputType ==
-        Enum.UserInputType.Touch then
-
+    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
         Dragging = false
     end
 end)
 
 UserInputService.InputChanged:Connect(function(Input)
-
     if not Dragging then
         return
     end
-
-    if Input.UserInputType ~=
-        Enum.UserInputType.MouseMovement
-    and Input.UserInputType ~=
-        Enum.UserInputType.Touch then
+    if Input.UserInputType ~= Enum.UserInputType.MouseMovement and Input.UserInputType ~= Enum.UserInputType.Touch then
         return
     end
-
-    local Delta =
-        Input.Position - DragStart
-
+    local Delta = Input.Position - DragStart
     Main.Position = UDim2.new(
         StartPosition.X.Scale,
         StartPosition.X.Offset + Delta.X,
@@ -485,108 +560,164 @@ UserInputService.InputChanged:Connect(function(Input)
 end)
 
 --========================================================--
--- ON / OFF
+-- TABS
 --========================================================--
 
+local TabContainer = Instance.new("Frame")
+TabContainer.Size = UDim2.new(1, -30, 0, 32)
+TabContainer.Position = UDim2.new(0, 15, 0, 65)
+TabContainer.BackgroundTransparency = 1
+TabContainer.Parent = Main
+
+local TabLayout = Instance.new("UIListLayout")
+TabLayout.FillDirection = Enum.FillDirection.Horizontal
+TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+TabLayout.Padding = UDim.new(0, 6)
+TabLayout.Parent = TabContainer
+
+local Tabs = {}
+local TabButtons = {}
+local CurrentTab = "PitScrap"
+
+local function CreateTab(name)
+    local TabBtn = Instance.new("TextButton")
+    TabBtn.Size = UDim2.new(0, 90, 1, 0)
+    TabBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+    TabBtn.BorderSizePixel = 0
+    TabBtn.Text = name
+    TabBtn.TextColor3 = Color3.fromRGB(180, 180, 190)
+    TabBtn.TextSize = 12
+    TabBtn.Font = Enum.Font.GothamBold
+    TabBtn.Parent = TabContainer
+
+    local TabCorner = Instance.new("UICorner")
+    TabCorner.CornerRadius = UDim.new(0, 8)
+    TabCorner.Parent = TabBtn
+
+    TabButtons[name] = TabBtn
+    return TabBtn
+end
+
+local PitScrapTab = CreateTab("PitScrap")
+local PlayersTab = CreateTab("Players")
+local ServerTab = CreateTab("Server")
+
+--========================================================--
+-- TAB CONTENT CONTAINERS
+--========================================================--
+
+local ContentContainer = Instance.new("Frame")
+ContentContainer.Size = UDim2.new(1, -30, 1, -115)
+ContentContainer.Position = UDim2.new(0, 15, 0, 102)
+ContentContainer.BackgroundTransparency = 1
+ContentContainer.Parent = Main
+
+-- PitScrap Content
+local PitScrapContent = Instance.new("Frame")
+PitScrapContent.Size = UDim2.new(1, 0, 1, 0)
+PitScrapContent.BackgroundTransparency = 1
+PitScrapContent.Visible = true
+PitScrapContent.Parent = ContentContainer
+
+-- Players Content
+local PlayersContent = Instance.new("Frame")
+PlayersContent.Size = UDim2.new(1, 0, 1, 0)
+PlayersContent.BackgroundTransparency = 1
+PlayersContent.Visible = false
+PlayersContent.Parent = ContentContainer
+
+-- Server Content
+local ServerContent = Instance.new("Frame")
+ServerContent.Size = UDim2.new(1, 0, 1, 0)
+ServerContent.BackgroundTransparency = 1
+ServerContent.Visible = false
+ServerContent.Parent = ContentContainer
+
+Tabs["PitScrap"] = PitScrapContent
+Tabs["Players"] = PlayersContent
+Tabs["Server"] = ServerContent
+
+local function SwitchTab(tabName)
+    CurrentTab = tabName
+    for name, content in pairs(Tabs) do
+        content.Visible = (name == tabName)
+    end
+    for name, btn in pairs(TabButtons) do
+        if name == tabName then
+            btn.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+            btn.TextColor3 = Color3.fromRGB(180, 180, 190)
+        end
+    end
+end
+
+PitScrapTab.MouseButton1Click:Connect(function() SwitchTab("PitScrap") end)
+PlayersTab.MouseButton1Click:Connect(function() SwitchTab("Players") end)
+ServerTab.MouseButton1Click:Connect(function() SwitchTab("Server") end)
+
+SwitchTab("PitScrap")
+
+--========================================================--
+-- PITSCRAP TAB CONTENT
+--========================================================--
+
+-- Tween ON/OFF Button
 local TweenButton = Instance.new("TextButton")
-
-TweenButton.Size =
-    UDim2.new(1, -30, 0, 45)
-
-TweenButton.Position =
-    UDim2.new(0, 15, 0, 72)
-
-TweenButton.BackgroundColor3 =
-    Color3.fromRGB(43, 43, 51)
-
+TweenButton.Size = UDim2.new(1, 0, 0, 45)
+TweenButton.Position = UDim2.new(0, 0, 0, 0)
+TweenButton.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
 TweenButton.BorderSizePixel = 0
 TweenButton.Text = "Tween : OFF"
-
-TweenButton.TextColor3 =
-    Color3.fromRGB(255, 255, 255)
-
+TweenButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 TweenButton.TextSize = 15
 TweenButton.Font = Enum.Font.GothamBold
-TweenButton.Parent = Main
+TweenButton.Parent = PitScrapContent
 
 local TweenCorner = Instance.new("UICorner")
 TweenCorner.CornerRadius = UDim.new(0, 9)
 TweenCorner.Parent = TweenButton
 
 TweenButton.MouseButton1Click:Connect(function()
-
     TweenEnabled = not TweenEnabled
-
     if TweenEnabled then
-
         TweenButton.Text = "Tween : ON"
-
         ResetVisited()
         StartTween()
-
     else
-
         TweenButton.Text = "Tween : OFF"
-
         StopTween()
     end
 end)
 
---========================================================--
--- SPEED LABEL
---========================================================--
-
+-- Speed Label
 local SpeedLabel = Instance.new("TextLabel")
-
-SpeedLabel.Size =
-    UDim2.new(1, -30, 0, 25)
-
-SpeedLabel.Position =
-    UDim2.new(0, 15, 0, 130)
-
+SpeedLabel.Size = UDim2.new(1, 0, 0, 25)
+SpeedLabel.Position = UDim2.new(0, 0, 0, 55)
 SpeedLabel.BackgroundTransparency = 1
-
-SpeedLabel.Text =
-    "NEAR : 35  |  FAR : 20"
-
-SpeedLabel.TextColor3 =
-    Color3.fromRGB(230, 230, 230)
-
+SpeedLabel.Text = "NEAR : 35  |  FAR : 20"
+SpeedLabel.TextColor3 = Color3.fromRGB(230, 230, 230)
 SpeedLabel.TextSize = 13
 SpeedLabel.Font = Enum.Font.GothamBold
 SpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
-SpeedLabel.Parent = Main
+SpeedLabel.Parent = PitScrapContent
 
---========================================================--
--- SLIDER
---========================================================--
-
+-- Slider Background
 local SliderBack = Instance.new("Frame")
-
-SliderBack.Size =
-    UDim2.new(1, -30, 0, 8)
-
-SliderBack.Position =
-    UDim2.new(0, 15, 0, 168)
-
-SliderBack.BackgroundColor3 =
-    Color3.fromRGB(55, 55, 63)
-
+SliderBack.Size = UDim2.new(1, 0, 0, 8)
+SliderBack.Position = UDim2.new(0, 0, 0, 88)
+SliderBack.BackgroundColor3 = Color3.fromRGB(55, 55, 63)
 SliderBack.BorderSizePixel = 0
-SliderBack.Parent = Main
+SliderBack.Parent = PitScrapContent
 
 local SliderCorner = Instance.new("UICorner")
 SliderCorner.CornerRadius = UDim.new(1, 0)
 SliderCorner.Parent = SliderBack
 
 local SliderFill = Instance.new("Frame")
-
-SliderFill.Size =
-    UDim2.new(1, 0, 1, 0)
-
-SliderFill.BackgroundColor3 =
-    Color3.fromRGB(255, 255, 255)
-
+SliderFill.Size = UDim2.new(1, 0, 1, 0)
+SliderFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 SliderFill.BorderSizePixel = 0
 SliderFill.Parent = SliderBack
 
@@ -595,19 +726,10 @@ FillCorner.CornerRadius = UDim.new(1, 0)
 FillCorner.Parent = SliderFill
 
 local SliderButton = Instance.new("TextButton")
-
-SliderButton.Size =
-    UDim2.new(0, 20, 0, 20)
-
-SliderButton.AnchorPoint =
-    Vector2.new(0.5, 0.5)
-
-SliderButton.Position =
-    UDim2.new(1, 0, 0.5, 0)
-
-SliderButton.BackgroundColor3 =
-    Color3.fromRGB(255, 255, 255)
-
+SliderButton.Size = UDim2.new(0, 20, 0, 20)
+SliderButton.AnchorPoint = Vector2.new(0.5, 0.5)
+SliderButton.Position = UDim2.new(1, 0, 0.5, 0)
+SliderButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 SliderButton.BorderSizePixel = 0
 SliderButton.Text = ""
 SliderButton.AutoButtonColor = false
@@ -617,61 +739,21 @@ local SliderButtonCorner = Instance.new("UICorner")
 SliderButtonCorner.CornerRadius = UDim.new(1, 0)
 SliderButtonCorner.Parent = SliderButton
 
---========================================================--
--- SLIDER: 20 -> 35
---========================================================--
-
+-- Slider Logic
 local Sliding = false
 
 local function UpdateSlider(X)
-
-    local StartX =
-        SliderBack.AbsolutePosition.X
-
-    local Width =
-        SliderBack.AbsoluteSize.X
-
-    local Percent =
-        math.clamp(
-            (X - StartX) / Width,
-            0,
-            1
-        )
-
-    MaxSpeed =
-        math.floor(
-            20 + ((35 - 20) * Percent)
-        )
-
-    SliderFill.Size =
-        UDim2.new(
-            Percent,
-            0,
-            1,
-            0
-        )
-
-    SliderButton.Position =
-        UDim2.new(
-            Percent,
-            0,
-            0.5,
-            0
-        )
-
-    SpeedLabel.Text =
-        "NEAR : "
-        .. tostring(MaxSpeed)
-        .. "  |  FAR : 20"
+    local StartX = SliderBack.AbsolutePosition.X
+    local Width = SliderBack.AbsoluteSize.X
+    local Percent = math.clamp((X - StartX) / Width, 0, 1)
+    MaxSpeed = math.floor(20 + ((35 - 20) * Percent))
+    SliderFill.Size = UDim2.new(Percent, 0, 1, 0)
+    SliderButton.Position = UDim2.new(Percent, 0, 0.5, 0)
+    SpeedLabel.Text = "NEAR : " .. tostring(MaxSpeed) .. "  |  FAR : 20"
 end
 
 local function BeginSlider(Input)
-
-    if Input.UserInputType ==
-        Enum.UserInputType.MouseButton1
-    or Input.UserInputType ==
-        Enum.UserInputType.Touch then
-
+    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
         Sliding = true
         UpdateSlider(Input.Position.X)
     end
@@ -681,95 +763,53 @@ SliderButton.InputBegan:Connect(BeginSlider)
 SliderBack.InputBegan:Connect(BeginSlider)
 
 UserInputService.InputEnded:Connect(function(Input)
-
-    if Input.UserInputType ==
-        Enum.UserInputType.MouseButton1
-    or Input.UserInputType ==
-        Enum.UserInputType.Touch then
-
+    if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
         Sliding = false
     end
 end)
 
 UserInputService.InputChanged:Connect(function(Input)
-
     if not Sliding then
         return
     end
-
-    if Input.UserInputType ==
-        Enum.UserInputType.MouseMovement
-    or Input.UserInputType ==
-        Enum.UserInputType.Touch then
-
+    if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
         UpdateSlider(Input.Position.X)
     end
 end)
 
---========================================================--
--- INFO
---========================================================--
-
+-- Info
 local Info = Instance.new("TextLabel")
-
-Info.Size =
-    UDim2.new(1, -30, 0, 45)
-
-Info.Position =
-    UDim2.new(0, 15, 0, 190)
-
+Info.Size = UDim2.new(1, 0, 0, 45)
+Info.Position = UDim2.new(0, 0, 0, 108)
 Info.BackgroundTransparency = 1
-
-Info.Text =
-    "PITSCRAP ONLY\n>40 = 20 SPEED   |   <=40 = 35 MAX"
-
-Info.TextColor3 =
-    Color3.fromRGB(145, 145, 155)
-
+Info.Text = "PITSCRAP ONLY\n>40 = 20 SPEED   |   <=40 = 35 MAX"
+Info.TextColor3 = Color3.fromRGB(145, 145, 155)
 Info.TextSize = 10
 Info.Font = Enum.Font.Gotham
 Info.TextXAlignment = Enum.TextXAlignment.Center
-Info.Parent = Main
+Info.Parent = PitScrapContent
 
---========================================================--
--- REFRESH
---========================================================--
-
+-- Refresh Button
 local RefreshButton = Instance.new("TextButton")
-
-RefreshButton.Size =
-    UDim2.new(1, -30, 0, 40)
-
-RefreshButton.Position =
-    UDim2.new(0, 15, 0, 245)
-
-RefreshButton.BackgroundColor3 =
-    Color3.fromRGB(43, 43, 51)
-
+RefreshButton.Size = UDim2.new(1, 0, 0, 40)
+RefreshButton.Position = UDim2.new(0, 0, 0, 165)
+RefreshButton.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
 RefreshButton.BorderSizePixel = 0
-
-RefreshButton.Text =
-    "Refresh PitScrap"
-
-RefreshButton.TextColor3 =
-    Color3.fromRGB(255, 255, 255)
-
+RefreshButton.Text = "Refresh PitScrap"
+RefreshButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 RefreshButton.TextSize = 13
 RefreshButton.Font = Enum.Font.GothamBold
-RefreshButton.Parent = Main
+RefreshButton.Parent = PitScrapContent
 
 local RefreshCorner = Instance.new("UICorner")
 RefreshCorner.CornerRadius = UDim.new(0, 9)
 RefreshCorner.Parent = RefreshButton
 
 RefreshButton.MouseButton1Click:Connect(function()
-
     ResetVisited()
     CancelTween()
-
     if TweenEnabled then
         task.wait(0.05)
-
         if not TweenRunning then
             StartTween()
         end
@@ -777,25 +817,327 @@ RefreshButton.MouseButton1Click:Connect(function()
 end)
 
 --========================================================--
+-- PLAYERS TAB CONTENT
+--========================================================--
+
+-- Player List Scrolling Frame
+local PlayerListFrame = Instance.new("ScrollingFrame")
+PlayerListFrame.Size = UDim2.new(1, 0, 0, 120)
+PlayerListFrame.Position = UDim2.new(0, 0, 0, 0)
+PlayerListFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
+PlayerListFrame.BorderSizePixel = 0
+PlayerListFrame.ScrollBarThickness = 4
+PlayerListFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 110)
+PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlayerListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+PlayerListFrame.Parent = PlayersContent
+
+local ListCorner = Instance.new("UICorner")
+ListCorner.CornerRadius = UDim.new(0, 10)
+ListCorner.Parent = PlayerListFrame
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.Padding = UDim.new(0, 4)
+ListLayout.Parent = PlayerListFrame
+
+local ListPadding = Instance.new("UIPadding")
+ListPadding.PaddingTop = UDim.new(0, 6)
+ListPadding.PaddingBottom = UDim.new(0, 6)
+ListPadding.PaddingLeft = UDim.new(0, 6)
+ListPadding.PaddingRight = UDim.new(0, 6)
+ListPadding.Parent = PlayerListFrame
+
+local PlayerButtons = {}
+
+local function RefreshPlayerList()
+    for _, btn in ipairs(PlayerButtons) do
+        btn:Destroy()
+    end
+    PlayerButtons = {}
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local PlayerBtn = Instance.new("TextButton")
+            PlayerBtn.Size = UDim2.new(1, 0, 0, 30)
+            PlayerBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+            PlayerBtn.BorderSizePixel = 0
+            PlayerBtn.Text = player.DisplayName .. " (@" .. player.Name .. ")"
+            PlayerBtn.TextColor3 = Color3.fromRGB(220, 220, 230)
+            PlayerBtn.TextSize = 11
+            PlayerBtn.Font = Enum.Font.GothamBold
+            PlayerBtn.Parent = PlayerListFrame
+
+            local PBtnCorner = Instance.new("UICorner")
+            PBtnCorner.CornerRadius = UDim.new(0, 8)
+            PBtnCorner.Parent = PlayerBtn
+
+            PlayerBtn.MouseButton1Click:Connect(function()
+                SelectedPlayer = player
+                for _, b in ipairs(PlayerButtons) do
+                    b.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+                end
+                PlayerBtn.BackgroundColor3 = Color3.fromRGB(70, 100, 140)
+                SelectedLabel.Text = "Selected: " .. player.DisplayName
+            end)
+
+            table.insert(PlayerButtons, PlayerBtn)
+        end
+    end
+end
+
+RefreshPlayerList()
+
+Players.PlayerAdded:Connect(function()
+    task.wait(0.5)
+    RefreshPlayerList()
+end)
+
+Players.PlayerRemoving:Connect(function()
+    task.wait(0.5)
+    RefreshPlayerList()
+end)
+
+-- Selected Label
+local SelectedLabel = Instance.new("TextLabel")
+SelectedLabel.Size = UDim2.new(1, 0, 0, 20)
+SelectedLabel.Position = UDim2.new(0, 0, 0, 128)
+SelectedLabel.BackgroundTransparency = 1
+SelectedLabel.Text = "Selected: None"
+SelectedLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+SelectedLabel.TextSize = 11
+SelectedLabel.Font = Enum.Font.GothamBold
+SelectedLabel.TextXAlignment = Enum.TextXAlignment.Left
+SelectedLabel.Parent = PlayersContent
+
+-- Row 1: Tween to Player + Stop Tween
+local TweenPlayerBtn = Instance.new("TextButton")
+TweenPlayerBtn.Size = UDim2.new(0.48, 0, 0, 34)
+TweenPlayerBtn.Position = UDim2.new(0, 0, 0, 154)
+TweenPlayerBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+TweenPlayerBtn.BorderSizePixel = 0
+TweenPlayerBtn.Text = "Tween to Player"
+TweenPlayerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+TweenPlayerBtn.TextSize = 11
+TweenPlayerBtn.Font = Enum.Font.GothamBold
+TweenPlayerBtn.Parent = PlayersContent
+
+local TweenPCorner = Instance.new("UICorner")
+TweenPCorner.CornerRadius = UDim.new(0, 9)
+TweenPCorner.Parent = TweenPlayerBtn
+
+TweenPlayerBtn.MouseButton1Click:Connect(function()
+    if not SelectedPlayer then
+        SelectedLabel.Text = "Selected: None - Select a player!"
+        return
+    end
+    PlayerTweenEnabled = true
+    task.spawn(function()
+        while PlayerTweenEnabled do
+            if not SelectedPlayer or not SelectedPlayer.Parent then
+                PlayerTweenEnabled = false
+                break
+            end
+            local success = TweenToPlayer(SelectedPlayer)
+            if not PlayerTweenEnabled then
+                break
+            end
+            if success then
+                task.wait(0.1)
+            else
+                task.wait(0.5)
+            end
+        end
+        CancelPlayerTween()
+    end)
+end)
+
+local StopTweenPlayerBtn = Instance.new("TextButton")
+StopTweenPlayerBtn.Size = UDim2.new(0.48, 0, 0, 34)
+StopTweenPlayerBtn.Position = UDim2.new(0.52, 0, 0, 154)
+StopTweenPlayerBtn.BackgroundColor3 = Color3.fromRGB(80, 50, 50)
+StopTweenPlayerBtn.BorderSizePixel = 0
+StopTweenPlayerBtn.Text = "Stop Tween"
+StopTweenPlayerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+StopTweenPlayerBtn.TextSize = 11
+StopTweenPlayerBtn.Font = Enum.Font.GothamBold
+StopTweenPlayerBtn.Parent = PlayersContent
+
+local StopTPCorner = Instance.new("UICorner")
+StopTPCorner.CornerRadius = UDim.new(0, 9)
+StopTPCorner.Parent = StopTweenPlayerBtn
+
+StopTweenPlayerBtn.MouseButton1Click:Connect(function()
+    PlayerTweenEnabled = false
+    CancelPlayerTween()
+end)
+
+-- Row 2: Follow + Fling
+local FollowBtn = Instance.new("TextButton")
+FollowBtn.Size = UDim2.new(0.48, 0, 0, 34)
+FollowBtn.Position = UDim2.new(0, 0, 0, 194)
+FollowBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+FollowBtn.BorderSizePixel = 0
+FollowBtn.Text = "Follow: OFF"
+FollowBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FollowBtn.TextSize = 11
+FollowBtn.Font = Enum.Font.GothamBold
+FollowBtn.Parent = PlayersContent
+
+local FollowCorner = Instance.new("UICorner")
+FollowCorner.CornerRadius = UDim.new(0, 9)
+FollowCorner.Parent = FollowBtn
+
+FollowBtn.MouseButton1Click:Connect(function()
+    if not SelectedPlayer then
+        SelectedLabel.Text = "Selected: None - Select a player!"
+        return
+    end
+    FollowEnabled = not FollowEnabled
+    if FollowEnabled then
+        FollowBtn.Text = "Follow: ON"
+        FollowBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 70)
+        StartFollow()
+    else
+        FollowBtn.Text = "Follow: OFF"
+        FollowBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+        StopFollow()
+    end
+end)
+
+-- FLING BUTTON - TOGGLE
+local FlingBtn = Instance.new("TextButton")
+FlingBtn.Size = UDim2.new(0.48, 0, 0, 34)
+FlingBtn.Position = UDim2.new(0.52, 0, 0, 194)
+FlingBtn.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
+FlingBtn.BorderSizePixel = 0
+FlingBtn.Text = "Fling: OFF"
+FlingBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FlingBtn.TextSize = 11
+FlingBtn.Font = Enum.Font.GothamBold
+FlingBtn.Parent = PlayersContent
+
+local FlingCorner = Instance.new("UICorner")
+FlingCorner.CornerRadius = UDim.new(0, 9)
+FlingCorner.Parent = FlingBtn
+
+FlingBtn.MouseButton1Click:Connect(function()
+    if not SelectedPlayer then
+        SelectedLabel.Text = "Selected: None - Select a player!"
+        return
+    end
+    FlingEnabled = not FlingEnabled
+    if FlingEnabled then
+        FlingBtn.Text = "Fling: ON"
+        FlingBtn.BackgroundColor3 = Color3.fromRGB(180, 30, 30)
+        StartFling()
+    else
+        FlingBtn.Text = "Fling: OFF"
+        FlingBtn.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
+        StopFling()
+    end
+end)
+
+-- Row 3: Refresh List
+local RefreshPlayersBtn = Instance.new("TextButton")
+RefreshPlayersBtn.Size = UDim2.new(1, 0, 0, 34)
+RefreshPlayersBtn.Position = UDim2.new(0, 0, 0, 234)
+RefreshPlayersBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+RefreshPlayersBtn.BorderSizePixel = 0
+RefreshPlayersBtn.Text = "Refresh List"
+RefreshPlayersBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+RefreshPlayersBtn.TextSize = 11
+RefreshPlayersBtn.Font = Enum.Font.GothamBold
+RefreshPlayersBtn.Parent = PlayersContent
+
+local RefreshPCorner = Instance.new("UICorner")
+RefreshPCorner.CornerRadius = UDim.new(0, 9)
+RefreshPCorner.Parent = RefreshPlayersBtn
+
+RefreshPlayersBtn.MouseButton1Click:Connect(function()
+    RefreshPlayerList()
+end)
+
+--========================================================--
+-- SERVER TAB CONTENT
+--========================================================--
+
+local ServerLabel = Instance.new("TextLabel")
+ServerLabel.Size = UDim2.new(1, 0, 0, 50)
+ServerLabel.Position = UDim2.new(0, 0, 0, 10)
+ServerLabel.BackgroundTransparency = 1
+ServerLabel.Text = "SERVER HOP\nFind a server with low players"
+ServerLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
+ServerLabel.TextSize = 13
+ServerLabel.Font = Enum.Font.GothamBold
+ServerLabel.TextXAlignment = Enum.TextXAlignment.Center
+ServerLabel.Parent = ServerContent
+
+local HopButton = Instance.new("TextButton")
+HopButton.Size = UDim2.new(1, 0, 0, 50)
+HopButton.Position = UDim2.new(0, 0, 0, 75)
+HopButton.BackgroundColor3 = Color3.fromRGB(50, 80, 130)
+HopButton.BorderSizePixel = 0
+HopButton.Text = "Hop to Low Players Server"
+HopButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+HopButton.TextSize = 14
+HopButton.Font = Enum.Font.GothamBold
+HopButton.Parent = ServerContent
+
+local HopCorner = Instance.new("UICorner")
+HopCorner.CornerRadius = UDim.new(0, 12)
+HopCorner.Parent = HopButton
+
+HopButton.MouseButton1Click:Connect(function()
+    HopButton.Text = "Searching..."
+    HopButton.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
+    task.spawn(function()
+        HopLowPlayersServer()
+        task.wait(3)
+        HopButton.Text = "Hop to Low Players Server"
+        HopButton.BackgroundColor3 = Color3.fromRGB(50, 80, 130)
+    end)
+end)
+
+local ServerInfo = Instance.new("TextLabel")
+ServerInfo.Size = UDim2.new(1, 0, 0, 60)
+ServerInfo.Position = UDim2.new(0, 0, 0, 140)
+ServerInfo.BackgroundTransparency = 1
+ServerInfo.Text = "This will teleport you to a server\nwith 0 or 1 players.\nIf none found, it picks the lowest."
+ServerInfo.TextColor3 = Color3.fromRGB(145, 145, 155)
+ServerInfo.TextSize = 11
+ServerInfo.Font = Enum.Font.Gotham
+ServerInfo.TextXAlignment = Enum.TextXAlignment.Center
+ServerInfo.Parent = ServerContent
+
+local CurrentServerLabel = Instance.new("TextLabel")
+CurrentServerLabel.Size = UDim2.new(1, 0, 0, 30)
+CurrentServerLabel.Position = UDim2.new(0, 0, 0, 210)
+CurrentServerLabel.BackgroundTransparency = 1
+CurrentServerLabel.Text = "Current Players: " .. tostring(#Players:GetPlayers())
+CurrentServerLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+CurrentServerLabel.TextSize = 12
+CurrentServerLabel.Font = Enum.Font.GothamBold
+CurrentServerLabel.TextXAlignment = Enum.TextXAlignment.Center
+CurrentServerLabel.Parent = ServerContent
+
+Players.PlayerAdded:Connect(function()
+    CurrentServerLabel.Text = "Current Players: " .. tostring(#Players:GetPlayers())
+end)
+
+Players.PlayerRemoving:Connect(function()
+    CurrentServerLabel.Text = "Current Players: " .. tostring(#Players:GetPlayers())
+end)
+
+--========================================================--
 -- HIDE
 --========================================================--
 
 local HideButton = Instance.new("TextButton")
-
-HideButton.Size =
-    UDim2.new(0, 35, 0, 35)
-
-HideButton.Position =
-    UDim2.new(1, -43, 0, 8)
-
-HideButton.BackgroundColor3 =
-    Color3.fromRGB(45, 45, 52)
-
+HideButton.Size = UDim2.new(0, 35, 0, 35)
+HideButton.Position = UDim2.new(1, -48, 0, 8)
+HideButton.BackgroundColor3 = Color3.fromRGB(45, 45, 52)
 HideButton.Text = "×"
-
-HideButton.TextColor3 =
-    Color3.fromRGB(255, 255, 255)
-
+HideButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 HideButton.TextSize = 20
 HideButton.Font = Enum.Font.GothamBold
 HideButton.Parent = Main
@@ -809,24 +1151,13 @@ HideCorner.Parent = HideButton
 --========================================================--
 
 local OpenButton = Instance.new("TextButton")
-
-OpenButton.Size =
-    UDim2.new(0, 55, 0, 55)
-
-OpenButton.Position =
-    UDim2.new(0, 20, 0.5, -27)
-
-OpenButton.BackgroundColor3 =
-    Color3.fromRGB(25, 25, 30)
-
+OpenButton.Size = UDim2.new(0, 55, 0, 55)
+OpenButton.Position = UDim2.new(0, 20, 0.5, -27)
+OpenButton.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 OpenButton.Text = "N"
-
-OpenButton.TextColor3 =
-    Color3.fromRGB(255, 255, 255)
-
+OpenButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 OpenButton.TextSize = 21
 OpenButton.Font = Enum.Font.GothamBold
-
 OpenButton.Visible = false
 OpenButton.Parent = ScreenGui
 
@@ -849,14 +1180,10 @@ end)
 --========================================================--
 
 LocalPlayer.CharacterAdded:Connect(function()
-
     task.wait(1)
-
-    if TweenEnabled
-    and not TweenRunning then
-
+    if TweenEnabled and not TweenRunning then
         StartTween()
     end
 end)
 
-print("NAZK HUB - PITSCRAP MAX SPEED 35 LOADED")
+print("NAZK HUB - PITSCRAP + PLAYERS + SERVER HOP + FLING LOADED")
