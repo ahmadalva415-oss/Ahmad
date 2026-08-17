@@ -11,8 +11,11 @@ local scripts = {
     ["109509029034984"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/+1%20Aura%20per%20click",
     ["89625393697373"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Arabian%20keyboard",
 
-    --// Steal an egg
-    ["107778070777162"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Steal%20an%20egg"
+    --// Steal an Egg
+    ["107778070777162"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Steal%20an%20egg",
+
+    --// Grow a Chicken Fighter
+    ["94640181989498"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Grow%20a%20Chicken%20Fighter"
 }
 
 local url = scripts[placeId]
