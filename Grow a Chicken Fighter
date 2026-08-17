@@ -1,7 +1,7 @@
 --========================================================--
--- NAZK HUB
--- PITSCRAP + PLAYERS + SERVER HOP + FLING + MISC + AUTO EGG
--- Smooth Tween + Fling Toggle + Misc Tools + Egg Collector
+-- NAZK HUB --
+-- PITSCRAP + PLAYERS + SERVER HOP + FLING + MISC + AUTO --
+-- Smooth Tween + Fling Toggle + Misc Tools + Auto Features --
 --========================================================--
 
 local Players = game:GetService("Players")
@@ -13,6 +13,7 @@ local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -46,11 +47,18 @@ local AntiLagEnabled = false
 local DefaultGravity = Workspace.Gravity
 local CurrentGravity = DefaultGravity
 
-local EggEnabled = false
-local EggRunning = false
-local EggTween = nil
-local CurrentEgg = nil
-local EggCooldown = {}
+-- AUTO SETTINGS
+local AutoIncubatorEnabled = false
+local AutoIncubatorConnection = nil
+
+local AutoRebirthEnabled = false
+local AutoRebirthConnection = nil
+
+local AutoTowerEnabled = false
+local AutoTowerConnection = nil
+
+local AutoRecyclerEnabled = false
+local AutoRecyclerConnection = nil
 
 --========================================================--
 -- CHARACTER
@@ -130,13 +138,6 @@ local function CancelPlayerTween()
     if PlayerCurrentTween then
         pcall(function() PlayerCurrentTween:Cancel() end)
         PlayerCurrentTween = nil
-    end
-end
-
-local function CancelEggTween()
-    if EggTween then
-        pcall(function() EggTween:Cancel() end)
-        EggTween = nil
     end
 end
 
@@ -268,138 +269,6 @@ local function StopFling()
 end
 
 --========================================================--
--- EGG SYSTEM
---========================================================--
-
-local function GetEggs()
-    local Eggs = {}
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj.Name == "NestEgg" or obj.Name == "Egg" or obj.Name == "nestEgg" or obj.Name == "egg" then
-            local eggPart = GetTargetPart(obj)
-            if eggPart and eggPart.Parent and not EggCooldown[eggPart] then
-                table.insert(Eggs, eggPart)
-            end
-        end
-        if obj:IsA("BasePart") and (obj.Name == "Egg" or obj.Name == "egg") then
-            if not EggCooldown[obj] then
-                table.insert(Eggs, obj)
-            end
-        end
-    end
-    local NestEggsFolder = Workspace:FindFirstChild("NestEggs")
-    if NestEggsFolder then
-        for _, nest in ipairs(NestEggsFolder:GetDescendants()) do
-            if nest:IsA("BasePart") and (nest.Name == "Egg" or nest.Name == "egg" or nest.Name == "NestEgg") then
-                if not EggCooldown[nest] then
-                    table.insert(Eggs, nest)
-                end
-            end
-        end
-    end
-    return Eggs
-end
-
-local function GetNearestEgg()
-    local Root = GetRoot()
-    if not Root then return nil end
-    local Nearest = nil
-    local ShortestDistance = math.huge
-    for _, egg in ipairs(GetEggs()) do
-        if egg and egg.Parent then
-            local Distance = (Root.Position - egg.Position).Magnitude
-            if Distance < ShortestDistance then
-                ShortestDistance = Distance
-                Nearest = egg
-            end
-        end
-    end
-    return Nearest
-end
-
-local function TweenToEgg(Egg)
-    local Root = GetRoot()
-    if not Root or not Egg then return false end
-    if not Egg.Parent then return false end
-    local TargetPosition = Egg.Position + Vector3.new(0, 2, 0)
-    local Distance = (Root.Position - TargetPosition).Magnitude
-    if Distance <= 3 then return true end
-    local Duration = math.max(Distance / 45, 0.1)
-    CancelEggTween()
-    EggTween = TweenService:Create(Root, TweenInfo.new(Duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { CFrame = CFrame.new(TargetPosition) })
-    EggTween:Play()
-    local Finished = false
-    local Connection = EggTween.Completed:Connect(function() Finished = true end)
-    while EggEnabled and EggTween and not Finished do
-        task.wait(0.02)
-    end
-    if Connection then Connection:Disconnect() end
-    if not EggEnabled then CancelEggTween() return false end
-    EggTween = nil
-    return true
-end
-
-local function CollectEgg()
-    if EggRunning then return end
-    EggRunning = true
-    task.spawn(function()
-        while EggEnabled do
-            local Root = GetRoot()
-            if not Root then
-                task.wait(0.2)
-                continue
-            end
-            local Egg = GetNearestEgg()
-            if not Egg then
-                task.wait(0.5)
-                continue
-            end
-            CurrentEgg = Egg
-            local WasPitScrapRunning = TweenRunning
-            if WasPitScrapRunning then
-                CancelTween()
-            end
-            local Success = TweenToEgg(Egg)
-            if Success then
-                -- Wait until egg is collected (disappears) or timeout
-                local WaitTime = 0
-                while Egg and Egg.Parent and WaitTime < 5 do
-                    -- Keep touching the egg
-                    pcall(function()
-                        if Egg and Egg.Parent then
-                            firetouchinterest(Root, Egg, 0)
-                            task.wait(0.05)
-                            firetouchinterest(Root, Egg, 1)
-                        end
-                    end)
-                    task.wait(0.2)
-                    WaitTime = WaitTime + 0.2
-                end
-                -- Add cooldown even if egg still exists
-                EggCooldown[Egg] = true
-                task.delay(8, function()
-                    EggCooldown[Egg] = nil
-                end)
-                task.wait(0.5)
-            end
-            CurrentEgg = nil
-            if WasPitScrapRunning and TweenEnabled and not TweenRunning then
-                StartTween()
-            end
-            task.wait(0.3)
-        end
-        CancelEggTween()
-        CurrentEgg = nil
-        EggRunning = false
-    end)
-end
-
-local function StopEgg()
-    EggEnabled = false
-    CancelEggTween()
-    CurrentEgg = nil
-end
-
---========================================================--
 -- MAIN PITSCRAP LOOP
 --========================================================--
 
@@ -408,10 +277,6 @@ local function StartTween()
     TweenRunning = true
     task.spawn(function()
         while TweenEnabled do
-            if EggRunning and CurrentEgg then
-                task.wait(0.2)
-                continue
-            end
             local Root = GetRoot()
             if not Root then
                 task.wait(0.2)
@@ -611,6 +476,75 @@ local function SetGravity(value)
 end
 
 --========================================================--
+-- AUTO FUNCTIONS
+--========================================================--
+
+local function StartAutoIncubator()
+    if AutoIncubatorConnection then AutoIncubatorConnection:Disconnect() end
+    AutoIncubatorEnabled = true
+    AutoIncubatorConnection = RunService.Heartbeat:Connect(function()
+        if not AutoIncubatorEnabled then return end
+        pcall(function()
+            ReplicatedStorage.Remotes.IncubatorClaim:InvokeServer()
+        end)
+    end)
+end
+
+local function StopAutoIncubator()
+    AutoIncubatorEnabled = false
+    if AutoIncubatorConnection then AutoIncubatorConnection:Disconnect() AutoIncubatorConnection = nil end
+end
+
+local function StartAutoRebirth()
+    if AutoRebirthConnection then AutoRebirthConnection:Disconnect() end
+    AutoRebirthEnabled = true
+    AutoRebirthConnection = RunService.Heartbeat:Connect(function()
+        if not AutoRebirthEnabled then return end
+        pcall(function()
+            ReplicatedStorage.Remotes.Rebirth:InvokeServer()
+        end)
+    end)
+end
+
+local function StopAutoRebirth()
+    AutoRebirthEnabled = false
+    if AutoRebirthConnection then AutoRebirthConnection:Disconnect() AutoRebirthConnection = nil end
+end
+
+local function StartAutoTower()
+    if AutoTowerConnection then AutoTowerConnection:Disconnect() end
+    AutoTowerEnabled = true
+    AutoTowerConnection = RunService.Heartbeat:Connect(function()
+        if not AutoTowerEnabled then return end
+        pcall(function()
+            ReplicatedStorage.Remotes.TowerStart:InvokeServer()
+        end)
+    end)
+end
+
+local function StopAutoTower()
+    AutoTowerEnabled = false
+    if AutoTowerConnection then AutoTowerConnection:Disconnect() AutoTowerConnection = nil end
+end
+
+local function StartAutoRecycler()
+    if AutoRecyclerConnection then AutoRecyclerConnection:Disconnect() end
+    AutoRecyclerEnabled = true
+    AutoRecyclerConnection = RunService.Heartbeat:Connect(function()
+        if not AutoRecyclerEnabled then return end
+        pcall(function()
+            -- !! استبدل هذا بـ Remote الصحيح للـ Recycler Upgrade !!
+            ReplicatedStorage.Remotes.UpgradeRecycler:InvokeServer()
+        end)
+    end)
+end
+
+local function StopAutoRecycler()
+    AutoRecyclerEnabled = false
+    if AutoRecyclerConnection then AutoRecyclerConnection:Disconnect() AutoRecyclerConnection = nil end
+end
+
+--========================================================--
 -- REMOVE OLD GUI
 --========================================================--
 
@@ -655,7 +589,7 @@ local Subtitle = Instance.new("TextLabel")
 Subtitle.Size = UDim2.new(1, -30, 0, 20)
 Subtitle.Position = UDim2.new(0, 15, 0, 40)
 Subtitle.BackgroundTransparency = 1
-Subtitle.Text = "PITSCRAP • PLAYERS • SERVER • MISC • EGG"
+Subtitle.Text = "PITSCRAP • PLAYERS • SERVER • MISC • AUTO"
 Subtitle.TextColor3 = Color3.fromRGB(145, 145, 155)
 Subtitle.TextSize = 10
 Subtitle.Font = Enum.Font.Gotham
@@ -707,7 +641,7 @@ local CurrentTab = "PitScrap"
 
 local function CreateTab(name)
     local TabBtn = Instance.new("TextButton")
-    TabBtn.Size = UDim2.new(0, 60, 1, 0)
+    TabBtn.Size = UDim2.new(0, 58, 1, 0)
     TabBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
     TabBtn.BorderSizePixel = 0
     TabBtn.Text = name
@@ -726,7 +660,7 @@ local PitScrapTab = CreateTab("PitScrap")
 local PlayersTab = CreateTab("Players")
 local ServerTab = CreateTab("Server")
 local MiscTab = CreateTab("Misc")
-local EggTab = CreateTab("Egg")
+local AutoTab = CreateTab("Auto")
 
 -- TAB CONTENT
 local ContentContainer = Instance.new("Frame")
@@ -759,17 +693,17 @@ MiscContent.BackgroundTransparency = 1
 MiscContent.Visible = false
 MiscContent.Parent = ContentContainer
 
-local EggContent = Instance.new("Frame")
-EggContent.Size = UDim2.new(1, 0, 1, 0)
-EggContent.BackgroundTransparency = 1
-EggContent.Visible = false
-EggContent.Parent = ContentContainer
+local AutoContent = Instance.new("Frame")
+AutoContent.Size = UDim2.new(1, 0, 1, 0)
+AutoContent.BackgroundTransparency = 1
+AutoContent.Visible = false
+AutoContent.Parent = ContentContainer
 
 Tabs["PitScrap"] = PitScrapContent
 Tabs["Players"] = PlayersContent
 Tabs["Server"] = ServerContent
 Tabs["Misc"] = MiscContent
-Tabs["Egg"] = EggContent
+Tabs["Auto"] = AutoContent
 
 local function SwitchTab(tabName)
     CurrentTab = tabName
@@ -791,7 +725,7 @@ PitScrapTab.MouseButton1Click:Connect(function() SwitchTab("PitScrap") end)
 PlayersTab.MouseButton1Click:Connect(function() SwitchTab("Players") end)
 ServerTab.MouseButton1Click:Connect(function() SwitchTab("Server") end)
 MiscTab.MouseButton1Click:Connect(function() SwitchTab("Misc") end)
-EggTab.MouseButton1Click:Connect(function() SwitchTab("Egg") end)
+AutoTab.MouseButton1Click:Connect(function() SwitchTab("Auto") end)
 
 SwitchTab("PitScrap")
 
@@ -1440,93 +1374,142 @@ MiscInfo.TextXAlignment = Enum.TextXAlignment.Center
 MiscInfo.Parent = MiscContent
 
 --========================================================--
--- EGG TAB CONTENT
+-- AUTO TAB CONTENT
 --========================================================--
 
-local EggTitle = Instance.new("TextLabel")
-EggTitle.Size = UDim2.new(1, 0, 0, 30)
-EggTitle.Position = UDim2.new(0, 0, 0, 0)
-EggTitle.BackgroundTransparency = 1
-EggTitle.Text = "🥚 AUTO EGG COLLECTOR"
-EggTitle.TextColor3 = Color3.fromRGB(255, 220, 100)
-EggTitle.TextSize = 15
-EggTitle.Font = Enum.Font.GothamBold
-EggTitle.TextXAlignment = Enum.TextXAlignment.Center
-EggTitle.Parent = EggContent
+local AutoTitle = Instance.new("TextLabel")
+AutoTitle.Size = UDim2.new(1, 0, 0, 28)
+AutoTitle.Position = UDim2.new(0, 0, 0, 0)
+AutoTitle.BackgroundTransparency = 1
+AutoTitle.Text = "AUTO FEATURES"
+AutoTitle.TextColor3 = Color3.fromRGB(255, 220, 100)
+AutoTitle.TextSize = 15
+AutoTitle.Font = Enum.Font.GothamBold
+AutoTitle.TextXAlignment = Enum.TextXAlignment.Center
+AutoTitle.Parent = AutoContent
 
-local EggDesc = Instance.new("TextLabel")
-EggDesc.Size = UDim2.new(1, 0, 0, 40)
-EggDesc.Position = UDim2.new(0, 0, 0, 32)
-EggDesc.BackgroundTransparency = 1
-EggDesc.Text = "Automatically detects and collects\neggs that spawn in the map"
-EggDesc.TextColor3 = Color3.fromRGB(180, 180, 190)
-EggDesc.TextSize = 10
-EggDesc.Font = Enum.Font.Gotham
-EggDesc.TextXAlignment = Enum.TextXAlignment.Center
-EggDesc.Parent = EggContent
+local AutoIncubatorBtn = Instance.new("TextButton")
+AutoIncubatorBtn.Size = UDim2.new(1, 0, 0, 38)
+AutoIncubatorBtn.Position = UDim2.new(0, 0, 0, 34)
+AutoIncubatorBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+AutoIncubatorBtn.BorderSizePixel = 0
+AutoIncubatorBtn.Text = "Claim Incubator: OFF"
+AutoIncubatorBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoIncubatorBtn.TextSize = 12
+AutoIncubatorBtn.Font = Enum.Font.GothamBold
+AutoIncubatorBtn.Parent = AutoContent
 
-local EggToggleBtn = Instance.new("TextButton")
-EggToggleBtn.Size = UDim2.new(1, 0, 0, 50)
-EggToggleBtn.Position = UDim2.new(0, 0, 0, 82)
-EggToggleBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
-EggToggleBtn.BorderSizePixel = 0
-EggToggleBtn.Text = "Auto Egg: OFF"
-EggToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-EggToggleBtn.TextSize = 16
-EggToggleBtn.Font = Enum.Font.GothamBold
-EggToggleBtn.Parent = EggContent
+local AutoIncubatorCorner = Instance.new("UICorner")
+AutoIncubatorCorner.CornerRadius = UDim.new(0, 9)
+AutoIncubatorCorner.Parent = AutoIncubatorBtn
 
-local EggToggleCorner = Instance.new("UICorner")
-EggToggleCorner.CornerRadius = UDim.new(0, 12)
-EggToggleCorner.Parent = EggToggleBtn
-
-EggToggleBtn.MouseButton1Click:Connect(function()
-    EggEnabled = not EggEnabled
-    if EggEnabled then
-        EggToggleBtn.Text = "Auto Egg: ON"
-        EggToggleBtn.BackgroundColor3 = Color3.fromRGB(100, 80, 40)
-        CollectEgg()
+AutoIncubatorBtn.MouseButton1Click:Connect(function()
+    AutoIncubatorEnabled = not AutoIncubatorEnabled
+    if AutoIncubatorEnabled then
+        AutoIncubatorBtn.Text = "Claim Incubator: ON"
+        AutoIncubatorBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 70)
+        StartAutoIncubator()
     else
-        EggToggleBtn.Text = "Auto Egg: OFF"
-        EggToggleBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
-        StopEgg()
+        AutoIncubatorBtn.Text = "Claim Incubator: OFF"
+        AutoIncubatorBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+        StopAutoIncubator()
     end
 end)
 
-local EggInfo = Instance.new("TextLabel")
-EggInfo.Size = UDim2.new(1, 0, 0, 60)
-EggInfo.Position = UDim2.new(0, 0, 0, 145)
-EggInfo.BackgroundTransparency = 1
-EggInfo.Text = "How it works:\n1. Monitors workspace for eggs\n2. Pauses PitScrap when egg found\n3. Tweets to egg & collects it\n4. Resumes PitScrap after collection"
-EggInfo.TextColor3 = Color3.fromRGB(145, 145, 155)
-EggInfo.TextSize = 10
-EggInfo.Font = Enum.Font.Gotham
-EggInfo.TextXAlignment = Enum.TextXAlignment.Center
-EggInfo.Parent = EggContent
+local AutoRebirthBtn = Instance.new("TextButton")
+AutoRebirthBtn.Size = UDim2.new(1, 0, 0, 38)
+AutoRebirthBtn.Position = UDim2.new(0, 0, 0, 78)
+AutoRebirthBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+AutoRebirthBtn.BorderSizePixel = 0
+AutoRebirthBtn.Text = "Auto Rebirth: OFF"
+AutoRebirthBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoRebirthBtn.TextSize = 12
+AutoRebirthBtn.Font = Enum.Font.GothamBold
+AutoRebirthBtn.Parent = AutoContent
 
-local EggStatusLabel = Instance.new("TextLabel")
-EggStatusLabel.Size = UDim2.new(1, 0, 0, 22)
-EggStatusLabel.Position = UDim2.new(0, 0, 0, 215)
-EggStatusLabel.BackgroundTransparency = 1
-EggStatusLabel.Text = "Status: Waiting for eggs..."
-EggStatusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
-EggStatusLabel.TextSize = 11
-EggStatusLabel.Font = Enum.Font.GothamBold
-EggStatusLabel.TextXAlignment = Enum.TextXAlignment.Center
-EggStatusLabel.Parent = EggContent
+local AutoRebirthCorner = Instance.new("UICorner")
+AutoRebirthCorner.CornerRadius = UDim.new(0, 9)
+AutoRebirthCorner.Parent = AutoRebirthBtn
 
--- Update egg status
-RunService.Heartbeat:Connect(function()
-    if not EggEnabled then
-        EggStatusLabel.Text = "Status: Waiting for eggs..."
-        return
-    end
-    if CurrentEgg then
-        EggStatusLabel.Text = "Status: Collecting egg..."
+AutoRebirthBtn.MouseButton1Click:Connect(function()
+    AutoRebirthEnabled = not AutoRebirthEnabled
+    if AutoRebirthEnabled then
+        AutoRebirthBtn.Text = "Auto Rebirth: ON"
+        AutoRebirthBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 70)
+        StartAutoRebirth()
     else
-        EggStatusLabel.Text = "Status: Scanning for eggs..."
+        AutoRebirthBtn.Text = "Auto Rebirth: OFF"
+        AutoRebirthBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+        StopAutoRebirth()
     end
 end)
+
+local AutoTowerBtn = Instance.new("TextButton")
+AutoTowerBtn.Size = UDim2.new(1, 0, 0, 38)
+AutoTowerBtn.Position = UDim2.new(0, 0, 0, 122)
+AutoTowerBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+AutoTowerBtn.BorderSizePixel = 0
+AutoTowerBtn.Text = "Auto Tower Start: OFF"
+AutoTowerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoTowerBtn.TextSize = 12
+AutoTowerBtn.Font = Enum.Font.GothamBold
+AutoTowerBtn.Parent = AutoContent
+
+local AutoTowerCorner = Instance.new("UICorner")
+AutoTowerCorner.CornerRadius = UDim.new(0, 9)
+AutoTowerCorner.Parent = AutoTowerBtn
+
+AutoTowerBtn.MouseButton1Click:Connect(function()
+    AutoTowerEnabled = not AutoTowerEnabled
+    if AutoTowerEnabled then
+        AutoTowerBtn.Text = "Auto Tower Start: ON"
+        AutoTowerBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 70)
+        StartAutoTower()
+    else
+        AutoTowerBtn.Text = "Auto Tower Start: OFF"
+        AutoTowerBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+        StopAutoTower()
+    end
+end)
+
+local AutoRecyclerBtn = Instance.new("TextButton")
+AutoRecyclerBtn.Size = UDim2.new(1, 0, 0, 38)
+AutoRecyclerBtn.Position = UDim2.new(0, 0, 0, 166)
+AutoRecyclerBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+AutoRecyclerBtn.BorderSizePixel = 0
+AutoRecyclerBtn.Text = "Upgrade Recycler: OFF"
+AutoRecyclerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoRecyclerBtn.TextSize = 12
+AutoRecyclerBtn.Font = Enum.Font.GothamBold
+AutoRecyclerBtn.Parent = AutoContent
+
+local AutoRecyclerCorner = Instance.new("UICorner")
+AutoRecyclerCorner.CornerRadius = UDim.new(0, 9)
+AutoRecyclerCorner.Parent = AutoRecyclerBtn
+
+AutoRecyclerBtn.MouseButton1Click:Connect(function()
+    AutoRecyclerEnabled = not AutoRecyclerEnabled
+    if AutoRecyclerEnabled then
+        AutoRecyclerBtn.Text = "Upgrade Recycler: ON"
+        AutoRecyclerBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 70)
+        StartAutoRecycler()
+    else
+        AutoRecyclerBtn.Text = "Upgrade Recycler: OFF"
+        AutoRecyclerBtn.BackgroundColor3 = Color3.fromRGB(43, 43, 51)
+        StopAutoRecycler()
+    end
+end)
+
+local AutoInfo = Instance.new("TextLabel")
+AutoInfo.Size = UDim2.new(1, 0, 0, 60)
+AutoInfo.Position = UDim2.new(0, 0, 0, 215)
+AutoInfo.BackgroundTransparency = 1
+AutoInfo.Text = "Incubator: Claims egg automatically\nRebirth: Rebirths automatically\nTower: Starts tower automatically\nRecycler: Upgrades recycler automatically"
+AutoInfo.TextColor3 = Color3.fromRGB(145, 145, 155)
+AutoInfo.TextSize = 10
+AutoInfo.Font = Enum.Font.Gotham
+AutoInfo.TextXAlignment = Enum.TextXAlignment.Center
+AutoInfo.Parent = AutoContent
 
 --========================================================--
 -- HIDE / OPEN
@@ -1582,4 +1565,4 @@ LocalPlayer.CharacterAdded:Connect(function()
     end
 end)
 
-print("NAZK HUB - PITSCRAP + PLAYERS + SERVER + FLING + MISC + AUTO EGG LOADED")
+print("NAZK HUB - PITSCRAP + PLAYERS + SERVER + FLING + MISC + AUTO LOADED")
