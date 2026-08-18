@@ -2,6 +2,7 @@
 -- NAZK HUB
 -- PITSCRAP + PLAYERS + SERVER HOP + FLING + MISC + AUTO
 -- PITSCRAP: RESTART TWEEN EVERY 15 STUDS
+-- AUTO: UPGRADE GENERATOR
 --========================================================--
 
 local Players = game:GetService("Players")
@@ -14,6 +15,7 @@ local Debris = game:GetService("Debris")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -66,6 +68,9 @@ local AutoTowerConnection = nil
 
 local AutoRecyclerEnabled = false
 local AutoRecyclerConnection = nil
+
+local AutoUpgradeGeneratorEnabled = false
+local AutoUpgradeGeneratorConnection = nil
 
 --========================================================--
 -- CHARACTER
@@ -147,7 +152,8 @@ local function GetNearestTarget()
             and Target:IsDescendantOf(PitScrap)
             and not Visited[Target] then
 
-            local Distance = (Root.Position - Target.Position).Magnitude
+            local Distance =
+                (Root.Position - Target.Position).Magnitude
 
             if Distance < ShortestDistance then
                 ShortestDistance = Distance
@@ -231,17 +237,13 @@ local function TweenToTarget(Target)
         local Distance =
             (Root.Position - TargetPosition).Magnitude
 
-        -- وصل للهدف
         if Distance <= 2 then
             CancelTween()
             return true
         end
 
-        --================================================--
-        -- كل Tween = 15 STUDS كحد أقصى
-        --================================================--
-
-        local SegmentDistance = math.min(15, Distance)
+        local SegmentDistance =
+            math.min(15, Distance)
 
         local Direction =
             (TargetPosition - Root.Position).Unit
@@ -249,20 +251,14 @@ local function TweenToTarget(Target)
         local NextPosition =
             Root.Position + Direction * SegmentDistance
 
-        local Speed = CalculateSpeed(Distance)
+        local Speed =
+            CalculateSpeed(Distance)
 
         local Duration =
             math.max(SegmentDistance / Speed, 0.12)
 
-        --================================================--
-        -- إلغاء الـTween السابق بالكامل
-        --================================================--
-
+        -- إيقاف التوين السابق نهائياً قبل إنشاء Tween جديد
         CancelTween()
-
-        --================================================--
-        -- إنشاء Tween جديد
-        --================================================--
 
         CurrentTween = TweenService:Create(
             Root,
@@ -278,18 +274,12 @@ local function TweenToTarget(Target)
 
         local Finished = false
 
-        local Connection
+        local Connection =
+            CurrentTween.Completed:Connect(function()
+                Finished = true
+            end)
 
-        Connection = CurrentTween.Completed:Connect(function()
-            Finished = true
-        end)
-
-        -- تشغيل الـTween
         CurrentTween:Play()
-
-        --================================================--
-        -- انتظار انتهاء الـ15 Stud
-        --================================================--
 
         while TweenEnabled
             and CurrentTween
@@ -302,26 +292,18 @@ local function TweenToTarget(Target)
             Connection:Disconnect()
         end
 
-        --================================================--
-        -- إذا المستخدم ضغط OFF
-        --================================================--
-
         if not TweenEnabled then
             CancelTween()
             return false
         end
 
-        --================================================--
-        -- إلغاء الـTween بالكامل ثم إعادة تشغيله
-        --================================================--
-
+        -- وصلنا نهاية الـ15 Stud:
+        -- إلغاء التوين بالكامل ثم تشغيل Tween جديد
         CancelTween()
-
         task.wait(0.03)
     end
 
     CancelTween()
-
     return false
 end
 
@@ -408,7 +390,7 @@ local function TweenToPlayer(TargetPlayer)
 end
 
 --========================================================--
--- FOLLOW PLAYER
+-- FOLLOW
 --========================================================--
 
 local function StartFollow()
@@ -629,10 +611,7 @@ end
 local function StopTween()
 
     TweenEnabled = false
-
-    -- إيقاف الـTween نفسه نهائياً
     CancelTween()
-
     CurrentTarget = nil
 end
 
@@ -664,8 +643,7 @@ local function HopLowPlayersServer()
                 game:HttpGet(URL)
 
             local Data =
-                game:GetService("HttpService")
-                :JSONDecode(Response)
+                HttpService:JSONDecode(Response)
 
             for _, Server in ipairs(Data.data) do
 
@@ -720,8 +698,7 @@ local function HopLowPlayersServer()
                     game:HttpGet(URL)
 
                 local Data =
-                    game:GetService("HttpService")
-                    :JSONDecode(Response)
+                    HttpService:JSONDecode(Response)
 
                 for _, Server in ipairs(Data.data) do
 
@@ -778,6 +755,7 @@ local function StartAntiAFK()
                     game:GetService("VirtualUser")
 
                 VirtualUser:CaptureController()
+
                 VirtualUser:ClickButton2(
                     Vector2.new()
                 )
@@ -1157,6 +1135,49 @@ local function StopAutoRecycler()
 end
 
 --========================================================--
+-- AUTO UPGRADE GENERATOR
+--========================================================--
+
+local function StartAutoUpgradeGenerator()
+
+    if AutoUpgradeGeneratorConnection then
+        AutoUpgradeGeneratorConnection:Disconnect()
+        AutoUpgradeGeneratorConnection = nil
+    end
+
+    AutoUpgradeGeneratorEnabled = true
+
+    AutoUpgradeGeneratorConnection =
+        RunService.Heartbeat:Connect(function()
+
+            if not AutoUpgradeGeneratorEnabled then
+                return
+            end
+
+            pcall(function()
+
+                local Remotes =
+                    ReplicatedStorage:WaitForChild("Remotes")
+
+                Remotes.UpgradeGenerator:InvokeServer(1)
+                Remotes.UpgradeGenerator:InvokeServer(2)
+                Remotes.UpgradeGenerator:InvokeServer(2)
+
+            end)
+        end)
+end
+
+local function StopAutoUpgradeGenerator()
+
+    AutoUpgradeGeneratorEnabled = false
+
+    if AutoUpgradeGeneratorConnection then
+        AutoUpgradeGeneratorConnection:Disconnect()
+        AutoUpgradeGeneratorConnection = nil
+    end
+end
+
+--========================================================--
 -- REMOVE OLD GUI
 --========================================================--
 
@@ -1287,7 +1308,6 @@ TabLayout.Parent = TabContainer
 
 local Tabs = {}
 local TabButtons = {}
-local CurrentTab = "PitScrap"
 
 local function CreateTab(Name)
 
@@ -1360,8 +1380,6 @@ Tabs["Misc"] = MiscContent
 Tabs["Auto"] = AutoContent
 
 local function SwitchTab(TabName)
-
-    CurrentTab = TabName
 
     for Name, Content in pairs(Tabs) do
         Content.Visible = Name == TabName
@@ -1445,6 +1463,7 @@ TweenButton.MouseButton1Click:Connect(function()
     if TweenEnabled then
 
         TweenButton.Text = "Tween : ON"
+
         TweenButton.BackgroundColor3 =
             Color3.fromRGB(50, 100, 70)
 
@@ -1454,6 +1473,7 @@ TweenButton.MouseButton1Click:Connect(function()
     else
 
         TweenButton.Text = "Tween : OFF"
+
         TweenButton.BackgroundColor3 =
             Color3.fromRGB(43, 43, 51)
 
@@ -1720,10 +1740,17 @@ ListLayout.Parent = PlayerListFrame
 
 local ListPadding = Instance.new("UIPadding")
 
-ListPadding.PaddingTop = UDim.new(0, 6)
-ListPadding.PaddingBottom = UDim.new(0, 6)
-ListPadding.PaddingLeft = UDim.new(0, 6)
-ListPadding.PaddingRight = UDim.new(0, 6)
+ListPadding.PaddingTop =
+    UDim.new(0, 6)
+
+ListPadding.PaddingBottom =
+    UDim.new(0, 6)
+
+ListPadding.PaddingLeft =
+    UDim.new(0, 6)
+
+ListPadding.PaddingRight =
+    UDim.new(0, 6)
 
 ListPadding.Parent = PlayerListFrame
 
@@ -1835,8 +1862,7 @@ Players.PlayerRemoving:Connect(function()
     RefreshPlayerList()
 end)
 
-local TweenPlayerBtn =
-    Instance.new("TextButton")
+local TweenPlayerBtn = Instance.new("TextButton")
 
 TweenPlayerBtn.Size =
     UDim2.new(0.48, 0, 0, 34)
@@ -2279,11 +2305,7 @@ end)
 -- MISC TAB
 --========================================================--
 
-local function CreateMiscButton(
-    Text,
-    X,
-    Y
-)
+local function CreateMiscButton(Text, X, Y)
 
     local Button =
         Instance.new("TextButton")
@@ -2299,6 +2321,7 @@ local function CreateMiscButton(
 
     Button.BorderSizePixel = 0
     Button.Text = Text
+
     Button.TextColor3 =
         Color3.fromRGB(255, 255, 255)
 
@@ -2350,11 +2373,13 @@ local AntiLagBtn =
 
 AntiAFKBtn.MouseButton1Click:Connect(function()
 
-    AntiAFKEnabled = not AntiAFKEnabled
+    AntiAFKEnabled =
+        not AntiAFKEnabled
 
     if AntiAFKEnabled then
 
-        AntiAFKBtn.Text = "Anti AFK: ON"
+        AntiAFKBtn.Text =
+            "Anti AFK: ON"
 
         AntiAFKBtn.BackgroundColor3 =
             Color3.fromRGB(50, 100, 70)
@@ -2363,7 +2388,8 @@ AntiAFKBtn.MouseButton1Click:Connect(function()
 
     else
 
-        AntiAFKBtn.Text = "Anti AFK: OFF"
+        AntiAFKBtn.Text =
+            "Anti AFK: OFF"
 
         AntiAFKBtn.BackgroundColor3 =
             Color3.fromRGB(43, 43, 51)
@@ -2374,11 +2400,13 @@ end)
 
 AntiFlingBtn.MouseButton1Click:Connect(function()
 
-    AntiFlingEnabled = not AntiFlingEnabled
+    AntiFlingEnabled =
+        not AntiFlingEnabled
 
     if AntiFlingEnabled then
 
-        AntiFlingBtn.Text = "Anti Fling: ON"
+        AntiFlingBtn.Text =
+            "Anti Fling: ON"
 
         AntiFlingBtn.BackgroundColor3 =
             Color3.fromRGB(50, 100, 70)
@@ -2387,7 +2415,8 @@ AntiFlingBtn.MouseButton1Click:Connect(function()
 
     else
 
-        AntiFlingBtn.Text = "Anti Fling: OFF"
+        AntiFlingBtn.Text =
+            "Anti Fling: OFF"
 
         AntiFlingBtn.BackgroundColor3 =
             Color3.fromRGB(43, 43, 51)
@@ -2398,11 +2427,13 @@ end)
 
 NoClipBtn.MouseButton1Click:Connect(function()
 
-    NoClipEnabled = not NoClipEnabled
+    NoClipEnabled =
+        not NoClipEnabled
 
     if NoClipEnabled then
 
-        NoClipBtn.Text = "No Clip: ON"
+        NoClipBtn.Text =
+            "No Clip: ON"
 
         NoClipBtn.BackgroundColor3 =
             Color3.fromRGB(50, 100, 70)
@@ -2411,7 +2442,8 @@ NoClipBtn.MouseButton1Click:Connect(function()
 
     else
 
-        NoClipBtn.Text = "No Clip: OFF"
+        NoClipBtn.Text =
+            "No Clip: OFF"
 
         NoClipBtn.BackgroundColor3 =
             Color3.fromRGB(43, 43, 51)
@@ -2422,11 +2454,13 @@ end)
 
 AntiLagBtn.MouseButton1Click:Connect(function()
 
-    AntiLagEnabled = not AntiLagEnabled
+    AntiLagEnabled =
+        not AntiLagEnabled
 
     if AntiLagEnabled then
 
-        AntiLagBtn.Text = "Anti Lag: ON"
+        AntiLagBtn.Text =
+            "Anti Lag: ON"
 
         AntiLagBtn.BackgroundColor3 =
             Color3.fromRGB(50, 100, 70)
@@ -2435,7 +2469,8 @@ AntiLagBtn.MouseButton1Click:Connect(function()
 
     else
 
-        AntiLagBtn.Text = "Anti Lag: OFF"
+        AntiLagBtn.Text =
+            "Anti Lag: OFF"
 
         AntiLagBtn.BackgroundColor3 =
             Color3.fromRGB(43, 43, 51)
@@ -2657,6 +2692,7 @@ ResetGravityBtn.BackgroundColor3 =
 
 ResetGravityBtn.BorderSizePixel = 0
 ResetGravityBtn.Text = "Reset Gravity"
+
 ResetGravityBtn.TextColor3 =
     Color3.fromRGB(255, 255, 255)
 
@@ -2737,10 +2773,7 @@ AutoTitle.TextXAlignment =
 AutoTitle.Parent =
     AutoContent
 
-local function CreateAutoButton(
-    Text,
-    Y
-)
+local function CreateAutoButton(Text, Y)
 
     local Button =
         Instance.new("TextButton")
@@ -2800,6 +2833,12 @@ local AutoRecyclerBtn =
     CreateAutoButton(
         "Upgrade Recycler: OFF",
         166
+    )
+
+local AutoUpgradeGeneratorBtn =
+    CreateAutoButton(
+        "Upgrade Generator: OFF",
+        210
     )
 
 AutoIncubatorBtn.MouseButton1Click:Connect(function()
@@ -2910,6 +2949,33 @@ AutoRecyclerBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+AutoUpgradeGeneratorBtn.MouseButton1Click:Connect(function()
+
+    AutoUpgradeGeneratorEnabled =
+        not AutoUpgradeGeneratorEnabled
+
+    if AutoUpgradeGeneratorEnabled then
+
+        AutoUpgradeGeneratorBtn.Text =
+            "Upgrade Generator: ON"
+
+        AutoUpgradeGeneratorBtn.BackgroundColor3 =
+            Color3.fromRGB(50, 100, 70)
+
+        StartAutoUpgradeGenerator()
+
+    else
+
+        AutoUpgradeGeneratorBtn.Text =
+            "Upgrade Generator: OFF"
+
+        AutoUpgradeGeneratorBtn.BackgroundColor3 =
+            Color3.fromRGB(43, 43, 51)
+
+        StopAutoUpgradeGenerator()
+    end
+end)
+
 --========================================================--
 -- HIDE / OPEN
 --========================================================--
@@ -2969,8 +3035,7 @@ OpenButton.Font =
     Enum.Font.GothamBold
 
 OpenButton.Visible = false
-OpenButton.Parent =
-    ScreenGui
+OpenButton.Parent = ScreenGui
 
 local OpenCorner =
     Instance.new("UICorner")
