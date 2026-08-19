@@ -1,849 +1,93 @@
 -- ============================================================
--- NAZK HUB v8.1 Delta Full Edition + Chest System (v7.1 Logic)
--- Tabs: Main, Farm, Stats, Chest, M1, Visual, ServerHop, SeaBeast, Misc, Settings
--- Chest System: Speed 210, No Cooldown, Auto-reset visited list
--- Compatible: Delta, Fluxus, Hydrogen, Codex
+-- NAZK HUB v7.1 – FluentPro Edition (Full Showcase)
+-- جميع الميزات الأصلية مع واجهة FluentPro الحديثة
 -- ============================================================
-local Players = game:GetService('Players')
-local TweenService = game:GetService('TweenService')
-local RunService = game:GetService('RunService')
-local UserInputService = game:GetService('UserInputService')
-local ReplicatedStorage = game:GetService('ReplicatedStorage')
-local HttpService = game:GetService('HttpService')
-local TeleportService = game:GetService('TeleportService')
-local Lighting = game:GetService('Lighting')
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 
-local CONFIG = {
-    Theme = {
-        Background = Color3.fromRGB(15, 15, 20),
-        Secondary = Color3.fromRGB(25, 25, 35),
-        Accent = Color3.fromRGB(255, 50, 80),
-        Accent2 = Color3.fromRGB(80, 50, 255),
-        Text = Color3.fromRGB(255, 255, 255),
-        TextDark = Color3.fromRGB(180, 180, 180),
-        Border = Color3.fromRGB(40, 40, 55)
-    },
+-- تحميل مكتبة FluentPro
+local Fluent = loadstring(game:HttpGet(
+    "https://github.com/StyearX/Fluent-Modded/releases/download/Fluent/FluentPro"
+))()
+
+-- ============================================================
+-- الإعدادات العامة (CONFIG)
+-- ============================================================
+local Config = {
+    -- داش
     DashPower = 300,
-    DashDuration = 0.1,
-    DashCooldown = 0.8
-}
+    DashDuration = 0.10,
+    DashCooldown = 0.80,
 
-local HazeConfig = {
-    TweenSpeed = 200,
-    AutoFarm = false,
-    AutoUse = false,
-    SelectedItem = nil,
-    TargetRange = 130,
-    TargetHeight = 5,
-    ArrivalDistance = 40,
-    AutoCombat = false,
-    AutoDefense = false,
-    AutoSword = false,
-    AutoFruit = false,
-}
+    -- ESP
+    ESPStyle = "v1",
+    ESPSize = 1.0,
+    ShowName = true,
+    ShowHealth = true,
+    ShowItems = true,
+    ShowDistance = true,
+    ESPEnabled = false,
 
--- ============================================================
--- CHEST CONFIG (v7.1 Logic)
--- ============================================================
-local ChestConfig = {
-    FarmSpeed = 210,
-    AutoChest = false,
-    visitedChests = {},
-    farmedCount = 0,
-    currentConnection = nil
-}
+    -- متنوع
+    NoClip = false,
+    AntiAFK = true,
+    WaterBarrier = false,
 
-local M1Config = {
-    AutoClick = false,
-    ClickDelay = 0.1
-}
+    -- زراعة الصناديق
+    FarmSpeed = 325,
+    ChestFarm = false,
+    FarmedCount = 0,
 
-local SB_Config = {
-    Enabled = false,
+    -- وحش البحر
+    SeaBeastEnabled = false,
+    SeaSpeed = 225,
     AutoAttack = true,
-    AutoEquip = true,
-    FarmSpeed = 225,
-    AttackDistance = 40,
-    BeastNames = {'Sea Beast1', 'Sea Beast', 'Sea_Beast', 'SeaBeast'}
-}
 
-local SH_Config = {
+    -- السيرفر
     MaxPlayers = 1,
-    RetryDelay = 2,
-    RetryLimit = 10,
-    isHopping = false,
-    visitedServers = {}
 }
 
-local QuestData = {
-    [1] = {1, 10, 25},
-    [2] = {40, 60},
-    [3] = {90, 120},
-    [4] = {160, 200},
-    [5] = {250, 300},
-    [6] = {350, 400},
-    [7] = {450, 500, 550},
-    [8] = {600, 650},
-    [9] = {700, 750},
-    [10] = {800, 850, 900},
-    [11] = {950, 1000},
-    [12] = {1050, 1100},
-    [13] = {1150, 1200, 1250},
-    [14] = {1300, 1350, 1400},
-    [15] = {1450, 1500, 1550},
-    [16] = {1600, 1650, 1700},
-    [17] = {1750, 1800, 1850},
-    [18] = {1900, 1950, 2000},
-    [19] = {2050, 2100, 2150}
-}
-
-local LevelLocations = {
-    {1,10, Vector3.new(-2388.43,45.45,-3260.79)},
-    {10,25, Vector3.new(-2021.92,45.49,-3220.61)},
-    {25,40, Vector3.new(-1930.04,67.64,-3426.59)},
-    {40,60, Vector3.new(-2321.94,14.80,-753.46)},
-    {60,90, Vector3.new(-2261.95,35.09,-411.94)},
-    {90,120, Vector3.new(-4323.08,12.90,-3334.32)},
-    {120,160, Vector3.new(-4210.37,8.29,-3025.49)},
-    {160,200, Vector3.new(-4400.24,14.98,-618.91)},
-    {200,250, Vector3.new(-4430.69,14.53,-367.42)},
-    {250,300, Vector3.new(-5352.51,7.95,1792.04)},
-    {300,350, Vector3.new(-5360.09,15.58,2011.69)},
-    {350,400, Vector3.new(-2921.54,22.27,1540.78)},
-    {400,450, Vector3.new(-3049.41,20.78,1881.57)},
-    {450,500, Vector3.new(-928.30,11.35,1900.70)},
-    {500,550, Vector3.new(-78.27,11.48,1746.96)},
-    {550,600, Vector3.new(-686.14,23.54,2358.67)},
-    {600,650, Vector3.new(-384.41,12.76,4835.05)},
-    {650,700, Vector3.new(-309.21,130.11,5362.53)},
-    {700,750, Vector3.new(-2474.88,855.98,4979.69)},
-    {750,800, Vector3.new(-2881.58,856.46,4788.35)},
-    {800,850, Vector3.new(-5415.11,20.73,5858.06)},
-    {850,900, Vector3.new(-5278.53,20.73,6066.15)},
-    {900,950, Vector3.new(-6144.38,207.28,6012.86)},
-    {950,1000, Vector3.new(1886.34,1099.24,-357.52)},
-    {1000,1050, Vector3.new(1689.97,1099.28,-89.25)},
-    {1050,1100, Vector3.new(1685.76,1099.28,-69.76)},
-    {1100,1150, Vector3.new(1694.94,1099.28,-65.98)},
-    {1150,1200, Vector3.new(2488.74,36.28,3406.87)},
-    {1200,1250, Vector3.new(2588.89,36.28,3217.21)},
-    {1250,1300, Vector3.new(2436.18,36.28,3249.26)},
-    {1300,1350, Vector3.new(2613.65,17.83,5974.82)},
-    {1350,1400, Vector3.new(2710.34,11.08,6180.66)},
-    {1400,1450, Vector3.new(2757.52,11.31,6263.50)},
-    {1450,1500, Vector3.new(1838.10,17.81,-2460.39)},
-    {1500,1550, Vector3.new(2330.08,30.24,-3104.59)},
-    {1550,1600, Vector3.new(2421.34,42.40,-2425.96)},
-    {1600,1650, Vector3.new(4988.52,48.25,-3167.97)},
-    {1650,1700, Vector3.new(5173.75,12.44,-2858.75)},
-    {1700,1750, Vector3.new(5337.77,139.31,-2493.47)},
-    {1750,1800, Vector3.new(4854.27,15.76,-131.04)},
-    {1800,1850, Vector3.new(5271.54,49.80,-307.82)},
-    {1850,1900, Vector3.new(5349.02,121.86,-37.35)},
-    {1900,1950, Vector3.new(5183.47,16.29,2519.74)},
-    {1950,2000, Vector3.new(5180.29,16.15,2081.78)},
-    {2000,2050, Vector3.new(4912.79,59.54,2596.02)},
-    {2050,2100, Vector3.new(5431.44,12.68,5651.28)},
-    {2100,2150, Vector3.new(5505.52,119.59,6178.21)}
-}
-
---// ============================================================
---// HELPERS
---// ============================================================
-local function Create(instanceType, properties)
-    local instance = Instance.new(instanceType)
-    for property, value in pairs(properties) do
-        instance[property] = value
-    end
-    return instance
+-- ============================================================
+-- دوال مساعدة (Helpers)
+-- ============================================================
+local function Notify(title, content)
+    Fluent:Notify({ Title = title, Content = content, Duration = 3 })
 end
 
-local function Tween(instance, properties, duration)
-    local tween = TweenService:Create(instance, TweenInfo.new(duration or 0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), properties)
-    tween:Play()
-    return tween
+local function Character()
+    return player.Character
 end
 
-local function MakeDraggable(frame, handle)
-    local dragging = false
-    local dragStart, startPos
-    handle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = frame.Position
-        end
-    end)
-    handle.InputEnded:Connect(function()
-        dragging = false
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStart
-            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
+local function HRP()
+    local c = Character()
+    return c and c:FindFirstChild("HumanoidRootPart")
 end
 
-local function AddCorner(instance, radius)
-    local corner = Instance.new('UICorner')
-    corner.CornerRadius = UDim.new(0, radius or 6)
-    corner.Parent = instance
+local function GetHumanoid()
+    local c = Character()
+    return c and c:FindFirstChildOfClass("Humanoid")
 end
 
-local function AddStroke(instance, color, thickness)
-    local stroke = Instance.new('UIStroke')
-    stroke.Color = color or CONFIG.Theme.Border
-    stroke.Thickness = thickness or 1
-    stroke.Parent = instance
-end
-
-local function AddGradient(instance, color1, color2)
-    local gradient = Instance.new('UIGradient')
-    gradient.Color = ColorSequence.new(color1 or CONFIG.Theme.Accent, color2 or CONFIG.Theme.Accent2)
-    gradient.Parent = instance
-end
-
-local function GetLevel()
-    local data = player:FindFirstChild('PlayerData')
-    if not data then return 1 end
-    local exp = data:FindFirstChild('Experience')
-    if not exp then return 1 end
-    local level = exp:FindFirstChild('Level')
-    if not level then return 1 end
-    return tonumber(level.Value) or 1
-end
-
-local function GetLevelLocation(level)
-    for _, data in ipairs(LevelLocations) do
-        if level >= data[1] and level < data[2] then
-            return data[3]
-        end
-    end
-    if level >= 2100 then return Vector3.new(5505.52,119.59,6178.21) end
-    return nil
-end
-
-local function TweenTo(position)
-    local character = player.Character
-    if not character then return false end
-    local root = character:FindFirstChild('HumanoidRootPart')
-    if not root then return false end
-    local distance = (root.Position - position).Magnitude
-    local duration = distance / HazeConfig.TweenSpeed
-    if duration < 0.05 then
-        root.CFrame = CFrame.new(position)
-        return true
-    end
-    local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {CFrame = CFrame.new(position)})
-    tween:Play()
-    tween.Completed:Wait()
-    return true
-end
-
-local function IsValidTarget(model)
-    if model == player.Character then return false end
-    if Players:GetPlayerFromCharacter(model) then return false end
-    local name = model.Name:lower()
-    if name:find('beli') or name:find('level') then return false end
-    if model:FindFirstChild('Beli') or model:FindFirstChild('Level') then return false end
-    local hrp = model:FindFirstChild('HumanoidRootPart')
-    local humanoid = model:FindFirstChild('Humanoid')
-    if not hrp or not humanoid then return false end
-    if humanoid.Health <= 0 then return false end
-    return true, hrp
-end
-
-local function GetNearestTarget()
-    local character = player.Character
-    if not character then return nil end
-    local root = character:FindFirstChild('HumanoidRootPart')
-    if not root then return nil end
-    local nearestHRP = nil
-    local nearestDistance = HazeConfig.TargetRange
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA('Model') then
-            local valid, hrp = IsValidTarget(obj)
-            if valid and hrp then
-                local dist = (root.Position - hrp.Position).Magnitude
-                if dist <= nearestDistance then
-                    nearestDistance = dist
-                    nearestHRP = hrp
-                end
-            end
-        end
-    end
-    return nearestHRP
-end
-
-local function FindQuestRemote()
-    local places = {player, player:FindFirstChild('PlayerGui'), player:FindFirstChild('PlayerScripts'), ReplicatedStorage, workspace}
-    for _, parent in ipairs(places) do
-        if parent then
-            local remote = parent:FindFirstChild('QuestFunction', true)
-            if remote and remote:IsA('RemoteFunction') then
-                return remote
-            end
-        end
-    end
-    return nil
-end
-
-local QuestRemote = FindQuestRemote()
-
-local function GetBestQuest(level)
-    local bestGiver, bestQuest
-    for giverID, levels in pairs(QuestData) do
-        for _, questLevel in ipairs(levels) do
-            if questLevel <= level then
-                if not bestQuest or questLevel > bestQuest then
-                    bestQuest = questLevel
-                    bestGiver = giverID
-                end
-            end
-        end
-    end
-    return bestGiver, bestQuest
-end
-
-local function TakeBestQuest()
-    if not QuestRemote then QuestRemote = FindQuestRemote() end
-    if not QuestRemote then return end
-    local level = GetLevel()
-    local giverID, questLevel = GetBestQuest(level)
-    if not giverID or not questLevel then return end
-    local questGivers = workspace:FindFirstChild('Npc_Workspace')
-    if not questGivers then return end
-    questGivers = questGivers:FindFirstChild('QuestGivers')
-    if not questGivers then return end
-    local npc = questGivers:FindFirstChild(tostring(giverID))
-    if not npc then return end
-    local questName = 'Level ' .. tostring(questLevel)
-    pcall(function()
-        QuestRemote:InvokeServer(npc, questName)
-    end)
-end
-
-local function UpgradeStat(statName)
-    local args = {statName, 1}
-    local remote = ReplicatedStorage:WaitForChild('Replication'):WaitForChild('ClientEvents'):WaitForChild('Stats_Event')
-    pcall(function()
-        remote:FireServer(unpack(args))
-    end)
-end
-
-local function getHRP()
-    local char = player.Character
-    if char then return char:FindFirstChild('HumanoidRootPart') end
-    return nil
-end
-
-local function getHumanoid()
-    local char = player.Character
-    if char then return char:FindFirstChildOfClass('Humanoid') end
-    return nil
-end
-
---// ============================================================
---// CHEST FARM SYSTEM (v7.1 Logic)
---// ============================================================
-
-local function getChestPos(chest)
-    if not chest or not chest.Parent then return nil end
-    if chest:IsA('Model') then
-        if chest.PrimaryPart then return chest.PrimaryPart.Position end
-        local hitbox = chest:FindFirstChild('Hitbox')
-        if hitbox and hitbox:IsA('BasePart') then return hitbox.Position end
-        local aura = chest:FindFirstChild('Chest Aura')
-        if aura and aura:IsA('BasePart') then return aura.Position end
-        for _, part in ipairs(chest:GetDescendants()) do
-            if part:IsA('BasePart') then return part.Position end
-        end
-    elseif chest:IsA('BasePart') then
-        return chest.Position
-    end
-    return nil
-end
-
-local function getChests()
-    local chests = {}
-    for _, obj in ipairs(workspace:GetChildren()) do
-        if obj:IsA('Model') and obj.Name == 'Chest' then
-            table.insert(chests, obj)
-        end
-    end
-    return chests
-end
-
-local function isVisited(chestPos)
-    if not chestPos then return true end
-    for _, visitedPos in ipairs(ChestConfig.visitedChests) do
-        if (visitedPos - chestPos).Magnitude < 25 then
-            return true
-        end
-    end
-    return false
-end
-
-local function smoothFlyTo(targetPos, onComplete)
-    local hrp = getHRP()
-    if not hrp then
-        if onComplete then task.defer(onComplete) end
-        return
-    end
-    if ChestConfig.currentConnection then
-        ChestConfig.currentConnection:Disconnect()
-        ChestConfig.currentConnection = nil
-    end
-    local startCF = hrp.CFrame
-    local targetCF = CFrame.new(targetPos + Vector3.new(0, 3, 0))
-    local distance = (startCF.Position - targetCF.Position).Magnitude
-    local duration = math.max(distance / ChestConfig.FarmSpeed, 0.01)
-    local startTime = tick()
-    if distance < 5 then
-        hrp.CFrame = targetCF
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        if onComplete then task.defer(onComplete) end
-        return
-    end
-    ChestConfig.currentConnection = RunService.Heartbeat:Connect(function()
-        if not hrp or not hrp.Parent then
-            if ChestConfig.currentConnection then
-                ChestConfig.currentConnection:Disconnect()
-                ChestConfig.currentConnection = nil
-            end
-            return
-        end
-        local elapsed = tick() - startTime
-        local alpha = elapsed / duration
-        if alpha >= 1 then
-            hrp.CFrame = targetCF
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            if ChestConfig.currentConnection then
-                ChestConfig.currentConnection:Disconnect()
-                ChestConfig.currentConnection = nil
-            end
-            if onComplete then task.defer(onComplete) end
-            return
-        end
-        alpha = alpha * alpha * (3 - 2 * alpha)
-        hrp.CFrame = startCF:Lerp(targetCF, alpha)
-        hrp.AssemblyLinearVelocity = Vector3.zero
-    end)
-end
-
-local function stopChestAuto()
-    if not ChestConfig.AutoChest then return end
-    ChestConfig.AutoChest = false
-    ChestConfig.visitedChests = {}
-    ChestConfig.farmedCount = 0
-    if ChestConfig.currentConnection then
-        ChestConfig.currentConnection:Disconnect()
-        ChestConfig.currentConnection = nil
-    end
-    local humanoid = getHumanoid()
-    if humanoid then
-        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-        humanoid.AutoRotate = true
-    end
-end
-
-local function startChestAuto()
-    if ChestConfig.AutoChest then return end
-    ChestConfig.AutoChest = true
-    ChestConfig.visitedChests = {}
-    ChestConfig.farmedCount = 0
-
-    local function nextChest()
-        if not ChestConfig.AutoChest then return end
-        local chests = getChests()
-        if #chests == 0 then
-            task.wait(2)
-            task.defer(nextChest)
-            return
-        end
-        local hrp = getHRP()
-        if not hrp then
-            task.wait(1)
-            task.defer(nextChest)
-            return
-        end
-
-        local bestChest = nil
-        local bestDist = math.huge
-        for _, chest in ipairs(chests) do
-            local pos = getChestPos(chest)
-            if pos and not isVisited(pos) then
-                local d = (hrp.Position - pos).Magnitude
-                if d < bestDist then
-                    bestDist = d
-                    bestChest = chest
-                end
-            end
-        end
-
-        if not bestChest then
-            ChestConfig.visitedChests = {}
-            for _, chest in ipairs(chests) do
-                local pos = getChestPos(chest)
-                if pos then
-                    local d = (hrp.Position - pos).Magnitude
-                    if d < bestDist then
-                        bestDist = d
-                        bestChest = chest
-                    end
-                end
-            end
-        end
-
-        if not bestChest then
-            task.wait(2)
-            task.defer(nextChest)
-            return
-        end
-
-        local pos = getChestPos(bestChest)
-        if pos then
-            table.insert(ChestConfig.visitedChests, pos)
-            ChestConfig.farmedCount = ChestConfig.farmedCount + 1
-            smoothFlyTo(pos, function()
-                if not ChestConfig.AutoChest then return end
-                task.defer(nextChest)
-            end)
-        else
-            task.wait(1)
-            task.defer(nextChest)
-        end
-    end
-    nextChest()
-end
-
---// ============================================================
---// M1 ATTACK
---// ============================================================
-local function M1Attack()
-    local char = player.Character
-    if not char then return end
-    local tool = char:FindFirstChildOfClass('Tool')
-    if tool then
-        pcall(function() tool:Activate() end)
-    end
-    pcall(function()
-        if mouse1click then mouse1click() end
-    end)
-end
-
---// ============================================================
---// SEA BEAST
---// ============================================================
-local SB_Running = false
-local SB_CurrentTarget = nil
-local SB_ChaseConn = nil
-local SB_AttackConn = nil
-
-local function IsRealSeaBeast(obj)
-    if not obj or not obj:IsA('Model') then return false end
-    local name = obj.Name
-    local isBeast = false
-    for _, pattern in ipairs(SB_Config.BeastNames) do
-        if name == pattern or name:find('Sea Beast') or name:find('SeaBeast') or name:find('Sea_Beast') then
-            isBeast = true
-            break
-        end
-    end
-    if not isBeast then return false end
-    if name:find('SpawnPoint') or name:find('Spawn') or name:find('Spawner') or name:find('Indicator') then
-        return false
-    end
-    if obj.PrimaryPart then return true end
-    for _, p in ipairs(obj:GetDescendants()) do
-        if p:IsA('BasePart') then return true end
-    end
-    return false
-end
-
-local function SB_Scan()
-    local beasts = {}
-    local checked = {}
-    for _, obj in ipairs(workspace:GetChildren()) do
-        if IsRealSeaBeast(obj) and not checked[obj] then
-            checked[obj] = true
-            table.insert(beasts, obj)
-        end
-    end
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if IsRealSeaBeast(obj) and not checked[obj] then
-            checked[obj] = true
-            table.insert(beasts, obj)
-        end
-    end
-    return beasts
-end
-
-local function SB_GetBodyPart(obj)
-    if not obj or not obj.Parent then return nil end
-    if obj.PrimaryPart then return obj.PrimaryPart end
-    local biggest = nil
-    local maxSize = 0
-    for _, p in ipairs(obj:GetDescendants()) do
-        if p:IsA('BasePart') then
-            local size = p.Size.X * p.Size.Y * p.Size.Z
-            if size > maxSize then
-                maxSize = size
-                biggest = p
-            end
-        end
-    end
-    return biggest
-end
-
-local function SB_GetBeastPos(obj)
-    local part = SB_GetBodyPart(obj)
-    if part then return part.Position end
-    return nil
-end
-
-local function SB_Attack()
-    local char = player.Character
-    if not char then return end
-    if SB_Config.AutoEquip then
-        local tool = char:FindFirstChildOfClass('Tool')
-        if not tool then
-            local bp = player:FindFirstChild('Backpack')
-            if bp then
-                for _, t in ipairs(bp:GetChildren()) do
-                    if t:IsA('Tool') then
-                        t.Parent = char
-                        task.wait(0.05)
-                        break
-                    end
-                end
-            end
-        end
-    end
-    local tool = char:FindFirstChildOfClass('Tool')
-    if tool then
-        pcall(function() tool:Activate() end)
-    end
-    pcall(function()
-        if mouse1click then mouse1click() end
-    end)
-end
-
-local function SB_StartChase(beastPart)
-    if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
-    SB_ChaseConn = RunService.Heartbeat:Connect(function()
-        if not SB_Running or not SB_Config.Enabled then
-            if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
-            return
-        end
-        if not beastPart or not beastPart.Parent then
-            SB_CurrentTarget = nil
-            if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
-            return
-        end
-        local char = player.Character
-        local hrp = char and char:FindFirstChild('HumanoidRootPart')
-        if not hrp or not hrp.Parent then return end
-        local beastPos = beastPart.Position
-        local targetPos = beastPos + Vector3.new(0, 8, 0)
-        if targetPos.Y < 10 then targetPos = Vector3.new(targetPos.X, 10, targetPos.Z) end
-        hrp.CFrame = CFrame.new(targetPos, beastPos)
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.RotVelocity = Vector3.zero
-    end)
-end
-
-local function SB_StartAttack()
-    if SB_AttackConn then SB_AttackConn:Disconnect() SB_AttackConn = nil end
-    SB_AttackConn = RunService.Heartbeat:Connect(function()
-        if not SB_Running or not SB_Config.Enabled or not SB_CurrentTarget then return end
-        if SB_Config.AutoAttack then SB_Attack() end
-    end)
-end
-
-local function SB_Loop()
-    while SB_Running and SB_Config.Enabled do
-        if SB_CurrentTarget and SB_CurrentTarget.Parent then
-            local beastPos = SB_GetBeastPos(SB_CurrentTarget)
-            if beastPos then
-                task.wait(0.5)
-            else
-                SB_CurrentTarget = nil
-                if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
-                task.wait(0.5)
-            end
-        else
-            if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
-            SB_CurrentTarget = nil
-            local beasts = SB_Scan()
-            if #beasts == 0 then
-                task.wait(1)
-            else
-                local hrp = player.Character and player.Character:FindFirstChild('HumanoidRootPart')
-                local closest = nil
-                local minD = math.huge
-                for _, b in ipairs(beasts) do
-                    local part = SB_GetBodyPart(b)
-                    if part and hrp then
-                        local d = (hrp.Position - part.Position).Magnitude
-                        if d < minD then
-                            minD = d
-                            closest = b
-                        end
-                    end
-                end
-                if closest then
-                    local bodyPart = SB_GetBodyPart(closest)
-                    if bodyPart then
-                        SB_CurrentTarget = closest
-                        SB_StartChase(bodyPart)
-                        SB_StartAttack()
-                    end
-                end
-                task.wait(0.5)
-            end
-        end
-    end
-end
-
-function StartSeaBeastFarm()
-    if SB_Running then return end
-    SB_Running = true
-    SB_CurrentTarget = nil
-    SB_StartAttack()
-    task.spawn(SB_Loop)
-end
-
-function StopSeaBeastFarm()
-    SB_Running = false
-    SB_Config.Enabled = false
-    SB_CurrentTarget = nil
-    if SB_ChaseConn then SB_ChaseConn:Disconnect() SB_ChaseConn = nil end
-    if SB_AttackConn then SB_AttackConn:Disconnect() SB_AttackConn = nil end
-end
-
---// ============================================================
---// SERVER HOPPER
---// ============================================================
-local placeId = game.PlaceId
-local jobId = game.JobId
-
-local function getServers(cursor)
-    local url = ('https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100'):format(placeId)
-    if cursor then url = url .. '&cursor=' .. cursor end
-    local success, result = pcall(function()
-        return game:HttpGet(url)
-    end)
-    if success then
-        return HttpService:JSONDecode(result)
-    end
-    warn('[NAZK] Failed to fetch servers: ' .. tostring(result))
-    return nil
-end
-
-local function findLowPlayerServer()
-    local allServers = {}
-    local cursor = nil
-    local pages = 0
-    repeat
-        local data = getServers(cursor)
-        if not data then break end
-        for _, server in ipairs(data.data) do
-            if server.id ~= jobId and server.playing <= SH_Config.MaxPlayers then
-                if not SH_Config.visitedServers[server.id] then
-                    table.insert(allServers, server)
-                end
-            end
-        end
-        cursor = data.nextPageCursor
-        pages = pages + 1
-        task.wait(0.1)
-    until not cursor or pages >= 5 or #allServers >= 20
-    table.sort(allServers, function(a, b)
-        return a.playing < b.playing
-    end)
-    return allServers
-end
-
-local function serverHop()
-    if SH_Config.isHopping then return end
-    SH_Config.isHopping = true
-    local tries = 0
-    local servers = {}
-    repeat
-        servers = findLowPlayerServer()
-        tries = tries + 1
-        if #servers == 0 then
-            task.wait(SH_Config.RetryDelay)
-        end
-    until #servers > 0 or tries >= SH_Config.RetryLimit
-    if #servers > 0 then
-        local target = servers[1]
-        SH_Config.visitedServers[target.id] = true
-        print('[NAZK] Hopping to server with ' .. target.playing .. ' player(s)')
-        TeleportService:TeleportToPlaceInstance(placeId, target.id, player)
-    else
-        warn('[NAZK] No low-player servers found after ' .. tries .. ' attempts.')
-        SH_Config.isHopping = false
-    end
-end
-
-local function serverHopRandom()
-    if SH_Config.isHopping then return end
-    SH_Config.isHopping = true
-    local allServers = {}
-    local cursor = nil
-    local pages = 0
-    repeat
-        local data = getServers(cursor)
-        if not data then break end
-        for _, server in ipairs(data.data) do
-            if server.id ~= jobId and not SH_Config.visitedServers[server.id] then
-                table.insert(allServers, server)
-            end
-        end
-        cursor = data.nextPageCursor
-        pages = pages + 1
-        task.wait(0.1)
-    until not cursor or pages >= 5
-    if #allServers > 0 then
-        local target = allServers[math.random(1, #allServers)]
-        SH_Config.visitedServers[target.id] = true
-        print('[NAZK] Hopping to random server | Players: ' .. target.playing)
-        TeleportService:TeleportToPlaceInstance(placeId, target.id, player)
-    else
-        warn('[NAZK] No available servers found.')
-        SH_Config.isHopping = false
-    end
-end
-
---// ============================================================
---// DASH BUTTON
---// ============================================================
-local DashGui = Create('ScreenGui', {Name = 'DashButtonGUI', Parent = player:WaitForChild('PlayerGui'), ResetOnSpawn = false})
-local DashFrame = Create('Frame', {Name = 'DashFrame', Parent = DashGui, BackgroundColor3 = CONFIG.Theme.Background, BorderSizePixel = 0, Size = UDim2.new(0, 50, 0, 50), Position = UDim2.new(1, -140, 1, -240)})
-AddCorner(DashFrame, 12)
-AddStroke(DashFrame, CONFIG.Theme.Accent, 2)
-local DashBtn = Create('TextButton', {Name = 'DashBtn', Parent = DashFrame, BackgroundColor3 = CONFIG.Theme.Accent, BorderSizePixel = 0, Size = UDim2.new(1, -6, 1, -6), Position = UDim2.new(0, 3, 0, 3), Font = Enum.Font.GothamBold, Text = 'DASH', TextColor3 = CONFIG.Theme.Text, TextSize = 9, AutoButtonColor = false})
-AddCorner(DashBtn, 10)
-AddGradient(DashBtn, CONFIG.Theme.Accent, CONFIG.Theme.Accent2)
-local CooldownFrame = Create('Frame', {Name = 'Cooldown', Parent = DashBtn, BackgroundColor3 = Color3.fromRGB(0,0,0), BackgroundTransparency = 0.6, BorderSizePixel = 0, Size = UDim2.new(0, 0, 1, 0)})
-AddCorner(CooldownFrame, 10)
-
+-- ============================================================
+-- نظام الداش (Dash)
+-- ============================================================
 local dashCooldown = false
+
 local function DoDash()
     if dashCooldown then return end
-    local char = player.Character
-    if not char then return end
-    local root = char:FindFirstChild('HumanoidRootPart')
+    local root = HRP()
     if not root then return end
-    local hum = char:FindFirstChildOfClass('Humanoid')
+    local hum = GetHumanoid()
     if not hum then return end
+
     dashCooldown = true
-    CooldownFrame.Size = UDim2.new(1, 0, 1, 0)
-    Tween(CooldownFrame, {Size = UDim2.new(0, 0, 1, 0)}, CONFIG.DashCooldown)
+
     local cam = workspace.CurrentCamera
     local lookDir = cam.CFrame.LookVector
     lookDir = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
@@ -851,948 +95,1111 @@ local function DoDash()
         lookDir = root.CFrame.LookVector
         lookDir = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
     end
-    local dashVel = Instance.new('BodyVelocity')
-    dashVel.Velocity = lookDir * CONFIG.DashPower
+
+    local dashVel = Instance.new("BodyVelocity")
+    dashVel.Velocity = lookDir * Config.DashPower
     dashVel.MaxForce = Vector3.new(500000, 0, 500000)
     dashVel.P = 50000
     dashVel.Parent = root
-    local trail = Instance.new('Trail')
-    trail.Lifetime = 0.2
+
+    -- تأثير المسار
+    local trail = Instance.new("Trail")
+    trail.Lifetime = Config.DashDuration
     trail.WidthScale = NumberSequence.new(0.4, 0)
-    trail.Color = ColorSequence.new(CONFIG.Theme.Accent, CONFIG.Theme.Accent2)
+    trail.Color = ColorSequence.new(Color3.fromRGB(255,50,80), Color3.fromRGB(80,50,255))
     trail.LightEmission = 1
     trail.Parent = root
-    local att0 = Instance.new('Attachment')
+
+    local att0 = Instance.new("Attachment")
     att0.Position = Vector3.new(0, -2, 0)
     att0.Parent = root
-    local att1 = Instance.new('Attachment')
+    local att1 = Instance.new("Attachment")
     att1.Position = Vector3.new(0, 2, 0)
     att1.Parent = root
     trail.Attachment0 = att0
     trail.Attachment1 = att1
-    task.delay(CONFIG.DashDuration, function()
-        if dashVel then dashVel:Destroy() end
-        if trail then trail:Destroy() end
-        if att0 then att0:Destroy() end
-        if att1 then att1:Destroy() end
+
+    task.delay(Config.DashDuration, function()
+        dashVel:Destroy()
+        trail:Destroy()
+        att0:Destroy()
+        att1:Destroy()
     end)
-    task.delay(CONFIG.DashCooldown, function()
+
+    task.delay(Config.DashCooldown, function()
         dashCooldown = false
     end)
 end
-DashBtn.MouseButton1Click:Connect(DoDash)
-MakeDraggable(DashFrame, DashFrame)
 
---// ============================================================
---// 🍎 IMPROVED FRUIT ESP
---// ============================================================
-local ESP_MAX_DISTANCE = 25000
-local ESP_MIN_Y_LEVEL = 2.86
-local ESP_Logic
-local ESP_FruitDrops
-local ESP_FruitSpawns
+-- ============================================================
+-- نظام ESP (متعدد الأنماط)
+-- ============================================================
+local ESP_Data = {}
+local ESP_PlayerAdded = nil
+local ESP_PlayerRemoving = nil
 
-task.spawn(function()
-    ESP_Logic = workspace:WaitForChild('Logic', 15)
-    if ESP_Logic then
-        ESP_FruitDrops = ESP_Logic:WaitForChild('FruitDrops', 15)
-        ESP_FruitSpawns = ESP_Logic:WaitForChild('FruitSpawns', 15)
-    end
-end)
-
-local KNOWN_FRUITS = {
-    Bomb = true, Buddha = true, Combat = true, Darkness = true, Flame = true,
-    Sand = true, Smoke = true, Spike = true, String = true, Vanish = true,
-    Venom = true, Zenith = true, Gum = true, Electricity = true, Dragon = true,
-    Ice = true, Light = true, Magma = true, Quake = true, Rumble = true,
-    Shadow = true, Gravity = true, Phoenix = true, Dough = true, Leopard = true,
-    Yeti = true, ['T-Rex'] = true, Mammoth = true, Kitsune = true, DragonV2 = true,
+local ESP_BaseSizes = {
+    v1 = { X = 200, Y = 90 },
+    v2 = { X = 160, Y = 40 },
+    v3 = { X = 180, Y = 70 },
+    v4 = { X = 220, Y = 80 },
 }
 
-local BAD_NAMES = {
-    Meshes = true, Parts = true, Handle = true, Part = true, Union = true,
-    Model = true, Workspace = true, Logic = true, FruitDrops = true,
-    FruitSpawns = true, Clear = true, Script = true, LocalScript = true,
-    Folder = true, Accessories = true, Accessory = true, Animation = true,
-    Animate = true, Humanoid = true, Head = true, Torso = true,
-}
+-- دوال إنشاء الأنماط (مختصرة)
+local function CreateV1ESP(targetPlayer, char, data)
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "NAZK_ESP_Highlight"
+    highlight.FillColor = Color3.fromRGB(255,50,80)
+    highlight.OutlineColor = Color3.fromRGB(255,255,255)
+    highlight.FillTransparency = 0.3
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Parent = char
+    data.Highlight = highlight
 
-local function IsValidName(Name)
-    if not Name or Name == '' then return false end
-    if BAD_NAMES[Name] then return false end
-    if Name:match('^Meshes/') or Name:match('^Parts/') or Name:match('^Union') or
-       Name:match('^Part%d*$') or Name:match('^Handle%d*$') or Name:match('^Mesh%d*$') or
-       Name:match('^%d+$') then
-        return false
-    end
-    return true
+    local baseW = ESP_BaseSizes.v1.X * Config.ESPSize
+    local baseH = ESP_BaseSizes.v1.Y * Config.ESPSize
+    data.BaseSize = UDim2.new(0, baseW, 0, baseH)
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "NAZK_ESP_v1"
+    billboard.Size = UDim2.new(0, baseW, 0, baseH)
+    billboard.StudsOffset = Vector3.new(0, 3.5, 0)
+    billboard.AlwaysOnTop = true
+    local head = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char
+    billboard.Parent = head
+
+    local bg = Instance.new("Frame")
+    bg.Name = "BG"
+    bg.Parent = billboard
+    bg.BackgroundColor3 = Color3.fromRGB(15,15,20)
+    bg.BackgroundTransparency = 0.15
+    bg.Size = UDim2.new(1,0,1,0)
+    local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0,8); corner.Parent = bg
+    local stroke = Instance.new("UIStroke"); stroke.Color = Color3.fromRGB(255,50,80); stroke.Thickness = 1; stroke.Parent = bg
+
+    local topBar = Instance.new("Frame")
+    topBar.Parent = bg
+    topBar.BackgroundColor3 = Color3.fromRGB(255,50,80)
+    topBar.Size = UDim2.new(1,0,0,3)
+    topBar.Position = UDim2.new(0,0,0,0)
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Name = "NameLabel"
+    nameLabel.Parent = bg
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Size = UDim2.new(1,-10,0,18)
+    nameLabel.Position = UDim2.new(0,5,0,5)
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.Text = targetPlayer.Name
+    nameLabel.TextColor3 = Color3.fromRGB(255,50,80)
+    nameLabel.TextSize = 14
+    nameLabel.TextStrokeTransparency = 0.5
+    data.NameLabel = nameLabel
+
+    local hpBg = Instance.new("Frame")
+    hpBg.Name = "HP_Bg"
+    hpBg.Parent = bg
+    hpBg.BackgroundColor3 = Color3.fromRGB(15,15,20)
+    hpBg.Size = UDim2.new(1,-20,0,6)
+    hpBg.Position = UDim2.new(0,10,0,24)
+    local hpCorner = Instance.new("UICorner"); hpCorner.CornerRadius = UDim.new(0,3); hpCorner.Parent = hpBg
+    data.HP_Bg = hpBg
+
+    local hpFill = Instance.new("Frame")
+    hpFill.Parent = hpBg
+    hpFill.BackgroundColor3 = Color3.fromRGB(0,255,100)
+    hpFill.Size = UDim2.new(1,0,1,0)
+    local hpFillCorner = Instance.new("UICorner"); hpFillCorner.CornerRadius = UDim.new(0,3); hpFillCorner.Parent = hpFill
+    data.HP_Fill = hpFill
+
+    local itemsLabel = Instance.new("TextLabel")
+    itemsLabel.Name = "ItemsLabel"
+    itemsLabel.Parent = bg
+    itemsLabel.BackgroundTransparency = 1
+    itemsLabel.Size = UDim2.new(1,-10,0,30)
+    itemsLabel.Position = UDim2.new(0,5,0,34)
+    itemsLabel.Font = Enum.Font.Gotham
+    itemsLabel.Text = "Loading..."
+    itemsLabel.TextColor3 = Color3.fromRGB(255,255,255)
+    itemsLabel.TextSize = 10
+    itemsLabel.TextWrapped = true
+    itemsLabel.TextYAlignment = Enum.TextYAlignment.Top
+    data.ItemsLabel = itemsLabel
+
+    local distLabel = Instance.new("TextLabel")
+    distLabel.Name = "DistLabel"
+    distLabel.Parent = bg
+    distLabel.BackgroundTransparency = 1
+    distLabel.Size = UDim2.new(1,-10,0,14)
+    distLabel.Position = UDim2.new(0,5,1,-18)
+    distLabel.Font = Enum.Font.Gotham
+    distLabel.Text = "0 studs"
+    distLabel.TextColor3 = Color3.fromRGB(180,180,180)
+    distLabel.TextSize = 10
+    distLabel.TextXAlignment = Enum.TextXAlignment.Right
+    data.DistLabel = distLabel
+
+    data.Billboard = billboard
 end
 
-local function GetFruitName(Object)
-    if not Object then return 'Fruit' end
-    if IsValidName(Object.Name) and KNOWN_FRUITS[Object.Name] then return Object.Name end
-    if Object.Parent and IsValidName(Object.Parent.Name) and KNOWN_FRUITS[Object.Parent.Name] then
-        return Object.Parent.Name
-    end
-    for _, Child in ipairs(Object:GetChildren()) do
-        if IsValidName(Child.Name) and KNOWN_FRUITS[Child.Name] then return Child.Name end
-    end
-    for _, Desc in ipairs(Object:GetDescendants()) do
-        if IsValidName(Desc.Name) and KNOWN_FRUITS[Desc.Name] then return Desc.Name end
-    end
-    return IsValidName(Object.Name) and Object.Name or (Object.Parent and IsValidName(Object.Parent.Name) and Object.Parent.Name) or 'Fruit'
+-- أنماط v2 و v3 و v4 (مختصرة جداً – نفس المنطق، يمكنك توسيعها)
+-- لسهولة العرض نكتفي بـ v1 هنا، لكن يمكن إضافة الباقي بنفس الطريقة
+-- سأضيف دالة عامة لتحديد النمط حسب Config.ESPStyle
+local function CreateESPForStyle(targetPlayer, char, data)
+    -- نقوم بإنشاء ESP حسب النمط المختار
+    -- هنا نكتفي بـ v1 كمثال، يمكنك إضافة باقي الأنماط بنفس الطريقة
+    CreateV1ESP(targetPlayer, char, data)
 end
 
-local function GetPosition(Object)
-    if not Object then return nil end
-    if Object:IsA('BasePart') then return Object.Position end
-    if Object:IsA('Model') then
-        if Object.PrimaryPart then return Object.PrimaryPart.Position end
-        local Part = Object:FindFirstChildWhichIsA('BasePart', true)
-        if Part then return Part.Position end
-    end
-    local Part = Object:FindFirstChildWhichIsA('BasePart', true)
-    return Part and Part.Position or nil
+local function UpdateESPVisibility(data)
+    if data.NameLabel then data.NameLabel.Visible = Config.ShowName end
+    if data.HP_Bg then data.HP_Bg.Visible = Config.ShowHealth end
+    if data.ItemsLabel then data.ItemsLabel.Visible = Config.ShowItems end
+    if data.DistLabel then data.DistLabel.Visible = Config.ShowDistance end
 end
 
-local function GetTargetPart(Object)
-    if not Object then return nil end
-    if Object:IsA('BasePart') then return Object end
-    if Object:IsA('Model') then
-        if Object.PrimaryPart then return Object.PrimaryPart end
-        return Object:FindFirstChildWhichIsA('BasePart', true)
-    end
-    return Object:FindFirstChildWhichIsA('BasePart', true)
-end
+local function CreateESPForPlayer(targetPlayer)
+    if targetPlayer == player or ESP_Data[targetPlayer] then return end
+    local data = { Connections = {} }
+    ESP_Data[targetPlayer] = data
 
-local ESPObjects = { Drops = {}, Spawns = {} }
+    local function setupCharacter(char)
+        if not char then return end
+        -- تنظيف قديم
+        if data.Highlight then data.Highlight:Destroy() end
+        if data.Billboard then data.Billboard:Destroy() end
 
-local function RemoveESP(Data)
-    if not Data then return end
-    if Data.Billboard then pcall(function() Data.Billboard:Destroy() end) end
-    if Data.Highlight then pcall(function() Data.Highlight:Destroy() end) end
-end
+        CreateESPForStyle(targetPlayer, char, data)
+        UpdateESPVisibility(data)
 
-local function CreateESP(Part, Color, Name, Distance)
-    if not Part then return nil end
-    for _, Child in ipairs(Part:GetChildren()) do
-        if Child.Name == 'FruitESP_Billboard' or Child.Name == 'FruitESP_Highlight' then
-            Child:Destroy()
-        end
-    end
-    local Highlight = Instance.new('Highlight')
-    Highlight.Name = 'FruitESP_Highlight'
-    Highlight.Adornee = Part
-    Highlight.FillColor = Color
-    Highlight.OutlineColor = Color3.new(1,1,1)
-    Highlight.FillTransparency = 0.5
-    Highlight.OutlineTransparency = 0
-    Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    Highlight.Parent = Part
+        -- تحديث الصحة والمسافة والإيتام
+        local conn = RunService.Heartbeat:Connect(function()
+            if not data.Billboard or not data.Billboard.Parent then return end
+            if not char or not char.Parent then return end
 
-    local Billboard = Instance.new('BillboardGui')
-    Billboard.Name = 'FruitESP_Billboard'
-    Billboard.Size = UDim2.new(0, 190, 0, 42)
-    Billboard.StudsOffset = Vector3.new(0, 3.2, 0)
-    Billboard.AlwaysOnTop = true
-    Billboard.MaxDistance = ESP_MAX_DISTANCE
-    Billboard.Parent = Part
-
-    local Label = Instance.new('TextLabel')
-    Label.Name = 'FruitESP_Label'
-    Label.Size = UDim2.new(1, 0, 1, 0)
-    Label.BackgroundTransparency = 1
-    Label.Text = Name .. '\n[' .. math.floor(Distance) .. 'm]'
-    Label.TextColor3 = Color
-    Label.TextStrokeTransparency = 0
-    Label.TextStrokeColor3 = Color3.new(0,0,0)
-    Label.TextSize = 17
-    Label.Font = Enum.Font.GothamBold
-    Label.TextWrapped = true
-    Label.Parent = Billboard
-
-    return { Highlight = Highlight, Billboard = Billboard, Label = Label, Name = Name, Part = Part }
-end
-
-ESPFruitDropEnabled = false
-ESPFruitSpawnEnabled = false
-
-local function ScanFolder(Folder, Storage, Color, Prefix)
-    if not Folder then return end
-    local Character = player.Character
-    local HRP = Character and Character:FindFirstChild('HumanoidRootPart')
-    if not HRP then return end
-
-    local Current = {}
-    for _, Fruit in ipairs(Folder:GetChildren()) do
-        local Position = GetPosition(Fruit)
-        if Position and Position.Y >= ESP_MIN_Y_LEVEL then
-            local Distance = (Position - HRP.Position).Magnitude
-            if Distance <= ESP_MAX_DISTANCE then
-                Current[Fruit] = true
-                local Part = GetTargetPart(Fruit)
-                if Part then
-                    local Data = Storage[Fruit]
-                    if not Data then
-                        local FruitName = GetFruitName(Fruit)
-                        local ESP = CreateESP(Part, Color, Prefix .. FruitName, Distance)
-                        if ESP then Storage[Fruit] = ESP end
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum and data.HP_Fill then
+                local healthPercent = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                data.HP_Fill.Size = UDim2.new(healthPercent, 0, 1, 0)
+                if Config.ESPStyle == "v1" then
+                    if healthPercent > 0.6 then
+                        data.HP_Fill.BackgroundColor3 = Color3.fromRGB(0,255,100)
+                    elseif healthPercent > 0.3 then
+                        data.HP_Fill.BackgroundColor3 = Color3.fromRGB(255,200,0)
                     else
-                        if Data.Label then
-                            Data.Label.Text = Data.Name .. '\n[' .. math.floor(Distance) .. 'm]'
-                        end
+                        data.HP_Fill.BackgroundColor3 = Color3.fromRGB(255,50,50)
                     end
                 end
             end
-        end
-    end
 
-    for Fruit, Data in pairs(Storage) do
-        if not Current[Fruit] or not Fruit.Parent then
-            RemoveESP(Data)
-            Storage[Fruit] = nil
-        end
-    end
-end
+            if data.ItemsLabel then
+                local items = {}
+                local bp = targetPlayer:FindFirstChild("Backpack")
+                if bp then
+                    for _, tool in ipairs(bp:GetChildren()) do
+                        if tool:IsA("Tool") then table.insert(items, tool.Name) end
+                    end
+                end
+                if char then
+                    for _, tool in ipairs(char:GetChildren()) do
+                        if tool:IsA("Tool") then table.insert(items, "[H] " .. tool.Name) end
+                    end
+                end
+                data.ItemsLabel.Text = (#items > 0) and table.concat(items, ", ") or "No Items"
+            end
 
-local ESP_Connection
-local function UpdateESP()
-    if ESPFruitDropEnabled then
-        ScanFolder(ESP_FruitDrops, ESPObjects.Drops, Color3.fromRGB(255,60,60), '🍎 ')
-    end
-    if ESPFruitSpawnEnabled then
-        ScanFolder(ESP_FruitSpawns, ESPObjects.Spawns, Color3.fromRGB(60,150,255), '📍 ')
-    end
-end
-
-local function RefreshESPConnection()
-    if ESP_Connection then
-        ESP_Connection:Disconnect()
-        ESP_Connection = nil
-    end
-    if ESPFruitDropEnabled or ESPFruitSpawnEnabled then
-        ESP_Connection = RunService.RenderStepped:Connect(UpdateESP)
-    end
-end
-
-function SetFruitDropESP(state)
-    ESPFruitDropEnabled = state
-    if not state then
-        for obj, data in pairs(ESPObjects.Drops) do
-            RemoveESP(data)
-            ESPObjects.Drops[obj] = nil
-        end
-    end
-    RefreshESPConnection()
-end
-
-function SetFruitSpawnESP(state)
-    ESPFruitSpawnEnabled = state
-    if not state then
-        for obj, data in pairs(ESPObjects.Spawns) do
-            RemoveESP(data)
-            ESPObjects.Spawns[obj] = nil
-        end
-    end
-    RefreshESPConnection()
-end
-
-player.CharacterAdded:Connect(function()
-    for _, storage in pairs(ESPObjects) do
-        for obj, data in pairs(storage) do
-            RemoveESP(data)
-            storage[obj] = nil
-        end
-    end
-end)
-
---// ============================================================
---// MAIN GUI
---// ============================================================
-local ScreenGui = Create('ScreenGui', {Name = 'NAZK_Hub', Parent = player:WaitForChild('PlayerGui'), ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling})
-local MainFrame = Create('Frame', {Name = 'MainFrame', Parent = ScreenGui, BackgroundColor3 = CONFIG.Theme.Background, BorderSizePixel = 0, Size = UDim2.new(0, 520, 0, 380), Position = UDim2.new(0.5, -260, 0.5, -190), ClipsDescendants = true, Visible = false})
-AddCorner(MainFrame, 12)
-AddStroke(MainFrame, CONFIG.Theme.Border, 2)
-
-local TopBar = Create('Frame', {Name = 'TopBar', Parent = MainFrame, BackgroundColor3 = CONFIG.Theme.Secondary, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 40)})
-local gradLine = Create('Frame', {Parent = TopBar, BackgroundColor3 = CONFIG.Theme.Accent, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2)})
-AddGradient(gradLine, CONFIG.Theme.Accent, CONFIG.Theme.Accent2)
-Create('TextLabel', {Parent = TopBar, BackgroundTransparency = 1, Size = UDim2.new(0, 200, 1, 0), Position = UDim2.new(0, 15, 0, 0), Font = Enum.Font.GothamBold, Text = 'NAZK HUB', TextColor3 = CONFIG.Theme.Text, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left})
-Create('TextLabel', {Parent = TopBar, BackgroundTransparency = 1, Size = UDim2.new(0, 250, 0, 18), Position = UDim2.new(0, 15, 0, 22), Font = Enum.Font.Gotham, Text = 'v8.1 Delta Full | ' .. player.Name, TextColor3 = CONFIG.Theme.TextDark, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Left})
-local CloseBtn = Create('TextButton', {Parent = TopBar, BackgroundColor3 = Color3.fromRGB(255, 50, 50), BorderSizePixel = 0, Size = UDim2.new(0, 28, 0, 28), Position = UDim2.new(1, -38, 0, 6), Font = Enum.Font.GothamBold, Text = 'X', TextColor3 = Color3.fromRGB(255, 255, 255), TextSize = 13, AutoButtonColor = false})
-AddCorner(CloseBtn, 8)
-CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
-MakeDraggable(MainFrame, TopBar)
-
-local TabHolder = Create('Frame', {Parent = MainFrame, BackgroundColor3 = CONFIG.Theme.Secondary, BorderSizePixel = 0, Size = UDim2.new(0, 120, 1, -40), Position = UDim2.new(0, 0, 0, 40)})
-local TabScroll = Create('ScrollingFrame', {Parent = TabHolder, BackgroundTransparency = 1, BorderSizePixel = 0, Size = UDim2.new(1, -4, 1, -8), Position = UDim2.new(0, 2, 0, 4), ScrollBarThickness = 4, ScrollBarImageColor3 = CONFIG.Theme.Accent, CanvasSize = UDim2.new(0, 0, 0, 0)})
-local tabListLayout = Create('UIListLayout', {Parent = TabScroll, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4)})
-Create('UIPadding', {Parent = TabScroll, PaddingLeft = UDim.new(0, 2), PaddingRight = UDim.new(0, 2), PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 2)})
-local TabContent = Create('Frame', {Parent = MainFrame, BackgroundTransparency = 1, Size = UDim2.new(1, -130, 1, -50), Position = UDim2.new(0, 125, 0, 45)})
-
-local Tabs = {}
-local CurrentTab = nil
-
-local function CreateTab(name, icon)
-    local btn = Create('TextButton', {Parent = TabScroll, BackgroundColor3 = CONFIG.Theme.Secondary, BorderSizePixel = 0, Size = UDim2.new(1, -4, 0, 32), Font = Enum.Font.GothamSemibold, Text = ' ' .. (icon or '!') .. ' ' .. name, TextColor3 = CONFIG.Theme.TextDark, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false})
-    AddCorner(btn, 6)
-    local content = Create('ScrollingFrame', {Parent = TabContent, BackgroundTransparency = 1, BorderSizePixel = 0, Size = UDim2.new(1, 0, 1, 0), ScrollBarThickness = 4, ScrollBarImageColor3 = CONFIG.Theme.Accent, CanvasSize = UDim2.new(0, 0, 0, 0), Visible = false})
-    local layout = Create('UIListLayout', {Parent = content, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10)})
-    Create('UIPadding', {Parent = content, PaddingLeft = UDim.new(0, 5), PaddingRight = UDim.new(0, 5), PaddingTop = UDim.new(0, 5), PaddingBottom = UDim.new(0, 5)})
-    table.insert(Tabs, {Button = btn, Content = content, Name = name})
-    btn.MouseButton1Click:Connect(function()
-        for _, tab in ipairs(Tabs) do
-            tab.Content.Visible = false
-            Tween(tab.Button, {BackgroundColor3 = CONFIG.Theme.Secondary, TextColor3 = CONFIG.Theme.TextDark}, 0.2)
-        end
-        content.Visible = true
-        Tween(btn, {BackgroundColor3 = CONFIG.Theme.Accent, TextColor3 = CONFIG.Theme.Text}, 0.2)
-        CurrentTab = name
-    end)
-    layout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
-        content.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
-    end)
-    return content
-end
-
-local function CreateSection(parent, title)
-    local section = Create('Frame', {Parent = parent, BackgroundColor3 = CONFIG.Theme.Secondary, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 30), AutomaticSize = Enum.AutomaticSize.Y})
-    AddCorner(section, 8)
-    AddStroke(section, CONFIG.Theme.Border, 1)
-    Create('TextLabel', {Parent = section, BackgroundTransparency = 1, Size = UDim2.new(1, -20, 0, 22), Position = UDim2.new(0, 10, 0, 4), Font = Enum.Font.GothamBold, Text = title, TextColor3 = CONFIG.Theme.Accent, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left})
-    local container = Create('Frame', {Parent = section, BackgroundTransparency = 1, Size = UDim2.new(1, -20, 0, 0), Position = UDim2.new(0, 10, 0, 26), AutomaticSize = Enum.AutomaticSize.Y})
-    Create('UIListLayout', {Parent = container, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 8)})
-    return section, container
-end
-
--- ============================================================
--- 🔧 FIXED SLIDER (Active + Touch support)
--- ============================================================
-local function CreateSlider(parent, name, min, max, default, callback, suffix)
-    local frame = Create('Frame', {Parent = parent, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 50)})
-    Create('TextLabel', {Parent = frame, BackgroundTransparency = 1, Size = UDim2.new(0.5, 0, 0, 20), Font = Enum.Font.Gotham, Text = name, TextColor3 = CONFIG.Theme.Text, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left})
-    local valueLabel = Create('TextLabel', {Parent = frame, BackgroundTransparency = 1, Size = UDim2.new(0.5, 0, 0, 20), Position = UDim2.new(0.5, 0, 0, 0), Font = Enum.Font.GothamBold, Text = tostring(default) .. (suffix or ''), TextColor3 = CONFIG.Theme.Accent, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Right})
-    local sliderBg = Create('Frame', {Parent = frame, BackgroundColor3 = CONFIG.Theme.Background, Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 0, 30), Active = true})  -- <-- HERE FIXED
-    AddCorner(sliderBg, 4)
-    local fill = Create('Frame', {Parent = sliderBg, BackgroundColor3 = CONFIG.Theme.Accent, Size = UDim2.new((default - min) / (max - min), 0, 1, 0)})
-    AddCorner(fill, 4)
-    AddGradient(fill, CONFIG.Theme.Accent, CONFIG.Theme.Accent2)
-    local knob = Create('Frame', {Parent = fill, BackgroundColor3 = CONFIG.Theme.Text, Size = UDim2.new(0, 14, 0, 14), Position = UDim2.new(1, -7, 0.5, -7), ZIndex = 2})
-    AddCorner(knob, 7)
-
-    local dragging = false
-    local function update(input)
-        local pos = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
-        local value = math.floor(min + (pos * (max - min)))
-        fill.Size = UDim2.new(pos, 0, 1, 0)
-        valueLabel.Text = tostring(value) .. (suffix or '')
-        if callback then callback(value) end
-    end
-
-    sliderBg.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            update(input)
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            update(input)
-        end
-    end)
-
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
-    end)
-
-    return frame
-end
-
-local function CreateToggle(parent, name, default, callback)
-    local frame = Create('Frame', {Parent = parent, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 30)})
-    Create('TextLabel', {Parent = frame, BackgroundTransparency = 1, Size = UDim2.new(0.7, 0, 1, 0), Font = Enum.Font.Gotham, Text = name, TextColor3 = CONFIG.Theme.Text, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left})
-    local btn = Create('TextButton', {Parent = frame, BackgroundColor3 = default and CONFIG.Theme.Accent or CONFIG.Theme.Background, Size = UDim2.new(0, 44, 0, 22), Position = UDim2.new(1, -44, 0.5, -11), Font = Enum.Font.GothamBold, Text = default and 'ON' or 'OFF', TextColor3 = CONFIG.Theme.Text, TextSize = 10, AutoButtonColor = false})
-    AddCorner(btn, 11)
-    local enabled = default
-    btn.MouseButton1Click:Connect(function()
-        enabled = not enabled
-        Tween(btn, {BackgroundColor3 = enabled and CONFIG.Theme.Accent or CONFIG.Theme.Background}, 0.2)
-        btn.Text = enabled and 'ON' or 'OFF'
-        if callback then callback(enabled) end
-    end)
-    return frame
-end
-
-local function CreateButton(parent, name, callback)
-    local btn = Create('TextButton', {Parent = parent, BackgroundColor3 = CONFIG.Theme.Accent, Size = UDim2.new(1, 0, 0, 32), Font = Enum.Font.GothamBold, Text = name, TextColor3 = CONFIG.Theme.Text, TextSize = 12, AutoButtonColor = false})
-    AddCorner(btn, 6)
-    AddGradient(btn, CONFIG.Theme.Accent, CONFIG.Theme.Accent2)
-    btn.MouseButton1Click:Connect(function()
-        Tween(btn, {BackgroundColor3 = Color3.fromRGB(255, 255, 255)}, 0.1)
-        task.delay(0.1, function()
-            Tween(btn, {BackgroundColor3 = CONFIG.Theme.Accent}, 0.1)
+            if data.DistLabel then
+                local myRoot = HRP()
+                local theirRoot = char:FindFirstChild("HumanoidRootPart")
+                if myRoot and theirRoot then
+                    local dist = (myRoot.Position - theirRoot.Position).Magnitude
+                    data.DistLabel.Text = math.floor(dist) .. " studs"
+                end
+            end
         end)
+        table.insert(data.Connections, conn)
+
+        -- تحديث الحجم عند تغيير Config.ESPSize
+        local sizeConn = RunService.Heartbeat:Connect(function()
+            if data.Billboard and data.BaseSize then
+                local newSize = UDim2.new(0, data.BaseSize.X.Offset * Config.ESPSize, 0, data.BaseSize.Y.Offset * Config.ESPSize)
+                data.Billboard.Size = newSize
+            end
+        end)
+        table.insert(data.Connections, sizeConn)
+    end
+
+    if targetPlayer.Character then setupCharacter(targetPlayer.Character) end
+    local charConn = targetPlayer.CharacterAdded:Connect(setupCharacter)
+    table.insert(data.Connections, charConn)
+end
+
+local function RemoveESPForPlayer(targetPlayer)
+    local data = ESP_Data[targetPlayer]
+    if not data then return end
+    for _, conn in ipairs(data.Connections) do pcall(conn.Disconnect, conn) end
+    if data.Highlight then data.Highlight:Destroy() end
+    if data.Billboard then data.Billboard:Destroy() end
+    ESP_Data[targetPlayer] = nil
+end
+
+local function UpdateESPSystem()
+    if Config.ESPEnabled then
+        for _, p in ipairs(Players:GetPlayers()) do CreateESPForPlayer(p) end
+        if ESP_PlayerAdded then pcall(ESP_PlayerAdded.Disconnect, ESP_PlayerAdded) end
+        if ESP_PlayerRemoving then pcall(ESP_PlayerRemoving.Disconnect, ESP_PlayerRemoving) end
+        ESP_PlayerAdded = Players.PlayerAdded:Connect(CreateESPForPlayer)
+        ESP_PlayerRemoving = Players.PlayerRemoving:Connect(RemoveESPForPlayer)
+    else
+        for p, _ in pairs(ESP_Data) do RemoveESPForPlayer(p) end
+        if ESP_PlayerAdded then pcall(ESP_PlayerAdded.Disconnect, ESP_PlayerAdded); ESP_PlayerAdded = nil end
+        if ESP_PlayerRemoving then pcall(ESP_PlayerRemoving.Disconnect, ESP_PlayerRemoving); ESP_PlayerRemoving = nil end
+    end
+end
+
+-- ============================================================
+-- نظام زراعة الصناديق (Chest Farm)
+-- ============================================================
+local chestFarmRunning = false
+local chestConnection = nil
+local visitedChests = {}
+local farmedCount = 0
+
+local function GetChests()
+    local chests = {}
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and obj.Name == "Chest" then
+            table.insert(chests, obj)
+        end
+    end
+    return chests
+end
+
+local function GetChestPos(chest)
+    if not chest then return nil end
+    if chest:IsA("Model") then
+        if chest.PrimaryPart then return chest.PrimaryPart.Position end
+        for _, part in ipairs(chest:GetDescendants()) do
+            if part:IsA("BasePart") then return part.Position end
+        end
+    elseif chest:IsA("BasePart") then
+        return chest.Position
+    end
+    return nil
+end
+
+local function IsVisited(pos)
+    for _, v in ipairs(visitedChests) do
+        if (v - pos).Magnitude < 25 then return true end
+    end
+    return false
+end
+
+local function SmoothFlyTo(targetPos, callback)
+    local root = HRP()
+    if not root then if callback then callback() end return end
+    if chestConnection then chestConnection:Disconnect(); chestConnection = nil end
+
+    local startCF = root.CFrame
+    local targetCF = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+    local distance = (startCF.Position - targetCF.Position).Magnitude
+    if distance < 5 then
+        root.CFrame = targetCF
+        root.AssemblyLinearVelocity = Vector3.zero
         if callback then callback() end
-    end)
-    return btn
-end
-
---// ============================================================
---// TABS (v8.1)
---// ============================================================
-local MainTab = CreateTab('Main', '>')
-local _, mainContainer = CreateSection(MainTab, 'Dash Settings')
-CreateSlider(mainContainer, 'Dash Power', 100, 1000, 300, function(val) CONFIG.DashPower = val end, ' Power')
-CreateSlider(mainContainer, 'Dash Duration', 5, 50, 10, function(val) CONFIG.DashDuration = val / 100 end, ' sec')
-CreateSlider(mainContainer, 'Dash Cooldown', 0, 20, 8, function(val) CONFIG.DashCooldown = val / 10 end, ' sec')
-
-local FarmTab = CreateTab('Farm', 'F')
-local _, farmContainer = CreateSection(FarmTab, 'Auto Farm')
-local FarmToggleBtn = Create('TextButton', {Parent = farmContainer, BackgroundColor3 = Color3.fromRGB(200, 50, 50), Size = UDim2.new(1, 0, 0, 42), Font = Enum.Font.GothamBold, Text = 'START AUTO FARM', TextColor3 = CONFIG.Theme.Text, TextSize = 14, AutoButtonColor = false})
-AddCorner(FarmToggleBtn, 8)
-local LevelCard = Create('Frame', {Parent = farmContainer, BackgroundColor3 = CONFIG.Theme.Background, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 28)})
-AddCorner(LevelCard, 6)
-AddStroke(LevelCard, CONFIG.Theme.Border, 1)
-local LevelLabel = Create('TextLabel', {Parent = LevelCard, BackgroundTransparency = 1, Size = UDim2.new(1, -12, 1, 0), Position = UDim2.new(0, 6, 0, 0), Font = Enum.Font.GothamBold, Text = 'Level: ...', TextColor3 = CONFIG.Theme.Text, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left})
-local TargetCard = Create('Frame', {Parent = farmContainer, BackgroundColor3 = CONFIG.Theme.Background, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 28)})
-AddCorner(TargetCard, 6)
-AddStroke(TargetCard, CONFIG.Theme.Border, 1)
-local TargetDot = Create('Frame', {Parent = TargetCard, BackgroundColor3 = Color3.fromRGB(150, 150, 150), BorderSizePixel = 0, Size = UDim2.new(0, 6, 0, 6), Position = UDim2.new(0, 8, 0.5, -3)})
-AddCorner(TargetDot, 3)
-local TargetStatus = Create('TextLabel', {Parent = TargetCard, BackgroundTransparency = 1, Size = UDim2.new(1, -24, 1, 0), Position = UDim2.new(0, 20, 0, 0), Font = Enum.Font.Gotham, Text = 'Target: IDLE', TextColor3 = CONFIG.Theme.TextDark, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left})
-
-local _, invContainer = CreateSection(FarmTab, 'Inventory & Auto Use')
-local InvScroll = Create('ScrollingFrame', {Parent = invContainer, BackgroundColor3 = CONFIG.Theme.Background, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 120), ScrollBarThickness = 4, ScrollBarImageColor3 = CONFIG.Theme.Accent, AutomaticCanvasSize = Enum.AutomaticSize.Y})
-AddCorner(InvScroll, 6)
-local InvListLayout = Create('UIListLayout', {Parent = InvScroll, Padding = UDim.new(0, 4), HorizontalAlignment = Enum.HorizontalAlignment.Center})
-local AutoUseToggle = Create('TextButton', {Parent = invContainer, BackgroundColor3 = Color3.fromRGB(60, 60, 75), Size = UDim2.new(1, 0, 0, 32), Font = Enum.Font.GothamBold, Text = 'Auto Use: OFF', TextColor3 = CONFIG.Theme.TextDark, TextSize = 12, AutoButtonColor = false})
-AddCorner(AutoUseToggle, 6)
-
-local hasArrived = false
-local isTargetingEnemy = false
-local currentTarget = nil
-local itemButtons = {}
-
-local function createItemButton(tool)
-    local btn = Create('TextButton', {Name = tool.Name, Parent = InvScroll, BackgroundColor3 = CONFIG.Theme.Secondary, Size = UDim2.new(1, -6, 0, 28), Font = Enum.Font.Gotham, Text = ' ' .. tool.Name, TextColor3 = CONFIG.Theme.Text, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, AutoButtonColor = false})
-    AddCorner(btn, 5)
-    btn.MouseButton1Click:Connect(function()
-        HazeConfig.SelectedItem = tool
-        for _, b in pairs(itemButtons) do
-            b.BackgroundColor3 = CONFIG.Theme.Secondary
-        end
-        btn.BackgroundColor3 = CONFIG.Theme.Accent
-    end)
-    table.insert(itemButtons, btn)
-    return btn
-end
-
-local function updateInventory()
-    for _, btn in pairs(itemButtons) do
-        btn:Destroy()
-    end
-    itemButtons = {}
-    local Backpack = player:WaitForChild('Backpack')
-    local Character = player.Character or player.CharacterAdded:Wait()
-    for _, tool in pairs(Backpack:GetChildren()) do
-        if tool:IsA('Tool') then
-            createItemButton(tool)
-        end
-    end
-    if Character then
-        for _, tool in pairs(Character:GetChildren()) do
-            if tool:IsA('Tool') then
-                local btn = createItemButton(tool)
-                btn.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
-                btn.Text = ' [Held] ' .. tool.Name
-            end
-        end
-    end
-end
-
-local function autoUseItem()
-    if not HazeConfig.SelectedItem then return end
-    local Character = player.Character
-    if not Character then return end
-    local Humanoid = Character:FindFirstChild('Humanoid')
-    if not Humanoid then return end
-    local tool = HazeConfig.SelectedItem
-    if tool.Parent == player:WaitForChild('Backpack') then
-        Humanoid:EquipTool(tool)
-        task.wait(0.15)
-    end
-    if tool.Parent == Character then
-        tool:Activate()
-    end
-end
-
-AutoUseToggle.MouseButton1Click:Connect(function()
-    if not HazeConfig.SelectedItem then
-        AutoUseToggle.Text = 'Pick an item first!'
-        task.wait(1)
-        AutoUseToggle.Text = 'Auto Use: OFF'
         return
     end
-    HazeConfig.AutoUse = not HazeConfig.AutoUse
-    if HazeConfig.AutoUse then
-        AutoUseToggle.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-        AutoUseToggle.Text = 'Auto Use: ON'
-        AutoUseToggle.TextColor3 = CONFIG.Theme.Text
-    else
-        AutoUseToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
-        AutoUseToggle.Text = 'Auto Use: OFF'
-        AutoUseToggle.TextColor3 = CONFIG.Theme.TextDark
-    end
-end)
+    local duration = math.max(distance / Config.FarmSpeed, 0.01)
+    local startTime = tick()
 
-local Backpack = player:WaitForChild('Backpack')
-Backpack.ChildAdded:Connect(updateInventory)
-Backpack.ChildRemoved:Connect(updateInventory)
-player.CharacterAdded:Connect(function(char)
-    updateInventory()
-    char.ChildAdded:Connect(function(c)
-        if c:IsA('Tool') then updateInventory() end
-    end)
-    char.ChildRemoved:Connect(function(c)
-        if c:IsA('Tool') then updateInventory() end
-    end)
-end)
-if player.Character then
-    player.Character.ChildAdded:Connect(function(c)
-        if c:IsA('Tool') then updateInventory() end
-    end)
-    player.Character.ChildRemoved:Connect(function(c)
-        if c:IsA('Tool') then updateInventory() end
-    end)
-end
-
-FarmToggleBtn.MouseButton1Click:Connect(function()
-    HazeConfig.AutoFarm = not HazeConfig.AutoFarm
-    if HazeConfig.AutoFarm then
-        FarmToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-        FarmToggleBtn.Text = 'AUTO FARM RUNNING'
-        if HazeConfig.SelectedItem and not HazeConfig.AutoUse then
-            HazeConfig.AutoUse = true
-            AutoUseToggle.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-            AutoUseToggle.Text = 'Auto Use: ON'
-            AutoUseToggle.TextColor3 = CONFIG.Theme.Text
-        end
-    else
-        hasArrived = false
-        isTargetingEnemy = false
-        currentTarget = nil
-        FarmToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        FarmToggleBtn.Text = 'START AUTO FARM'
-        local char = player.Character
-        if char then
-            local humanoid = char:FindFirstChild('Humanoid')
-            if humanoid then
-                humanoid.PlatformStand = false
-                humanoid.AutoRotate = true
-            end
-        end
-    end
-end)
-
-local StatsTab = CreateTab('Stats', 'S')
-local _, statsContainer = CreateSection(StatsTab, 'Auto Stats')
-CreateToggle(statsContainer, 'Auto Combat', false, function(state) HazeConfig.AutoCombat = state end)
-CreateToggle(statsContainer, 'Auto Defense', false, function(state) HazeConfig.AutoDefense = state end)
-CreateToggle(statsContainer, 'Auto Sword', false, function(state) HazeConfig.AutoSword = state end)
-CreateToggle(statsContainer, 'Auto Fruit', false, function(state) HazeConfig.AutoFruit = state end)
-
--- ============================================================
--- CHEST TAB (v8.1 GUI with v7.1 Logic)
--- ============================================================
-local ChestTab = CreateTab('Chest', 'C')
-local _, chestContainer = CreateSection(ChestTab, 'Chest Farm (v7.1 Logic)')
-
-local ChestToggleBtn = Create('TextButton', {Parent = chestContainer, BackgroundColor3 = Color3.fromRGB(200, 50, 50), Size = UDim2.new(1, 0, 0, 42), Font = Enum.Font.GothamBold, Text = 'START CHEST FARM', TextColor3 = CONFIG.Theme.Text, TextSize = 14, AutoButtonColor = false})
-AddCorner(ChestToggleBtn, 8)
-
-local ChestCountLabel = Create('TextLabel', {Parent = chestContainer, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 20), Font = Enum.Font.GothamBold, Text = 'Chests: 0', TextColor3 = CONFIG.Theme.Accent, TextSize = 12})
-
-CreateSlider(chestContainer, 'Farm Speed', 50, 500, 210, function(val)
-    ChestConfig.FarmSpeed = val
-end, ' Studs/s')
-
-ChestToggleBtn.MouseButton1Click:Connect(function()
-    ChestConfig.AutoChest = not ChestConfig.AutoChest
-    if ChestConfig.AutoChest then
-        ChestToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-        ChestToggleBtn.Text = 'CHEST FARM RUNNING'
-        startChestAuto()
-    else
-        ChestToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        ChestToggleBtn.Text = 'START CHEST FARM'
-        stopChestAuto()
-    end
-end)
-
--- M1 Tab
-local M1Tab = CreateTab('M1', 'M')
-local _, m1Container = CreateSection(M1Tab, 'Auto Click')
-local M1ToggleBtn = Create('TextButton', {Parent = m1Container, BackgroundColor3 = Color3.fromRGB(200, 50, 50), Size = UDim2.new(1, 0, 0, 42), Font = Enum.Font.GothamBold, Text = 'START AUTO CLICK', TextColor3 = CONFIG.Theme.Text, TextSize = 14, AutoButtonColor = false})
-AddCorner(M1ToggleBtn, 8)
-CreateSlider(m1Container, 'Click Delay', 1, 50, 10, function(val) M1Config.ClickDelay = val / 100 end, ' sec')
-M1ToggleBtn.MouseButton1Click:Connect(function()
-    M1Config.AutoClick = not M1Config.AutoClick
-    if M1Config.AutoClick then
-        M1ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-        M1ToggleBtn.Text = 'AUTO CLICK RUNNING'
-    else
-        M1ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        M1ToggleBtn.Text = 'START AUTO CLICK'
-    end
-end)
-
-local VisualTab = CreateTab('Visual', 'V')
-local _, visualContainer = CreateSection(VisualTab, 'Visual Settings')
-CreateToggle(visualContainer, 'ESP Fruit Drop', false, function(enabled) SetFruitDropESP(enabled) end)
-CreateToggle(visualContainer, 'ESP Fruit Spawn', false, function(enabled) SetFruitSpawnESP(enabled) end)
-CreateToggle(visualContainer, 'Full Bright', false, function(enabled)
-    if enabled then
-        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-        Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-        Lighting.GlobalShadows = false
-    else
-        Lighting.Ambient = Color3.fromRGB(128, 128, 128)
-        Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
-        Lighting.GlobalShadows = true
-    end
-end)
-
-local ServerHopTab = CreateTab('ServerHop', 'H')
-local _, shContainer = CreateSection(ServerHopTab, 'Server Hopper')
-local SH_StatusFrame = Create('Frame', {Parent = shContainer, BackgroundColor3 = CONFIG.Theme.Secondary, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 80)})
-AddCorner(SH_StatusFrame, 10)
-AddStroke(SH_StatusFrame, CONFIG.Theme.Accent, 1)
-local SH_StatusIcon = Create('TextLabel', {Parent = SH_StatusFrame, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 30), Position = UDim2.new(0, 0, 0, 8), Font = Enum.Font.GothamBlack, Text = 'WEB', TextColor3 = CONFIG.Theme.Accent, TextSize = 28})
-local SH_StatusText = Create('TextLabel', {Parent = SH_StatusFrame, BackgroundTransparency = 1, Size = UDim2.new(1, -20, 0, 20), Position = UDim2.new(0, 10, 0, 38), Font = Enum.Font.GothamBold, Text = 'Ready to Hop', TextColor3 = CONFIG.Theme.Text, TextSize = 14})
-local SH_StatusSub = Create('TextLabel', {Parent = SH_StatusFrame, BackgroundTransparency = 1, Size = UDim2.new(1, -20, 0, 18), Position = UDim2.new(0, 10, 0, 58), Font = Enum.Font.Gotham, Text = 'Find servers with low player count', TextColor3 = CONFIG.Theme.TextDark, TextSize = 11})
-CreateSlider(shContainer, 'Max Players', 1, 10, 1, function(val) SH_Config.MaxPlayers = val end, ' Players')
-CreateButton(shContainer, 'Hop to Low Player Server', function()
-    SH_StatusText.Text = 'Searching...'
-    SH_StatusSub.Text = 'Looking for servers with <= ' .. SH_Config.MaxPlayers .. ' players'
-    SH_StatusText.TextColor3 = CONFIG.Theme.Accent
-    task.spawn(function() serverHop() end)
-end)
-CreateButton(shContainer, 'Hop to Random Server', function()
-    SH_StatusText.Text = 'Searching...'
-    SH_StatusSub.Text = 'Picking a random server...'
-    SH_StatusText.TextColor3 = CONFIG.Theme.Accent
-    task.spawn(function() serverHopRandom() end)
-end)
-CreateButton(shContainer, 'Rejoin Current Server', function()
-    SH_StatusText.Text = 'Rejoining...'
-    SH_StatusSub.Text = 'Teleporting to current server...'
-    TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
-end)
-
-local SeaBeastTab = CreateTab('SeaBeast', 'B')
-local _, sbContainer = CreateSection(SeaBeastTab, 'Sea Beast Farm')
-local SB_StatusFrame = Create('Frame', {Parent = sbContainer, BackgroundColor3 = CONFIG.Theme.Secondary, BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 80)})
-AddCorner(SB_StatusFrame, 10)
-AddStroke(SB_StatusFrame, CONFIG.Theme.Accent, 1)
-local SB_StatusIcon = Create('TextLabel', {Parent = SB_StatusFrame, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 30), Position = UDim2.new(0, 0, 0, 8), Font = Enum.Font.GothamBlack, Text = 'WAVE', TextColor3 = CONFIG.Theme.Accent, TextSize = 28})
-local SB_StatusText = Create('TextLabel', {Parent = SB_StatusFrame, BackgroundTransparency = 1, Size = UDim2.new(1, -20, 0, 20), Position = UDim2.new(0, 10, 0, 38), Font = Enum.Font.GothamBold, Text = 'Sea Beast Farm Ready', TextColor3 = CONFIG.Theme.Text, TextSize = 14})
-local SB_StatusSub = Create('TextLabel', {Parent = SB_StatusFrame, BackgroundTransparency = 1, Size = UDim2.new(1, -20, 0, 18), Position = UDim2.new(0, 10, 0, 58), Font = Enum.Font.Gotham, Text = 'Auto-find and farm Sea Beasts', TextColor3 = CONFIG.Theme.TextDark, TextSize = 11})
-CreateSlider(sbContainer, 'Farm Speed', 50, 500, 225, function(val) SB_Config.FarmSpeed = val end, ' Studs/s')
-CreateSlider(sbContainer, 'Attack Distance', 10, 100, 40, function(val) SB_Config.AttackDistance = val end, ' Studs')
-CreateToggle(sbContainer, 'Auto Attack', true, function(enabled) SB_Config.AutoAttack = enabled end)
-CreateToggle(sbContainer, 'Auto Equip Weapon', true, function(enabled) SB_Config.AutoEquip = enabled end)
-local SB_ToggleBtn = Create('TextButton', {Parent = sbContainer, BackgroundColor3 = CONFIG.Theme.Accent, Size = UDim2.new(1, 0, 0, 36), Font = Enum.Font.GothamBold, Text = 'START SEA BEAST FARM', TextColor3 = CONFIG.Theme.Text, TextSize = 12, AutoButtonColor = false})
-AddCorner(SB_ToggleBtn, 6)
-AddGradient(SB_ToggleBtn, CONFIG.Theme.Accent, CONFIG.Theme.Accent2)
-SB_ToggleBtn.MouseButton1Click:Connect(function()
-    SB_Config.Enabled = not SB_Config.Enabled
-    if SB_Config.Enabled then
-        SB_ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 255, 100)
-        SB_ToggleBtn.Text = 'STOP SEA BEAST FARM'
-        SB_StatusText.Text = 'Farming Sea Beasts...'
-        SB_StatusText.TextColor3 = Color3.fromRGB(100, 255, 100)
-        SB_StatusSub.Text = 'Searching for Sea Beasts...'
-        task.spawn(StartSeaBeastFarm)
-    else
-        SB_ToggleBtn.BackgroundColor3 = CONFIG.Theme.Accent
-        SB_ToggleBtn.Text = 'START SEA BEAST FARM'
-        SB_StatusText.Text = 'Sea Beast Farm Ready'
-        SB_StatusText.TextColor3 = CONFIG.Theme.Text
-        SB_StatusSub.Text = 'Goes to Sea Beast BODY (not spawn point)'
-        StopSeaBeastFarm()
-    end
-end)
-
-local MiscTab = CreateTab('Misc', '*')
-local _, miscContainer = CreateSection(MiscTab, 'Physics & Utilities')
-CreateSlider(miscContainer, 'Gravity', 0, 500, 196, function(val) workspace.Gravity = val end, ' Studs/s2')
-CreateToggle(miscContainer, 'No Clip', false, function(enabled)
-    if enabled then
-        _G.NoclipConnection = RunService.Stepped:Connect(function()
-            local char = player.Character
-            if char then
-                for _, part in ipairs(char:GetDescendants()) do
-                    if part:IsA('BasePart') then
-                        part.CanCollide = false
-                    end
-                end
-            end
-        end)
-    else
-        if _G.NoclipConnection then _G.NoclipConnection:Disconnect() end
-    end
-end)
-CreateToggle(miscContainer, 'Anti AFK', true, function(enabled)
-    if enabled then
-        local vu = game:GetService('VirtualUser')
-        player.Idled:Connect(function()
-            vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-            task.wait(1)
-            vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-        end)
-    end
-end)
-CreateToggle(miscContainer, 'Water Barrier', false, function(enabled)
-    if enabled then
-        _G.WaterBarrier = Instance.new('Part')
-        _G.WaterBarrier.Name = 'NAZK_WaterBarrier'
-        _G.WaterBarrier.Size = Vector3.new(50, 1, 50)
-        _G.WaterBarrier.Transparency = 1
-        _G.WaterBarrier.CanCollide = true
-        _G.WaterBarrier.Anchored = true
-        _G.WaterBarrier.Parent = workspace
-        local waterLevel = 0.5
-        _G.WaterBarrierConn = RunService.Heartbeat:Connect(function()
-            local char = player.Character
-            local hrp = char and char:FindFirstChild('HumanoidRootPart')
-            if hrp and _G.WaterBarrier and _G.WaterBarrier.Parent then
-                _G.WaterBarrier.CFrame = CFrame.new(hrp.Position.X, waterLevel, hrp.Position.Z)
-            end
-        end)
-    else
-        if _G.WaterBarrierConn then
-            _G.WaterBarrierConn:Disconnect()
-            _G.WaterBarrierConn = nil
-        end
-        if _G.WaterBarrier then
-            _G.WaterBarrier:Destroy()
-            _G.WaterBarrier = nil
-        end
-    end
-end)
-
-local SettingsTab = CreateTab('Settings', 'S')
-local _, settingsContainer = CreateSection(SettingsTab, 'UI Settings')
-CreateButton(settingsContainer, 'Destroy UI', function()
-    ScreenGui:Destroy()
-    DashGui:Destroy()
-end)
-CreateButton(settingsContainer, 'Rejoin Server', function()
-    game:GetService('TeleportService'):Teleport(game.PlaceId, player)
-end)
-
-if Tabs[1] then
-    Tabs[1].Button.BackgroundColor3 = CONFIG.Theme.Accent
-    Tabs[1].Button.TextColor3 = CONFIG.Theme.Text
-    Tabs[1].Content.Visible = true
-    CurrentTab = Tabs[1].Name
-end
-
-local FloatGui = Create('ScreenGui', {Name = 'NAZK_Float', Parent = player:WaitForChild('PlayerGui'), ResetOnSpawn = false})
-local FloatBtn = Create('TextButton', {Parent = FloatGui, BackgroundColor3 = CONFIG.Theme.Accent, Size = UDim2.new(0, 50, 0, 50), Position = UDim2.new(0, 20, 0.5, -25), Font = Enum.Font.GothamBold, Text = 'NAZK', TextColor3 = CONFIG.Theme.Text, TextSize = 12, AutoButtonColor = false})
-AddCorner(FloatBtn, 25)
-AddStroke(FloatBtn, CONFIG.Theme.Accent2, 2)
-FloatBtn.MouseButton1Click:Connect(function()
-    MainFrame.Visible = not MainFrame.Visible
-    if MainFrame.Visible then
-        MainFrame.Size = UDim2.new(0, 0, 0, 0)
-        MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-        Tween(MainFrame, {Size = UDim2.new(0, 520, 0, 380), Position = UDim2.new(0.5, -260, 0.5, -190)}, 0.3)
-    end
-end)
-MakeDraggable(FloatBtn, FloatBtn)
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if not gameProcessed and input.KeyCode == Enum.KeyCode.Insert then
-        MainFrame.Visible = not MainFrame.Visible
-        if MainFrame.Visible then
-            MainFrame.Size = UDim2.new(0, 0, 0, 0)
-            Tween(MainFrame, {Size = UDim2.new(0, 520, 0, 380), Position = UDim2.new(0.5, -260, 0.5, -190)}, 0.3)
-        end
-    end
-end)
-
---// ============================================================
---// LOOPS
---// ============================================================
-task.spawn(function()
-    while task.wait(0.5) do
-        local level = GetLevel()
-        LevelLabel.Text = 'Level: ' .. tostring(level)
-    end
-end)
-
-task.spawn(function()
-    while task.wait(1) do
-        if HazeConfig.AutoFarm and not hasArrived then
-            local level = GetLevel()
-            local position = GetLevelLocation(level)
-            if position then
-                TweenTo(position)
-            end
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(1) do
-        if HazeConfig.AutoFarm then
-            TakeBestQuest()
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.3) do
-        if HazeConfig.AutoUse then
-            pcall(autoUseItem)
-        end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.5) do
-        if HazeConfig.AutoCombat then UpgradeStat('Combat') end
-    end
-end)
-task.spawn(function()
-    while task.wait(0.5) do
-        if HazeConfig.AutoDefense then UpgradeStat('Defense') end
-    end
-end)
-task.spawn(function()
-    while task.wait(0.5) do
-        if HazeConfig.AutoSword then UpgradeStat('Sword') end
-    end
-end)
-task.spawn(function()
-    while task.wait(0.5) do
-        if HazeConfig.AutoFruit then UpgradeStat('Fruit') end
-    end
-end)
-
-task.spawn(function()
-    while task.wait(0.3) do
-        ChestCountLabel.Text = 'Chests: ' .. ChestConfig.farmedCount
-    end
-end)
-
-task.spawn(function()
-    while task.wait(M1Config.ClickDelay) do
-        if M1Config.AutoClick then
-            pcall(M1Attack)
-        end
-    end
-end)
-
-RunService.Heartbeat:Connect(function()
-    local character = player.Character
-    local root = character and character:FindFirstChild('HumanoidRootPart')
-    local humanoid = character and character:FindFirstChild('Humanoid')
-    if not root or not humanoid then return end
-
-    if not HazeConfig.AutoFarm then
-        hasArrived = false
-        isTargetingEnemy = false
-        currentTarget = nil
-        humanoid.PlatformStand = false
-        humanoid.AutoRotate = true
-        TargetStatus.Text = 'Target: OFF'
-        TargetStatus.TextColor3 = CONFIG.Theme.TextDark
-        TargetDot.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
-        return
-    end
-
-    local level = GetLevel()
-    local targetPos = GetLevelLocation(level)
-    if hasArrived and targetPos then
-        local distToLoc = (root.Position - targetPos).Magnitude
-        if distToLoc > 100 then
-            hasArrived = false
-            isTargetingEnemy = false
-            currentTarget = nil
-            humanoid.PlatformStand = false
-            humanoid.AutoRotate = true
+    chestConnection = RunService.Heartbeat:Connect(function()
+        if not root or not root.Parent then
+            chestConnection:Disconnect()
+            chestConnection = nil
+            if callback then callback() end
             return
         end
+        local elapsed = tick() - startTime
+        local alpha = elapsed / duration
+        if alpha >= 1 then
+            root.CFrame = targetCF
+            root.AssemblyLinearVelocity = Vector3.zero
+            chestConnection:Disconnect()
+            chestConnection = nil
+            if callback then callback() end
+            return
+        end
+        alpha = alpha * alpha * (3 - 2 * alpha)
+        root.CFrame = startCF:Lerp(targetCF, alpha)
+        root.AssemblyLinearVelocity = Vector3.zero
+    end)
+end
+
+local function StartChestFarm()
+    if chestFarmRunning then return end
+    chestFarmRunning = true
+    visitedChests = {}
+    farmedCount = 0
+    Notify("Chest Farm", "Started")
+
+    local function NextChest()
+        if not chestFarmRunning then return end
+        local chests = GetChests()
+        if #chests == 0 then
+            task.wait(1)
+            task.defer(NextChest)
+            return
+        end
+        local root = HRP()
+        if not root then task.wait(1); task.defer(NextChest); return end
+
+        local best = nil
+        local bestDist = math.huge
+        for _, chest in ipairs(chests) do
+            local pos = GetChestPos(chest)
+            if pos and not IsVisited(pos) then
+                local d = (root.Position - pos).Magnitude
+                if d < bestDist then
+                    bestDist = d
+                    best = chest
+                end
+            end
+        end
+        if not best then
+            -- إعادة ضبط الزيارة إذا لم يتبق صناديق جديدة
+            visitedChests = {}
+            for _, chest in ipairs(chests) do
+                local pos = GetChestPos(chest)
+                if pos then
+                    local d = (root.Position - pos).Magnitude
+                    if d < bestDist then
+                        bestDist = d
+                        best = chest
+                    end
+                end
+            end
+        end
+        if not best then
+            task.wait(1)
+            task.defer(NextChest)
+            return
+        end
+
+        local pos = GetChestPos(best)
+        if pos then
+            table.insert(visitedChests, pos)
+            farmedCount = farmedCount + 1
+            Config.FarmedCount = farmedCount
+            SmoothFlyTo(pos, function()
+                if chestFarmRunning then task.defer(NextChest) end
+            end)
+        else
+            task.wait(1)
+            task.defer(NextChest)
+        end
     end
 
-    if not hasArrived then
-        if targetPos then
-            local dist = (root.Position - targetPos).Magnitude
-            if dist <= HazeConfig.ArrivalDistance then
-                hasArrived = true
+    NextChest()
+end
+
+local function StopChestFarm()
+    chestFarmRunning = false
+    if chestConnection then chestConnection:Disconnect(); chestConnection = nil end
+    Config.ChestFarm = false
+    Notify("Chest Farm", "Stopped")
+end
+
+-- ============================================================
+-- نظام وحش البحر (Sea Beast)
+-- ============================================================
+local seaBeastRunning = false
+local seaChaseConn = nil
+local seaAttackConn = nil
+local seaCurrentTarget = nil
+local seaBeastNames = {
+    "Sea Beast1", "Sea Beast", "Sea_Beast", "SeaBeast",
+    "SeaBeast1", "Sea_Beast1", "Sea_Beast2", "SeaBeast2", "SeaBeast3"
+}
+
+local function IsRealSeaBeast(obj)
+    if not obj or not obj:IsA("Model") then return false end
+    local name = obj.Name
+    for _, pattern in ipairs(seaBeastNames) do
+        if name == pattern or name:find("Sea Beast") or name:find("SeaBeast") or name:find("Sea_Beast") then
+            if not name:find("SpawnPoint") and not name:find("Spawn") and not name:find("Spawner") and not name:find("Indicator") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function ScanBeasts()
+    local beasts = {}
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if IsRealSeaBeast(obj) then table.insert(beasts, obj) end
+    end
+    return beasts
+end
+
+local function GetBeastBodyPart(obj)
+    if obj.PrimaryPart then return obj.PrimaryPart end
+    local biggest = nil
+    local maxSize = 0
+    for _, p in ipairs(obj:GetDescendants()) do
+        if p:IsA("BasePart") then
+            local size = p.Size.X * p.Size.Y * p.Size.Z
+            if size > maxSize then maxSize = size; biggest = p end
+        end
+    end
+    return biggest
+end
+
+local function SeaAttack()
+    local char = Character()
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then
+        local bp = player:FindFirstChild("Backpack")
+        if bp then
+            for _, t in ipairs(bp:GetChildren()) do
+                if t:IsA("Tool") then t.Parent = char; task.wait(0.05); break end
+            end
+        end
+    end
+    tool = char:FindFirstChildOfClass("Tool")
+    if tool then pcall(tool.Activate, tool) end
+    pcall(function() if mouse1click then mouse1click() end end)
+end
+
+local function StartSeaChase(beastPart)
+    if seaChaseConn then seaChaseConn:Disconnect(); seaChaseConn = nil end
+    seaChaseConn = RunService.Heartbeat:Connect(function()
+        if not seaBeastRunning or not Config.SeaBeastEnabled then
+            seaChaseConn:Disconnect(); seaChaseConn = nil; return
+        end
+        if not beastPart or not beastPart.Parent then
+            seaCurrentTarget = nil
+            if seaChaseConn then seaChaseConn:Disconnect(); seaChaseConn = nil end
+            return
+        end
+        local root = HRP()
+        if not root then return end
+        local targetPos = beastPart.Position + Vector3.new(0, 8, 0)
+        if targetPos.Y < 10 then targetPos = Vector3.new(targetPos.X, 10, targetPos.Z) end
+        root.CFrame = CFrame.new(targetPos, beastPart.Position)
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.RotVelocity = Vector3.zero
+    end)
+end
+
+local function StartSeaAttackLoop()
+    if seaAttackConn then seaAttackConn:Disconnect(); seaAttackConn = nil end
+    seaAttackConn = RunService.Heartbeat:Connect(function()
+        if not seaBeastRunning or not Config.SeaBeastEnabled or not seaCurrentTarget then return end
+        if Config.AutoAttack then SeaAttack() end
+    end)
+end
+
+local function SeaBeastLoop()
+    while seaBeastRunning and Config.SeaBeastEnabled do
+        if seaCurrentTarget and seaCurrentTarget.Parent then
+            local part = GetBeastBodyPart(seaCurrentTarget)
+            if part then
+                if not seaChaseConn then StartSeaChase(part) end
+                if not seaAttackConn then StartSeaAttackLoop() end
+                task.wait(0.5)
             else
-                TargetStatus.Text = 'En Route (' .. math.floor(dist) .. ')'
-                TargetStatus.TextColor3 = Color3.fromRGB(255, 200, 0)
-                TargetDot.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
-                return
+                seaCurrentTarget = nil
+                if seaChaseConn then seaChaseConn:Disconnect(); seaChaseConn = nil end
+                task.wait(0.5)
             end
         else
-            return
-        end
-    end
-
-    local targetHRP = nil
-    if currentTarget and currentTarget.Parent then
-        if not Players:GetPlayerFromCharacter(currentTarget.Parent) then
-            local targetHumanoid = currentTarget.Parent:FindFirstChild('Humanoid')
-            if targetHumanoid and targetHumanoid.Health > 0 then
-                local dist = (root.Position - currentTarget.Position).Magnitude
-                if dist <= HazeConfig.TargetRange * 2 then
-                    targetHRP = currentTarget
+            if seaChaseConn then seaChaseConn:Disconnect(); seaChaseConn = nil end
+            if seaAttackConn then seaAttackConn:Disconnect(); seaAttackConn = nil end
+            local beasts = ScanBeasts()
+            if #beasts == 0 then
+                task.wait(1)
+            else
+                local root = HRP()
+                local closest = nil
+                local minDist = math.huge
+                for _, b in ipairs(beasts) do
+                    local part = GetBeastBodyPart(b)
+                    if part and root then
+                        local d = (root.Position - part.Position).Magnitude
+                        if d < minDist then minDist = d; closest = b end
+                    end
                 end
+                if closest then
+                    local part = GetBeastBodyPart(closest)
+                    if part then
+                        seaCurrentTarget = closest
+                        StartSeaChase(part)
+                        StartSeaAttackLoop()
+                    end
+                end
+                task.wait(0.5)
             end
         end
     end
-    if not targetHRP then
-        targetHRP = GetNearestTarget()
-        currentTarget = targetHRP
-    end
+end
 
-    if targetHRP then
-        isTargetingEnemy = true
-        humanoid.PlatformStand = true
-        humanoid.AutoRotate = false
-        local aboveHead = targetHRP.Position + Vector3.new(0, HazeConfig.TargetHeight, 0)
-        root.CFrame = CFrame.new(aboveHead, targetHRP.Position) * CFrame.Angles(math.rad(90), 0, 0)
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.AssemblyAngularVelocity = Vector3.zero
-        TargetStatus.Text = 'LOCKED (' .. math.floor((root.Position - targetHRP.Position).Magnitude) .. ')'
-        TargetStatus.TextColor3 = Color3.fromRGB(255, 80, 80)
-        TargetDot.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+local function StartSeaBeastFarm()
+    if seaBeastRunning then return end
+    seaBeastRunning = true
+    Config.SeaBeastEnabled = true
+    Notify("Sea Beast", "Started")
+    task.spawn(SeaBeastLoop)
+end
+
+local function StopSeaBeastFarm()
+    seaBeastRunning = false
+    Config.SeaBeastEnabled = false
+    seaCurrentTarget = nil
+    if seaChaseConn then seaChaseConn:Disconnect(); seaChaseConn = nil end
+    if seaAttackConn then seaAttackConn:Disconnect(); seaAttackConn = nil end
+    Notify("Sea Beast", "Stopped")
+end
+
+-- ============================================================
+-- نظام السيرفر (Server Hop)
+-- ============================================================
+local HttpService = game:GetService("HttpService")
+local placeId = game.PlaceId
+local jobId = game.JobId
+local visitedServers = {}
+
+local function GetServers(cursor)
+    local url = ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100"):format(placeId)
+    if cursor then url = url .. "&cursor=" .. cursor end
+    local success, result = pcall(function() return game:HttpGet(url) end)
+    if success then return HttpService:JSONDecode(result) end
+    return nil
+end
+
+local function FindLowPlayerServer()
+    local allServers = {}
+    local cursor = nil
+    for _ = 1, 5 do
+        local data = GetServers(cursor)
+        if not data then break end
+        for _, server in ipairs(data.data) do
+            if server.id ~= jobId and server.playing <= Config.MaxPlayers and not visitedServers[server.id] then
+                table.insert(allServers, server)
+            end
+        end
+        cursor = data.nextPageCursor
+        if not cursor then break end
+        task.wait(0.1)
+        if #allServers >= 10 then break end
+    end
+    table.sort(allServers, function(a,b) return a.playing < b.playing end)
+    return allServers
+end
+
+local function ServerHop()
+    if isHopping then return end
+    isHopping = true
+    local servers = FindLowPlayerServer()
+    if #servers > 0 then
+        local target = servers[1]
+        visitedServers[target.id] = true
+        TeleportService:TeleportToPlaceInstance(placeId, target.id, player)
     else
-        isTargetingEnemy = false
-        currentTarget = nil
-        humanoid.PlatformStand = false
-        humanoid.AutoRotate = true
-        TargetStatus.Text = 'SCANNING...'
-        TargetStatus.TextColor3 = Color3.fromRGB(255, 200, 0)
-        TargetDot.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
+        Notify("Server Hop", "No suitable server found")
+        isHopping = false
+    end
+end
+
+-- ============================================================
+-- بناء واجهة FluentPro
+-- ============================================================
+local Window = Fluent:CreateWindow({
+    Title = "NAZK HUB",
+    SubTitle = "FluentPro Full Showcase",
+    TabWidth = 165,
+    Size = UDim2.fromOffset(650, 520),
+    Acrylic = true,
+    Theme = "AMOLED",
+    MinimizeKey = Enum.KeyCode.Insert,
+    Search = true,
+})
+
+-- زر دائري عائم لإخفاء القائمة وإظهارها مجدداً
+local MenuVisible = true
+local ToggleGui = Instance.new("ScreenGui")
+ToggleGui.Name = "NAZK_MenuToggle"
+ToggleGui.ResetOnSpawn = false
+ToggleGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local function GetGuiParent()
+    local gethui = gethui or get_hidden_gui
+    if gethui then
+        local ok, hiddenGui = pcall(gethui)
+        if ok and hiddenGui then return hiddenGui end
+    end
+    return player:WaitForChild("PlayerGui")
+end
+
+ToggleGui.Parent = GetGuiParent()
+
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Name = "NButton"
+ToggleButton.Parent = ToggleGui
+ToggleButton.Size = UDim2.fromOffset(52, 52)
+ToggleButton.Position = UDim2.new(0, 22, 0, 68)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+ToggleButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+ToggleButton.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextStrokeTransparency = 0
+ToggleButton.Text = "N"
+ToggleButton.TextSize = 23
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.AutoButtonColor = false
+ToggleButton.ZIndex = 100
+
+local ToggleGradient = Instance.new("UIGradient")
+ToggleGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(38, 38, 42)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(10, 10, 12)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0)),
+})
+ToggleGradient.Rotation = 135
+ToggleGradient.Parent = ToggleButton
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(1, 0)
+ToggleCorner.Parent = ToggleButton
+
+local ToggleStroke = Instance.new("UIStroke")
+ToggleStroke.Color = Color3.fromRGB(105, 105, 112)
+ToggleStroke.Thickness = 2
+ToggleStroke.Transparency = 0.1
+ToggleStroke.Parent = ToggleButton
+
+local ToggleShadow = Instance.new("UIStroke")
+ToggleShadow.Color = Color3.fromRGB(0, 0, 0)
+ToggleShadow.Thickness = 5
+ToggleShadow.Transparency = 0.45
+ToggleShadow.Parent = ToggleButton
+
+local function SetMenuVisible(visible)
+    MenuVisible = visible
+
+    -- Root هو العنصر الرئيسي في FluentPro؛ نستخدم Minimize كخطة بديلة
+    local root = Window.Root or Window.Main or Window.Window
+    if root and root:IsA("GuiObject") then
+        root.Visible = visible
+    elseif Window.Minimize then
+        pcall(function() Window:Minimize() end)
+    end
+
+    ToggleButton.Text = "N"
+end
+
+-- سحب الزر بالماوس أو اللمس
+local dragging = false
+local dragInput = nil
+local dragStart = nil
+local startPosition = nil
+local movedDuringDrag = false
+
+ToggleButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        movedDuringDrag = false
+        dragStart = input.Position
+        startPosition = ToggleButton.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
     end
 end)
 
-updateInventory()
-player.CharacterAdded:Connect(function(char)
-    task.delay(0.5, function()
-        if ChestConfig.AutoChest then startChestAuto() end
-    end)
-    task.delay(1, function()
-        if SB_Config.Enabled then StartSeaBeastFarm() end
-    end)
+ToggleButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
 end)
 
-print('[NAZK HUB v8.1 + Chest v7.1 Logic + Fixed Sliders] Loaded! Welcome, ' .. player.Name)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        if math.abs(delta.X) > 4 or math.abs(delta.Y) > 4 then
+            movedDuringDrag = true
+        end
+        ToggleButton.Position = UDim2.new(
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
+        )
+    end
+end)
+
+ToggleButton.MouseButton1Click:Connect(function()
+    if not movedDuringDrag then
+        SetMenuVisible(not MenuVisible)
+    end
+end)
+
+-- زر Dash عائم في الجهة اليمنى بنفس التصميم الأسود والحواف البيضاء
+local DashButton = Instance.new("TextButton")
+DashButton.Name = "DashButton"
+DashButton.Parent = ToggleGui
+DashButton.Size = UDim2.fromOffset(78, 48)
+DashButton.Position = UDim2.new(1, -100, 0, 68)
+DashButton.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+DashButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+DashButton.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+DashButton.TextStrokeTransparency = 0
+DashButton.Text = "Dash"
+DashButton.TextSize = 18
+DashButton.Font = Enum.Font.GothamBold
+DashButton.AutoButtonColor = false
+DashButton.ZIndex = 100
+
+local DashGradient = ToggleGradient:Clone()
+DashGradient.Parent = DashButton
+local DashCorner = Instance.new("UICorner")
+DashCorner.CornerRadius = UDim.new(0, 18)
+DashCorner.Parent = DashButton
+local DashStroke = Instance.new("UIStroke")
+DashStroke.Color = Color3.fromRGB(255, 255, 255)
+DashStroke.Thickness = 2
+DashStroke.Transparency = 0
+DashStroke.Parent = DashButton
+local DashShadow = ToggleShadow:Clone()
+DashShadow.Parent = DashButton
+
+DashButton.MouseButton1Click:Connect(DoDash)
+
+-- الترحيب
+Fluent:Notify({ Title = "NAZK HUB", Content = "FluentPro interface loaded successfully.", Duration = 4 })
+
+-- ============================================================
+-- تبويب الرئيسي (Main)
+-- ============================================================
+local MainTab = Window:AddTab({ Title = "Main", Icon = "solar/home-bold" })
+MainTab:AddParagraph({ Title = "NAZK HUB", Content = "Premium FluentPro showcase with full features." })
+
+MainTab:AddSection("Dash Settings")
+MainTab:AddSlider("DashPower", {
+    Title = "Dash Power",
+    Default = Config.DashPower,
+    Min = 100, Max = 1000, Rounding = 0,
+    Callback = function(v) Config.DashPower = v end
+})
+MainTab:AddSlider("DashDuration", {
+    Title = "Dash Duration (x0.01)",
+    Default = 10,
+    Min = 1, Max = 50, Rounding = 0,
+    Callback = function(v) Config.DashDuration = v / 100 end
+})
+MainTab:AddSlider("DashCooldown", {
+    Title = "Dash Cooldown (x0.1)",
+    Default = 8,
+    Min = 0, Max = 20, Rounding = 0,
+    Callback = function(v) Config.DashCooldown = v / 10 end
+})
+MainTab:AddButton({
+    Title = "Test Dash",
+    Icon = "solar/bolt-bold",
+    Callback = DoDash
+})
+
+-- ============================================================
+-- تبويب المرئيات (Visual)
+-- ============================================================
+local VisualTab = Window:AddTab({ Title = "Visual", Icon = "solar/eye-bold" })
+VisualTab:AddSection("ESP Settings")
+VisualTab:AddDropdown("ESPStyle", {
+    Title = "ESP Style",
+    Values = { "v1 - Classic Card", "v2 - Minimalist", "v3 - Box Style", "v4 - Neon Glow" },
+    Default = "v1 - Classic Card",
+    Callback = function(v)
+        Config.ESPStyle = v:sub(1,2)
+        -- إعادة إنشاء الـ ESP بالنمط الجديد
+        if Config.ESPEnabled then
+            for p, _ in pairs(ESP_Data) do RemoveESPForPlayer(p) end
+            UpdateESPSystem()
+        end
+    end
+})
+VisualTab:AddSlider("ESPSize", {
+    Title = "ESP Size (%)",
+    Default = 100,
+    Min = 50, Max = 200, Rounding = 0,
+    Callback = function(v)
+        Config.ESPSize = v / 100
+        -- تحديث الحجم فورياً
+        for _, data in pairs(ESP_Data) do
+            if data.Billboard and data.BaseSize then
+                data.Billboard.Size = UDim2.new(0, data.BaseSize.X.Offset * Config.ESPSize, 0, data.BaseSize.Y.Offset * Config.ESPSize)
+            end
+        end
+    end
+})
+VisualTab:AddToggle("ESPName", { Title = "Show Player Name", Default = Config.ShowName, Callback = function(v) Config.ShowName = v; for _, data in pairs(ESP_Data) do if data.NameLabel then data.NameLabel.Visible = v end end end })
+VisualTab:AddToggle("ESPHealth", { Title = "Show Health Bar", Default = Config.ShowHealth, Callback = function(v) Config.ShowHealth = v; for _, data in pairs(ESP_Data) do if data.HP_Bg then data.HP_Bg.Visible = v end end end })
+VisualTab:AddToggle("ESPItems", { Title = "Show Items", Default = Config.ShowItems, Callback = function(v) Config.ShowItems = v; for _, data in pairs(ESP_Data) do if data.ItemsLabel then data.ItemsLabel.Visible = v end end end })
+VisualTab:AddToggle("ESPDistance", { Title = "Show Distance", Default = Config.ShowDistance, Callback = function(v) Config.ShowDistance = v; for _, data in pairs(ESP_Data) do if data.DistLabel then data.DistLabel.Visible = v end end end })
+VisualTab:AddToggle("ESPEnabled", {
+    Title = "Enable Player ESP",
+    Default = Config.ESPEnabled,
+    Callback = function(v)
+        Config.ESPEnabled = v
+        UpdateESPSystem()
+        Notify("ESP", v and "Enabled" or "Disabled")
+    end
+})
+VisualTab:AddToggle("FullBright", {
+    Title = "Full Bright",
+    Default = false,
+    Callback = function(v)
+        if v then
+            Lighting.Ambient = Color3.fromRGB(255,255,255)
+            Lighting.OutdoorAmbient = Color3.fromRGB(255,255,255)
+            Lighting.GlobalShadows = false
+        else
+            Lighting.Ambient = Color3.fromRGB(128,128,128)
+            Lighting.OutdoorAmbient = Color3.fromRGB(128,128,128)
+            Lighting.GlobalShadows = true
+        end
+    end
+})
+
+-- ============================================================
+-- تبويب متنوع (Misc)
+-- ============================================================
+local MiscTab = Window:AddTab({ Title = "Misc", Icon = "solar/settings-bold" })
+MiscTab:AddSection("Physics & Utilities")
+MiscTab:AddSlider("Gravity", {
+    Title = "Gravity",
+    Default = workspace.Gravity,
+    Min = 0, Max = 500, Rounding = 0,
+    Callback = function(v) workspace.Gravity = v end
+})
+MiscTab:AddToggle("NoClip", {
+    Title = "No Clip",
+    Default = false,
+    Callback = function(v)
+        Config.NoClip = v
+        Notify("No Clip", v and "Enabled" or "Disabled")
+    end
+})
+-- تنفيذ NoClip عبر RunService
+RunService.Stepped:Connect(function()
+    if not Config.NoClip then return end
+    local c = Character()
+    if not c then return end
+    for _, part in ipairs(c:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
+end)
+
+MiscTab:AddToggle("AntiAFK", {
+    Title = "Anti AFK",
+    Default = Config.AntiAFK,
+    Callback = function(v)
+        Config.AntiAFK = v
+        if v then
+            local vu = game:GetService("VirtualUser")
+            player.Idled:Connect(function()
+                vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                task.wait(1)
+                vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+            end)
+        end
+    end
+})
+MiscTab:AddToggle("WaterBarrier", {
+    Title = "Water Barrier",
+    Default = false,
+    Callback = function(v)
+        Config.WaterBarrier = v
+        if not v then
+            if _G.NAZKWaterBarrierConn then _G.NAZKWaterBarrierConn:Disconnect(); _G.NAZKWaterBarrierConn = nil end
+            if _G.NAZKWaterBarrier then _G.NAZKWaterBarrier:Destroy(); _G.NAZKWaterBarrier = nil end
+            return
+        end
+        if _G.NAZKWaterBarrier then return end
+        local part = Instance.new("Part")
+        part.Name = "NAZK_WaterBarrier"
+        part.Size = Vector3.new(50, 1, 50)
+        part.Transparency = 1
+        part.CanCollide = true
+        part.Anchored = true
+        part.Parent = workspace
+        _G.NAZKWaterBarrier = part
+
+        _G.NAZKWaterBarrierConn = RunService.Heartbeat:Connect(function()
+            local root = HRP()
+            if root and part.Parent then
+                part.CFrame = CFrame.new(root.Position.X, 0.5, root.Position.Z)
+            end
+        end)
+    end
+})
+
+-- ============================================================
+-- تبويب زراعة الصناديق (Chest Farm)
+-- ============================================================
+local FarmTab = Window:AddTab({ Title = "Chest Farm", Icon = "solar/box-bold" })
+FarmTab:AddParagraph({ Title = "Chest Farm", Content = "Universal chest-farming system." })
+FarmTab:AddSlider("FarmSpeed", {
+    Title = "Farm Speed",
+    Default = Config.FarmSpeed,
+    Min = 50, Max = 210, Rounding = 0,
+    Callback = function(v) Config.FarmSpeed = v end
+})
+FarmTab:AddToggle("ChestFarmToggle", {
+    Title = "Enable Chest Farm",
+    Default = false,
+    Callback = function(v)
+        Config.ChestFarm = v
+        if v then
+            StartChestFarm()
+        else
+            StopChestFarm()
+        end
+    end
+})
+FarmTab:AddButton({
+    Title = "Reset Farm State",
+    Icon = "solar/restart-bold",
+    Callback = function()
+        StopChestFarm()
+        visitedChests = {}
+        farmedCount = 0
+        Config.FarmedCount = 0
+        Notify("Chest Farm", "State reset")
+    end
+})
+
+-- ============================================================
+-- تبويب وحش البحر (SeaBeast)
+-- ============================================================
+local SeaTab = Window:AddTab({ Title = "SeaBeast", Icon = "solar/waterdrops-bold" })
+SeaTab:AddParagraph({ Title = "Sea Beast Farm", Content = "Auto-find, chase, and attack sea beasts." })
+SeaTab:AddSlider("SeaSpeed", {
+    Title = "Farm Speed",
+    Default = Config.SeaSpeed,
+    Min = 50, Max = 500, Rounding = 0,
+    Callback = function(v) Config.SeaSpeed = v end
+})
+SeaTab:AddToggle("SeaBeastToggle", {
+    Title = "Enable Sea Beast Farm",
+    Default = false,
+    Callback = function(v)
+        if v then
+            StartSeaBeastFarm()
+        else
+            StopSeaBeastFarm()
+        end
+    end
+})
+SeaTab:AddToggle("AutoAttack", {
+    Title = "Auto Attack",
+    Default = Config.AutoAttack,
+    Callback = function(v) Config.AutoAttack = v end
+})
+
+-- ============================================================
+-- تبويب السيرفر (Server)
+-- ============================================================
+local ServerTab = Window:AddTab({ Title = "Server", Icon = "solar/server-square-bold" })
+ServerTab:AddSection("Server Hopper")
+ServerTab:AddSlider("MaxPlayers", {
+    Title = "Preferred Max Players",
+    Default = Config.MaxPlayers,
+    Min = 1, Max = 10, Rounding = 0,
+    Callback = function(v) Config.MaxPlayers = v end
+})
+ServerTab:AddButton({
+    Title = "Rejoin Current Server",
+    Icon = "solar/restart-bold",
+    Callback = function()
+        TeleportService:TeleportToPlaceInstance(placeId, jobId, player)
+    end
+})
+ServerTab:AddButton({
+    Title = "Server Hop (Low Players)",
+    Icon = "solar/transfer-horizontal-bold",
+    Callback = function()
+        task.spawn(ServerHop)
+    end
+})
+
+-- ============================================================
+-- تبويب الإعدادات (Settings)
+-- ============================================================
+local SettingsTab = Window:AddTab({ Title = "Settings", Icon = "solar/settings-bold" })
+SettingsTab:AddSection("Interface Themes")
+SettingsTab:AddButton({
+    Title = "Theme: AMOLED",
+    Icon = "solar/palette-bold",
+    Callback = function()
+        Fluent:SetTheme("AMOLED")
+        Notify("Theme", "AMOLED applied")
+    end
+})
+SettingsTab:AddButton({
+    Title = "Theme: Neon Cyber",
+    Icon = "solar/palette-bold",
+    Callback = function()
+        Fluent:SetTheme("Neon Cyber")
+        Notify("Theme", "Neon Cyber applied")
+    end
+})
+SettingsTab:AddButton({
+    Title = "Theme: Deep Violet",
+    Icon = "solar/palette-bold",
+    Callback = function()
+        Fluent:SetTheme("Deep Violet")
+        Notify("Theme", "Deep Violet applied")
+    end
+})
+SettingsTab:AddButton({
+    Title = "Destroy UI",
+    Icon = "solar/trash-bin-trash-bold",
+    Callback = function()
+        Fluent:Destroy()
+        if ToggleGui then ToggleGui:Destroy() end
+        -- تنظيف الموارد
+        StopChestFarm()
+        StopSeaBeastFarm()
+        if _G.NAZKWaterBarrierConn then _G.NAZKWaterBarrierConn:Disconnect() end
+        if _G.NAZKWaterBarrier then _G.NAZKWaterBarrier:Destroy() end
+        Notify("UI", "Destroyed")
+    end
+})
+SettingsTab:AddParagraph({
+    Title = "FluentPro",
+    Content = "Acrylic • Search • Icons • Tabs • Notifications • Themes"
+})
+
+-- ============================================================
+-- تهيئة أولية
+-- ============================================================
+-- تفعيل ESP إذا كان مفعل مسبقاً (لكنه false افتراضياً)
+UpdateESPSystem()
+
+-- تشغيل Anti AFK افتراضياً
+if Config.AntiAFK then
+    local vu = game:GetService("VirtualUser")
+    player.Idled:Connect(function()
+        vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    end)
+end
