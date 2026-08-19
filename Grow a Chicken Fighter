@@ -1226,6 +1226,57 @@ local function DoDash()
 end
 
 --========================================================--
+-- SETTINGS SAVE / LOAD
+--========================================================--
+
+local SettingsFile = "NAZK_HUB_Settings.json"
+
+local function SaveSettings()
+    if type(writefile) ~= "function" then
+        return false
+    end
+
+    local Data = {
+        FarSpeed = FarSpeed,
+        MaxSpeed = MaxSpeed,
+        DashPower = DashPower,
+        DashDuration = DashDuration,
+        DashCooldown = DashCooldown,
+        Gravity = CurrentGravity,
+    }
+
+    local Success = pcall(function()
+        writefile(SettingsFile, HttpService:JSONEncode(Data))
+    end)
+    return Success
+end
+
+local function LoadSettings()
+    if type(isfile) ~= "function" or type(readfile) ~= "function" then
+        return
+    end
+    if not isfile(SettingsFile) then
+        return
+    end
+
+    pcall(function()
+        local Data = HttpService:JSONDecode(readfile(SettingsFile))
+        if type(Data) ~= "table" then return end
+        if type(Data.FarSpeed) == "number" then FarSpeed = Data.FarSpeed end
+        if type(Data.MaxSpeed) == "number" then MaxSpeed = Data.MaxSpeed end
+        if type(Data.DashPower) == "number" then DashPower = Data.DashPower end
+        if type(Data.DashDuration) == "number" then DashDuration = Data.DashDuration end
+        if type(Data.DashCooldown) == "number" then DashCooldown = Data.DashCooldown end
+        if type(Data.Gravity) == "number" then
+            CurrentGravity = Data.Gravity
+            Workspace.Gravity = CurrentGravity
+        end
+    end)
+end
+
+LoadSettings()
+
+--========================================================--
 -- FLUENTPRO GUI
 --========================================================--
 
@@ -1296,6 +1347,7 @@ PitTab:AddSlider("NearSpeed", {
     Rounding = 0,
     Callback = function(Value)
         MaxSpeed = Value
+        SaveSettings()
     end
 })
 PitTab:AddSlider("FarSpeed", {
@@ -1306,6 +1358,7 @@ PitTab:AddSlider("FarSpeed", {
     Rounding = 0,
     Callback = function(Value)
         FarSpeed = Value
+        SaveSettings()
     end
 })
 PitTab:AddButton({
@@ -1321,6 +1374,16 @@ PitTab:AddButton({
     end
 })
 
+local StatusTab = Window:AddTab({ Title = "Status", Icon = "solar/chart-bold" })
+StatusTab:AddParagraph({
+    Title = "Live Status",
+    Content = "Preparing status..."
+})
+local StatusParagraph = StatusTab:AddParagraph({
+    Title = "NAZK HUB Monitor",
+    Content = "Loading..."
+})
+
 local DashTab = Window:AddTab({ Title = "Dash", Icon = "solar/bolt-bold" })
 DashTab:AddParagraph({
     Title = "Dash System",
@@ -1334,6 +1397,7 @@ DashTab:AddSlider("DashPower", {
     Rounding = 0,
     Callback = function(Value)
         DashPower = Value
+        SaveSettings()
     end
 })
 DashTab:AddSlider("DashDuration", {
@@ -1344,6 +1408,7 @@ DashTab:AddSlider("DashDuration", {
     Rounding = 0,
     Callback = function(Value)
         DashDuration = Value / 100
+        SaveSettings()
     end
 })
 DashTab:AddSlider("DashCooldown", {
@@ -1354,6 +1419,7 @@ DashTab:AddSlider("DashCooldown", {
     Rounding = 0,
     Callback = function(Value)
         DashCooldown = Value / 10
+        SaveSettings()
     end
 })
 DashTab:AddButton({
@@ -1498,6 +1564,7 @@ MiscTab:AddSlider("Gravity", {
     Callback = function(Value)
         CurrentGravity = Value
         Workspace.Gravity = Value
+        SaveSettings()
     end
 })
 MiscTab:AddButton({
@@ -1570,6 +1637,25 @@ SettingsTab:AddButton({
     end
 })
 SettingsTab:AddButton({
+    Title = "Save Settings",
+    Icon = "solar/diskette-bold",
+    Callback = function()
+        if SaveSettings() then
+            Notify("Settings", "Settings saved")
+        else
+            Notify("Settings", "File saving is not supported")
+        end
+    end
+})
+SettingsTab:AddButton({
+    Title = "Load Settings",
+    Icon = "solar/download-bold",
+    Callback = function()
+        LoadSettings()
+        Notify("Settings", "Settings loaded; restart UI to refresh sliders")
+    end
+})
+SettingsTab:AddButton({
     Title = "Destroy UI",
     Icon = "solar/trash-bin-trash-bold",
     Callback = function()
@@ -1594,6 +1680,43 @@ SettingsTab:AddParagraph({
     Title = "NAZK HUB",
     Content = "FluentPro interface • PitScrap pause: 0.4 seconds"
 })
+
+--========================================================--
+-- LIVE STATUS MONITOR
+--========================================================--
+
+local function UpdateStatusText(Text)
+    pcall(function()
+        if StatusParagraph.SetDesc then
+            StatusParagraph:SetDesc(Text)
+        elseif StatusParagraph.SetContent then
+            StatusParagraph:SetContent(Text)
+        end
+    end)
+end
+
+task.spawn(function()
+    while task.wait(0.25) do
+        local TargetName = "None"
+        if CurrentTarget and CurrentTarget.Parent then
+            TargetName = CurrentTarget.Name
+        end
+
+        local PitState = TweenEnabled and (TweenRunning and "Running" or "Waiting") or "OFF"
+        local DashState = DashOnCooldown and "Cooldown" or "Ready"
+        local Text = string.format(
+            "PitScrap: %s\nTarget: %s\nPause per 15 studs: 0.4s\nNear speed: %.1f | Far speed: %.1f\nDash: %s\nDash power: %.1f\nGravity: %.1f",
+            PitState,
+            TargetName,
+            MaxSpeed,
+            FarSpeed,
+            DashState,
+            DashPower,
+            CurrentGravity
+        )
+        UpdateStatusText(Text)
+    end
+end)
 
 --========================================================--
 -- FLOATING N / DASH BUTTONS
@@ -1643,9 +1766,7 @@ local function SetMenuVisible(Visible)
     end
 end
 
-NButton.MouseButton1Click:Connect(function()
-    SetMenuVisible(not MenuVisible)
-end)
+-- سيتم ربط النقر والسحب معًا بعد إنشاء زر Dash
 
 local FloatingDash = Instance.new("TextButton")
 FloatingDash.Name = "FloatingDash"
@@ -1670,7 +1791,80 @@ local DashStroke = Instance.new("UIStroke")
 DashStroke.Color = Color3.fromRGB(255, 255, 255)
 DashStroke.Thickness = 2
 DashStroke.Parent = FloatingDash
-FloatingDash.MouseButton1Click:Connect(DoDash)
+-- دعم السحب بالماوس واللمس للأزرار العائمة
+local function MakeDraggable(Button, ClickCallback)
+    local Dragging = false
+    local DragInput = nil
+    local DragStart = nil
+    local StartPosition = nil
+    local Moved = false
+
+    Button.InputBegan:Connect(function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseButton1
+            or Input.UserInputType == Enum.UserInputType.Touch then
+            Dragging = true
+            Moved = false
+            DragStart = Input.Position
+            StartPosition = Button.Position
+
+            Input.Changed:Connect(function()
+                if Input.UserInputState == Enum.UserInputState.End then
+                    Dragging = false
+                    if not Moved then
+                        ClickCallback()
+                    end
+                end
+            end)
+        end
+    end)
+
+    Button.InputChanged:Connect(function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseMovement
+            or Input.UserInputType == Enum.UserInputType.Touch then
+            DragInput = Input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(Input)
+        if Input == DragInput and Dragging then
+            local Delta = Input.Position - DragStart
+            if math.abs(Delta.X) > 4 or math.abs(Delta.Y) > 4 then
+                Moved = true
+            end
+            Button.Position = UDim2.new(
+                StartPosition.X.Scale,
+                StartPosition.X.Offset + Delta.X,
+                StartPosition.Y.Scale,
+                StartPosition.Y.Offset + Delta.Y
+            )
+        end
+    end)
+end
+
+MakeDraggable(NButton, function()
+    SetMenuVisible(not MenuVisible)
+end)
+MakeDraggable(FloatingDash, DoDash)
+
+-- تصغير FluentPro تلقائيًا على شاشات الهاتف
+if FluentRoot and FluentRoot:IsA("GuiObject") then
+    local FluentScale = Instance.new("UIScale")
+    FluentScale.Name = "NAZK_ResponsiveScale"
+    FluentScale.Parent = FluentRoot
+
+    local function UpdateResponsiveScale()
+        local Camera = Workspace.CurrentCamera
+        if not Camera then return end
+        local Viewport = Camera.ViewportSize
+        FluentScale.Scale = math.clamp(math.min(Viewport.X / 800, Viewport.Y / 600), 0.72, 1)
+    end
+
+    UpdateResponsiveScale()
+    local Camera = Workspace.CurrentCamera
+    if Camera then
+        Camera:GetPropertyChangedSignal("ViewportSize"):Connect(UpdateResponsiveScale)
+    end
+end
 
 SettingsTab:AddButton({
     Title = "Hide / Show Menu",
