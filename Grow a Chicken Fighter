@@ -57,6 +57,42 @@ local AntiLagEnabled = false
 local DefaultGravity = Workspace.Gravity
 local CurrentGravity = DefaultGravity
 
+local CurrentThemeName = "AMOLED"
+local ApplyFloatingTheme
+local ThemeNames = {
+    "AMOLED",
+    "Dark",
+    "Ash Gray",
+    "Royal Blue",
+    "Deep Ocean",
+    "Neon Cyber",
+    "Neon Purple",
+    "Orange",
+    "Charcoal",
+    "Pearl White",
+    "Midnight Blue",
+    "Galaxy Purple",
+    "Cosmic Violet",
+    "Cotton Candy",
+}
+
+local ThemeColors = {
+    ["AMOLED"] = Color3.fromRGB(0, 0, 0),
+    ["Dark"] = Color3.fromRGB(35, 35, 35),
+    ["Ash Gray"] = Color3.fromRGB(95, 100, 105),
+    ["Royal Blue"] = Color3.fromRGB(40, 75, 170),
+    ["Deep Ocean"] = Color3.fromRGB(15, 70, 105),
+    ["Neon Cyber"] = Color3.fromRGB(0, 175, 125),
+    ["Neon Purple"] = Color3.fromRGB(125, 35, 190),
+    ["Orange"] = Color3.fromRGB(190, 85, 15),
+    ["Charcoal"] = Color3.fromRGB(55, 55, 55),
+    ["Pearl White"] = Color3.fromRGB(210, 210, 210),
+    ["Midnight Blue"] = Color3.fromRGB(25, 45, 100),
+    ["Galaxy Purple"] = Color3.fromRGB(75, 35, 125),
+    ["Cosmic Violet"] = Color3.fromRGB(105, 25, 155),
+    ["Cotton Candy"] = Color3.fromRGB(220, 105, 175),
+}
+
 local AutoIncubatorEnabled = false
 local AutoIncubatorConnection = nil
 
@@ -1243,6 +1279,7 @@ local function SaveSettings()
         DashDuration = DashDuration,
         DashCooldown = DashCooldown,
         Gravity = CurrentGravity,
+        ThemeName = CurrentThemeName,
     }
 
     local Success = pcall(function()
@@ -1271,6 +1308,9 @@ local function LoadSettings()
             CurrentGravity = Data.Gravity
             Workspace.Gravity = CurrentGravity
         end
+        if type(Data.ThemeName) == "string" and ThemeColors[Data.ThemeName] then
+            CurrentThemeName = Data.ThemeName
+        end
     end)
 end
 
@@ -1290,7 +1330,7 @@ local Window = Fluent:CreateWindow({
     TabWidth = 150,
     Size = UDim2.fromOffset(650, 520),
     Acrylic = true,
-    Theme = "AMOLED",
+    Theme = CurrentThemeName,
     MinimizeKey = Enum.KeyCode.Insert,
     Search = true,
 })
@@ -1434,7 +1474,7 @@ PlayersTab:AddParagraph({
     Content = "Select a player, then use tween, follow, or fling controls."
 })
 local SelectedPlayerValue = nil
-PlayersTab:AddDropdown("SelectedPlayer", {
+local PlayerDropdown = PlayersTab:AddDropdown("SelectedPlayer", {
     Title = "Select Player",
     Values = PlayerValues(),
     Default = PlayerValues()[1],
@@ -1446,13 +1486,44 @@ PlayersTab:AddDropdown("SelectedPlayer", {
         end
     end
 })
+
+local function RefreshPlayerDropdown()
+    local Values = PlayerValues()
+    pcall(function()
+        if PlayerDropdown.SetValues then
+            PlayerDropdown:SetValues(Values)
+        elseif PlayerDropdown.SetOptions then
+            PlayerDropdown:SetOptions(Values)
+        end
+    end)
+
+    if SelectedPlayer and not SelectedPlayer.Parent then
+        SelectedPlayer = nil
+        SelectedPlayerValue = nil
+        Notify("Players", "Selected player left the server")
+    end
+end
+
 PlayersTab:AddButton({
     Title = "Refresh Player List",
     Icon = "solar/refresh-bold",
     Callback = function()
-        Notify("Players", "Player list refreshed; reopen the dropdown to view changes")
+        RefreshPlayerDropdown()
+        Notify("Players", "Player list updated")
     end
 })
+
+Players.PlayerAdded:Connect(function()
+    task.defer(RefreshPlayerDropdown)
+end)
+
+Players.PlayerRemoving:Connect(function(Player)
+    if Player == SelectedPlayer then
+        SelectedPlayer = nil
+        SelectedPlayerValue = nil
+    end
+    task.defer(RefreshPlayerDropdown)
+end)
 PlayersTab:AddToggle("TweenToPlayer", {
     Title = "Tween to Selected Player",
     Default = false,
@@ -1620,20 +1691,53 @@ AutoTab:AddToggle("AutoUpgradeGenerator", {
 
 local SettingsTab = Window:AddTab({ Title = "Settings", Icon = "solar/palette-bold" })
 SettingsTab:AddSection("Interface")
-SettingsTab:AddButton({
-    Title = "Theme: AMOLED",
-    Icon = "solar/palette-bold",
-    Callback = function()
-        Fluent:SetTheme("AMOLED")
-        Notify("Theme", "AMOLED applied")
+
+SettingsTab:AddDropdown("PresetSelector", {
+    Title = "Choose Preset",
+    Values = { "Balanced", "Performance", "Movement" },
+    Default = "Balanced",
+    Callback = function(Value)
+        if Value == "Performance" then
+            FarSpeed = 30
+            MaxSpeed = 45
+            DashPower = 90
+            DashDuration = 0.10
+            DashCooldown = 1.0
+        elseif Value == "Movement" then
+            FarSpeed = 45
+            MaxSpeed = 70
+            DashPower = 180
+            DashDuration = 0.16
+            DashCooldown = 0.6
+        else
+            FarSpeed = 20
+            MaxSpeed = 35
+            DashPower = 110
+            DashDuration = 0.12
+            DashCooldown = 0.8
+        end
+
+        SaveSettings()
+        Notify("Preset", Value .. " applied")
     end
 })
-SettingsTab:AddButton({
-    Title = "Theme: Neon Cyber",
-    Icon = "solar/palette-bold",
-    Callback = function()
-        Fluent:SetTheme("Neon Cyber")
-        Notify("Theme", "Neon Cyber applied")
+
+SettingsTab:AddDropdown("ThemeSelector", {
+    Title = "Choose Theme",
+    Values = ThemeNames,
+    Multi = false,
+    Default = CurrentThemeName,
+    Callback = function(Value)
+        if not ThemeColors[Value] then return end
+        CurrentThemeName = Value
+        pcall(function()
+            Fluent:SetTheme(Value)
+        end)
+        if ApplyFloatingTheme then
+            ApplyFloatingTheme(Value)
+        end
+        SaveSettings()
+        Notify("Theme", Value .. " applied")
     end
 })
 SettingsTab:AddButton({
@@ -1679,6 +1783,20 @@ SettingsTab:AddButton({
 SettingsTab:AddParagraph({
     Title = "NAZK HUB",
     Content = "FluentPro interface • PitScrap pause: 0.4 seconds"
+})
+
+local AboutTab = Window:AddTab({ Title = "About", Icon = "solar/info-circle-bold" })
+AboutTab:AddParagraph({
+    Title = "NAZK HUB",
+    Content = "A modular FluentPro interface for PitScrap, player controls, server tools, movement, automation, and customization."
+})
+AboutTab:AddParagraph({
+    Title = "Version",
+    Content = "NAZK HUB v2.1\nTheme Dropdown • Presets • Live Player List • About/Credits"
+})
+AboutTab:AddParagraph({
+    Title = "Credits",
+    Content = "Interface: FluentPro\nProject: NAZK HUB\nThank you for using the hub."
 })
 
 --========================================================--
@@ -1791,6 +1909,19 @@ local DashStroke = Instance.new("UIStroke")
 DashStroke.Color = Color3.fromRGB(255, 255, 255)
 DashStroke.Thickness = 2
 DashStroke.Parent = FloatingDash
+
+ApplyFloatingTheme = function(ThemeName)
+    local Color = ThemeColors[ThemeName] or ThemeColors["AMOLED"]
+    if NButton then
+        NButton.BackgroundColor3 = Color
+    end
+    if FloatingDash then
+        FloatingDash.BackgroundColor3 = Color
+    end
+end
+
+ApplyFloatingTheme(CurrentThemeName)
+
 -- دعم السحب بالماوس واللمس للأزرار العائمة
 local function MakeDraggable(Button, ClickCallback)
     local Dragging = false
@@ -1879,5 +2010,37 @@ SettingsTab:AddButton({
     Callback = DoDash
 })
 
+-- إصلاح مؤشر التبويب: تثبيت موضعه بعد تحديث التخطيط أو تمرير قائمة التبويبات
+local LastSelectedTab = nil
+task.spawn(function()
+    while task.wait(0.05) do
+        if not Window or not Window.Root or not Window.Root.Parent then
+            break
+        end
+
+        local TabsAPI = Window.TabsAPI
+        local TabHolder = Window.TabHolder
+        local SelectorFrame = Window.SelectorFrame
+
+        if TabsAPI and TabHolder and SelectorFrame then
+            local SelectedIndex = TabsAPI.SelectedTab
+            if SelectedIndex ~= LastSelectedTab then
+                LastSelectedTab = SelectedIndex
+                task.wait()
+            end
+
+            local Success, TabPosition = pcall(function()
+                return TabsAPI:GetCurrentTabPos()
+            end)
+
+            if Success and TabPosition then
+                local CanvasY = TabHolder.CanvasPosition.Y
+                SelectorFrame.Position = UDim2.fromOffset(0, TabPosition + 17 + CanvasY)
+                SelectorFrame.Size = UDim2.fromOffset(4, 34)
+                SelectorFrame.Visible = true
+            end
+        end
+    end
+end)
+
 Notify("NAZK HUB", "FluentPro interface loaded successfully")
-print("[NAZK HUB] FluentPro GUI loaded for " .. LocalPlayer.Name)
