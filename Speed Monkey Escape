@@ -679,6 +679,36 @@ end
 -- DASH TAB
 --========================================================--
 
+--========================================================--
+-- DISCORD TAB (First Tab)
+--========================================================--
+
+local DiscordTab = Window:AddTab({ Title = "Discord", Icon = "solar/chat-round-bold" })
+DiscordTab:AddParagraph({
+    Title = "Join Our Discord",
+    Content = "Click the button below to copy the invite link!"
+})
+
+local DiscordLink = "https://discord.gg/zQjjP9pGr"
+
+DiscordTab:AddButton({
+    Title = "Copy Discord Link",
+    Icon = "solar/copy-bold",
+    Callback = function()
+        if type(setclipboard) == "function" then
+            setclipboard(DiscordLink)
+            Notify("Discord", "Link copied to clipboard!")
+        else
+            Notify("Discord", "Clipboard not supported. Link: " .. DiscordLink)
+        end
+    end
+})
+
+DiscordTab:AddParagraph({
+    Title = "Link",
+    Content = DiscordLink
+})
+
 local DashTab = Window:AddTab({ Title = "Dash", Icon = "solar/bolt-bold" })
 DashTab:AddParagraph({
     Title = "Dash System",
