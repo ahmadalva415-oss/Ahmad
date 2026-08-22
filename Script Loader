@@ -16,7 +16,10 @@ local scripts = {
 
     --// Grow a Chicken Fighter
     ["94640181989498"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Grow%20a%20Chicken%20Fighter",
-    ["94939256104840"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Grow%20a%20Chicken%20Fighter"
+    ["94939256104840"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Grow%20a%20Chicken%20Fighter",
+
+    --// Speed Monkey Escape
+    ["114697347887839"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Speed%20Monkey%20Escape"
 }
 
 local url = scripts[placeId]
