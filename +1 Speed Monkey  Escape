@@ -1,0 +1,1207 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+local Debris = game:GetService("Debris")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+
+
+--========================================================--
+-- SETTINGS
+--========================================================--
+
+local AntiAFKEnabled = false
+local AntiAFKConnection = nil
+
+local AntiFlingEnabled = false
+local AntiFlingConnection = nil
+
+local NoClipEnabled = false
+local NoClipConnection = nil
+
+local AntiLagEnabled = false
+
+--========================================================--
+-- AUTO WIN
+--========================================================--
+
+local AutoWinEnabled = { false, false, false, false, false }
+local AutoWinConnections = { nil, nil, nil, nil, nil }
+
+local WorldPositions = {
+    [1] = Vector3.new(-9461.28, 390.95, -255.74),
+    [2] = Vector3.new(-3604.26, 155.56, -9378.71),
+    [3] = Vector3.new(-8077.74, 285.20, 2739.79),
+    [4] = Vector3.new(-7761.09, 22.64, 5741.76),
+    [5] = Vector3.new(-2829.17, 288.86, 7802.49),
+}
+
+
+local InfinityJumpEnabled = false
+local InfinityJumpConnection = nil
+
+--========================================================--
+-- AUTO TAB VARIABLES
+--========================================================--
+
+local AutoRebirthEnabled = false
+local AutoRebirthConnection = nil
+
+local AutoBuyAllShopEnabled = false
+local AutoBuyAllShopConnection = nil
+
+
+local AutoWinYAmplitude = 5
+local AutoWinYSpeed = 3
+
+
+local DefaultGravity = Workspace.Gravity
+local CurrentGravity = DefaultGravity
+
+local CurrentThemeName = "AMOLED"
+local ApplyFloatingTheme
+local ThemeNames = {
+    "AMOLED",
+    "Dark",
+    "Ash Gray",
+    "Royal Blue",
+    "Deep Ocean",
+    "Neon Cyber",
+    "Neon Purple",
+    "Orange",
+    "Charcoal",
+    "Pearl White",
+    "Midnight Blue",
+    "Galaxy Purple",
+    "Cosmic Violet",
+    "Cotton Candy",
+}
+
+local ThemeColors = {
+    ["AMOLED"] = Color3.fromRGB(0, 0, 0),
+    ["Dark"] = Color3.fromRGB(35, 35, 35),
+    ["Ash Gray"] = Color3.fromRGB(95, 100, 105),
+    ["Royal Blue"] = Color3.fromRGB(40, 75, 170),
+    ["Deep Ocean"] = Color3.fromRGB(15, 70, 105),
+    ["Neon Cyber"] = Color3.fromRGB(0, 175, 125),
+    ["Neon Purple"] = Color3.fromRGB(125, 35, 190),
+    ["Orange"] = Color3.fromRGB(190, 85, 15),
+    ["Charcoal"] = Color3.fromRGB(55, 55, 55),
+    ["Pearl White"] = Color3.fromRGB(210, 210, 210),
+    ["Midnight Blue"] = Color3.fromRGB(25, 45, 100),
+    ["Galaxy Purple"] = Color3.fromRGB(75, 35, 125),
+    ["Cosmic Violet"] = Color3.fromRGB(105, 25, 155),
+    ["Cotton Candy"] = Color3.fromRGB(220, 105, 175),
+}
+
+
+--========================================================--
+-- CHARACTER
+--========================================================--
+
+local function GetCharacter()
+    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+end
+
+local function GetRoot()
+    local Character = GetCharacter()
+    return Character and Character:FindFirstChild("HumanoidRootPart")
+end
+
+
+--========================================================--
+-- DASH SYSTEM
+--========================================================--
+
+local DashPower = 110
+local DashDuration = 0.12
+local DashCooldown = 0.8
+local DashOnCooldown = false
+
+local function DoDash()
+    if DashOnCooldown then
+        return
+    end
+
+    local Root = GetRoot()
+    if not Root then
+        return
+    end
+
+    DashOnCooldown = true
+    local Camera = Workspace.CurrentCamera
+    local Direction = Camera and Camera.CFrame.LookVector or Root.CFrame.LookVector
+    Direction = Vector3.new(Direction.X, 0, Direction.Z)
+
+    if Direction.Magnitude < 0.01 then
+        Direction = Vector3.new(Root.CFrame.LookVector.X, 0, Root.CFrame.LookVector.Z)
+    end
+
+    Direction = Direction.Unit
+    local Velocity = Instance.new("BodyVelocity")
+    Velocity.Name = "NAZK_DashVelocity"
+    Velocity.MaxForce = Vector3.new(1000000, 0, 1000000)
+    Velocity.P = 50000
+    Velocity.Velocity = Direction * DashPower
+    Velocity.Parent = Root
+
+    task.delay(DashDuration, function()
+        if Velocity and Velocity.Parent then
+            Velocity:Destroy()
+        end
+    end)
+
+    task.delay(DashCooldown, function()
+        DashOnCooldown = false
+    end)
+end
+
+
+--========================================================--
+-- MISC
+--========================================================--
+
+local function StartAntiAFK()
+
+    if AntiAFKConnection then
+        AntiAFKConnection:Disconnect()
+    end
+
+    AntiAFKEnabled = true
+
+    AntiAFKConnection =
+        LocalPlayer.Idled:Connect(function()
+
+            if AntiAFKEnabled then
+
+                local VirtualUser =
+                    game:GetService("VirtualUser")
+
+                VirtualUser:CaptureController()
+
+                VirtualUser:ClickButton2(
+                    Vector2.new()
+                )
+            end
+        end)
+end
+
+local function StopAntiAFK()
+
+    AntiAFKEnabled = false
+
+    if AntiAFKConnection then
+        AntiAFKConnection:Disconnect()
+        AntiAFKConnection = nil
+    end
+end
+
+local function StartAntiFling()
+
+    if AntiFlingConnection then
+        AntiFlingConnection:Disconnect()
+    end
+
+    AntiFlingEnabled = true
+
+    AntiFlingConnection =
+        RunService.Heartbeat:Connect(function()
+
+            if not AntiFlingEnabled then
+                return
+            end
+
+            local Character =
+                LocalPlayer.Character
+
+            if not Character then
+                return
+            end
+
+            local Root =
+                Character:FindFirstChild(
+                    "HumanoidRootPart"
+                )
+
+            if not Root then
+                return
+            end
+
+            for _, Obj in ipairs(Root:GetChildren()) do
+
+                if Obj:IsA("BodyVelocity")
+                    or Obj:IsA("BodyAngularVelocity")
+                    or Obj:IsA("BodyGyro")
+                    or Obj:IsA("BodyForce")
+                    or Obj:IsA("BodyThrust") then
+
+                    Obj:Destroy()
+                end
+            end
+
+            if Root.AssemblyAngularVelocity.Magnitude > 50
+                or Root.AssemblyLinearVelocity.Magnitude > 100 then
+
+                Root.AssemblyAngularVelocity =
+                    Vector3.zero
+
+                Root.AssemblyLinearVelocity =
+                    Vector3.zero
+            end
+        end)
+end
+
+local function StopAntiFling()
+
+    AntiFlingEnabled = false
+
+    if AntiFlingConnection then
+        AntiFlingConnection:Disconnect()
+        AntiFlingConnection = nil
+    end
+end
+
+local function StartNoClip()
+
+    if NoClipConnection then
+        NoClipConnection:Disconnect()
+    end
+
+    NoClipEnabled = true
+
+    NoClipConnection =
+        RunService.Stepped:Connect(function()
+
+            if not NoClipEnabled then
+                return
+            end
+
+            local Character =
+                LocalPlayer.Character
+
+            if not Character then
+                return
+            end
+
+            for _, Part in ipairs(Character:GetDescendants()) do
+
+                if Part:IsA("BasePart") then
+                    Part.CanCollide = false
+                end
+            end
+        end)
+end
+
+local function StopNoClip()
+
+    NoClipEnabled = false
+
+    if NoClipConnection then
+        NoClipConnection:Disconnect()
+        NoClipConnection = nil
+    end
+
+    local Character =
+        LocalPlayer.Character
+
+    if Character then
+
+        for _, Part in ipairs(Character:GetDescendants()) do
+
+            if Part:IsA("BasePart") then
+                Part.CanCollide = true
+            end
+        end
+    end
+end
+
+local function StartAntiLag()
+
+    AntiLagEnabled = true
+
+    for _, Obj in ipairs(Workspace:GetDescendants()) do
+
+        if Obj:IsA("ParticleEmitter")
+            or Obj:IsA("Trail") then
+
+            Obj.Enabled = false
+        end
+
+        if Obj:IsA("BasePart")
+            and Obj.Material == Enum.Material.Water then
+
+            Obj.Transparency = 1
+        end
+
+        if Obj:IsA("Decal")
+            or Obj:IsA("Texture") then
+
+            Obj.Transparency = 1
+        end
+
+        if Obj:IsA("Sound") then
+            Obj.Volume = 0
+        end
+    end
+
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 100000
+    Lighting.Brightness = 2
+
+    for _, Effect in ipairs(Lighting:GetChildren()) do
+
+        if Effect:IsA("BlurEffect")
+            or Effect:IsA("BloomEffect")
+            or Effect:IsA("SunRaysEffect")
+            or Effect:IsA("ColorCorrectionEffect") then
+
+            Effect.Enabled = false
+        end
+    end
+
+    settings().Rendering.QualityLevel =
+        Enum.QualityLevel.Level01
+end
+
+local function StopAntiLag()
+
+    AntiLagEnabled = false
+
+    for _, Obj in ipairs(Workspace:GetDescendants()) do
+
+        if Obj:IsA("ParticleEmitter")
+            or Obj:IsA("Trail") then
+
+            Obj.Enabled = true
+        end
+
+        if Obj:IsA("BasePart")
+            and Obj.Material == Enum.Material.Water then
+
+            Obj.Transparency = 0
+        end
+
+        if Obj:IsA("Decal")
+            or Obj:IsA("Texture") then
+
+            Obj.Transparency = 0
+        end
+
+        if Obj:IsA("Sound") then
+            Obj.Volume = 0.5
+        end
+    end
+
+    Lighting.GlobalShadows = true
+    Lighting.FogEnd = 10000
+    Lighting.Brightness = 1
+
+    for _, Effect in ipairs(Lighting:GetChildren()) do
+
+        if Effect:IsA("BlurEffect")
+            or Effect:IsA("BloomEffect")
+            or Effect:IsA("SunRaysEffect")
+            or Effect:IsA("ColorCorrectionEffect") then
+
+            Effect.Enabled = true
+        end
+    end
+
+    settings().Rendering.QualityLevel =
+        Enum.QualityLevel.Level10
+end
+
+
+
+--========================================================--
+-- INFINITY JUMP
+--========================================================--
+
+local function StartInfinityJump()
+
+    if InfinityJumpConnection then
+        InfinityJumpConnection:Disconnect()
+    end
+
+    InfinityJumpEnabled = true
+
+    InfinityJumpConnection =
+        UserInputService.JumpRequest:Connect(function()
+
+            if not InfinityJumpEnabled then
+                return
+            end
+
+            local Character = LocalPlayer.Character
+            if not Character then
+                return
+            end
+
+            local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+            if not Humanoid then
+                return
+            end
+
+            Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end)
+end
+
+local function StopInfinityJump()
+
+    InfinityJumpEnabled = false
+
+    if InfinityJumpConnection then
+        InfinityJumpConnection:Disconnect()
+        InfinityJumpConnection = nil
+    end
+end
+
+
+--========================================================--
+-- AUTO TAB FUNCTIONS
+--========================================================--
+
+local function StartAutoRebirth()
+
+    if AutoRebirthConnection then
+        AutoRebirthConnection:Disconnect()
+        AutoRebirthConnection = nil
+    end
+
+    AutoRebirthEnabled = true
+
+    AutoRebirthConnection =
+        RunService.Heartbeat:Connect(function()
+
+            if not AutoRebirthEnabled then
+                return
+            end
+
+            pcall(function()
+                game:GetService("ReplicatedStorage").Remotes.Rebirth:FireServer()
+            end)
+        end)
+end
+
+local function StopAutoRebirth()
+
+    AutoRebirthEnabled = false
+
+    if AutoRebirthConnection then
+        AutoRebirthConnection:Disconnect()
+        AutoRebirthConnection = nil
+    end
+end
+
+local function StartAutoBuyAllShop()
+
+    if AutoBuyAllShopConnection then
+        AutoBuyAllShopConnection:Disconnect()
+        AutoBuyAllShopConnection = nil
+    end
+
+    AutoBuyAllShopEnabled = true
+
+    AutoBuyAllShopConnection =
+        RunService.Heartbeat:Connect(function()
+
+            if not AutoBuyAllShopEnabled then
+                return
+            end
+
+            pcall(function()
+                game:GetService("ReplicatedStorage").Remotes.BuyCharm:FireServer(1)
+                game:GetService("ReplicatedStorage").Remotes.BuyCharm:FireServer(2)
+                game:GetService("ReplicatedStorage").Remotes.BuyCharm:FireServer(3)
+            end)
+        end)
+end
+
+local function StopAutoBuyAllShop()
+
+    AutoBuyAllShopEnabled = false
+
+    if AutoBuyAllShopConnection then
+        AutoBuyAllShopConnection:Disconnect()
+        AutoBuyAllShopConnection = nil
+    end
+end
+
+--========================================================--
+-- AUTO WIN FUNCTIONS
+--========================================================--
+
+local function StartAutoWin(WorldIndex)
+
+    if AutoWinConnections[WorldIndex] then
+        AutoWinConnections[WorldIndex]:Disconnect()
+        AutoWinConnections[WorldIndex] = nil
+    end
+
+    AutoWinEnabled[WorldIndex] = true
+
+    AutoWinConnections[WorldIndex] =
+        RunService.Heartbeat:Connect(function()
+
+            if not AutoWinEnabled[WorldIndex] then
+                return
+            end
+
+            local Root = GetRoot()
+            if not Root then
+                return
+            end
+
+            local TargetPos = WorldPositions[WorldIndex]
+            if not TargetPos then
+                return
+            end
+
+            local Time = tick()
+            -- math.sin goes from -1 to 1, so YOffset goes from -Amplitude to +Amplitude
+            -- Amplitude = 5 means: UP 5 studs, DOWN 5 studs from target Y
+            local YOffset = math.sin(Time * AutoWinYSpeed) * AutoWinYAmplitude
+
+            Root.CFrame = CFrame.new(
+                TargetPos.X,
+                TargetPos.Y + YOffset,
+                TargetPos.Z
+            )
+        end)
+end
+
+local function StopAutoWin(WorldIndex)
+
+    AutoWinEnabled[WorldIndex] = false
+
+    if AutoWinConnections[WorldIndex] then
+        AutoWinConnections[WorldIndex]:Disconnect()
+        AutoWinConnections[WorldIndex] = nil
+    end
+end
+
+local function StopAllAutoWin()
+    for i = 1, 5 do
+        StopAutoWin(i)
+    end
+end
+
+local function SetGravity(Value)
+
+    CurrentGravity = Value
+    Workspace.Gravity = Value
+end
+
+
+--========================================================--
+-- SETTINGS SAVE / LOAD
+--========================================================--
+
+local SettingsFile = "NAZK_HUB_Settings.json"
+
+local function SaveSettings()
+    if type(writefile) ~= "function" then
+        return false
+    end
+
+    local Data = {
+        DashPower = DashPower,
+        DashDuration = DashDuration,
+        DashCooldown = DashCooldown,
+        Gravity = CurrentGravity,
+        ThemeName = CurrentThemeName,
+    }
+
+    local Success = pcall(function()
+        writefile(SettingsFile, HttpService:JSONEncode(Data))
+    end)
+    return Success
+end
+
+local function LoadSettings()
+    if type(isfile) ~= "function" or type(readfile) ~= "function" then
+        return
+    end
+    if not isfile(SettingsFile) then
+        return
+    end
+
+    pcall(function()
+        local Data = HttpService:JSONDecode(readfile(SettingsFile))
+        if type(Data) ~= "table" then return end
+        if type(Data.DashPower) == "number" then DashPower = Data.DashPower end
+        if type(Data.DashDuration) == "number" then DashDuration = Data.DashDuration end
+        if type(Data.DashCooldown) == "number" then DashCooldown = Data.DashCooldown end
+        if type(Data.Gravity) == "number" then
+            CurrentGravity = Data.Gravity
+            Workspace.Gravity = CurrentGravity
+        end
+        if type(Data.ThemeName) == "string" and ThemeColors[Data.ThemeName] then
+            CurrentThemeName = Data.ThemeName
+        end
+    end)
+end
+
+LoadSettings()
+
+
+--========================================================--
+-- FLUENTPRO GUI
+--========================================================--
+
+local Fluent = loadstring(game:HttpGet(
+    "https://github.com/StyearX/Fluent-Modded/releases/download/Fluent/FluentPro"
+))()
+
+local Window = Fluent:CreateWindow({
+    Title = "NAZK HUB",
+    SubTitle = "Dash • Misc • Auto Win • Auto • Settings",
+    TabWidth = 150,
+    Size = UDim2.fromOffset(650, 520),
+    Acrylic = true,
+    Theme = CurrentThemeName,
+    MinimizeKey = Enum.KeyCode.Insert,
+    Search = true,
+})
+
+local function Notify(Title, Content)
+    Fluent:Notify({ Title = Title, Content = Content, Duration = 3 })
+end
+
+
+--========================================================--
+-- DASH TAB
+--========================================================--
+
+local DashTab = Window:AddTab({ Title = "Dash", Icon = "solar/bolt-bold" })
+DashTab:AddParagraph({
+    Title = "Dash System",
+    Content = "اندفع في اتجاه الكاميرا مع فترة تبريد قصيرة."
+})
+DashTab:AddSlider("DashPower", {
+    Title = "Dash Power",
+    Default = DashPower,
+    Min = 40,
+    Max = 300,
+    Rounding = 0,
+    Callback = function(Value)
+        DashPower = Value
+        SaveSettings()
+    end
+})
+DashTab:AddSlider("DashDuration", {
+    Title = "Dash Duration",
+    Default = DashDuration * 100,
+    Min = 5,
+    Max = 50,
+    Rounding = 0,
+    Callback = function(Value)
+        DashDuration = Value / 100
+        SaveSettings()
+    end
+})
+DashTab:AddSlider("DashCooldown", {
+    Title = "Dash Cooldown",
+    Default = DashCooldown * 10,
+    Min = 1,
+    Max = 30,
+    Rounding = 0,
+    Callback = function(Value)
+        DashCooldown = Value / 10
+        SaveSettings()
+    end
+})
+DashTab:AddButton({
+    Title = "Dash Now",
+    Icon = "solar/bolt-bold",
+    Callback = DoDash
+})
+
+--========================================================--
+-- MISC TAB
+--========================================================--
+
+local MiscTab = Window:AddTab({ Title = "Misc", Icon = "solar/settings-bold" })
+MiscTab:AddToggle("AntiAFK", {
+    Title = "Anti AFK",
+    Default = AntiAFKEnabled,
+    Callback = function(Value)
+        AntiAFKEnabled = Value
+        if Value then StartAntiAFK() else StopAntiAFK() end
+    end
+})
+MiscTab:AddToggle("NoClip", {
+    Title = "No Clip",
+    Default = NoClipEnabled,
+    Callback = function(Value)
+        NoClipEnabled = Value
+        if Value then StartNoClip() else StopNoClip() end
+    end
+})
+MiscTab:AddToggle("AntiLag", {
+    Title = "Anti Lag",
+    Default = AntiLagEnabled,
+    Callback = function(Value)
+        AntiLagEnabled = Value
+        if Value then StartAntiLag() else StopAntiLag() end
+    end
+})
+MiscTab:AddToggle("InfinityJump", {
+    Title = "Infinity Jump",
+    Default = InfinityJumpEnabled,
+    Callback = function(Value)
+        InfinityJumpEnabled = Value
+        if Value then StartInfinityJump() else StopInfinityJump() end
+    end
+})
+MiscTab:AddToggle("AntiFling", {
+    Title = "Anti Fling",
+    Default = AntiFlingEnabled,
+    Callback = function(Value)
+        AntiFlingEnabled = Value
+        if Value then StartAntiFling() else StopAntiFling() end
+    end
+})
+MiscTab:AddSlider("Gravity", {
+    Title = "Gravity",
+    Default = CurrentGravity,
+    Min = 0,
+    Max = 500,
+    Rounding = 0,
+    Callback = function(Value)
+        CurrentGravity = Value
+        Workspace.Gravity = Value
+        SaveSettings()
+    end
+})
+MiscTab:AddButton({
+    Title = "Reset Gravity",
+    Icon = "solar/restart-bold",
+    Callback = function()
+        CurrentGravity = DefaultGravity
+        Workspace.Gravity = DefaultGravity
+    end
+})
+
+--========================================================--
+-- SETTINGS TAB
+--========================================================--
+
+
+--========================================================--
+-- AUTO WIN TAB
+--========================================================--
+
+local AutoWinTab = Window:AddTab({ Title = "Auto Win", Icon = "solar/trophy-bold" })
+AutoWinTab:AddParagraph({
+    Title = "Auto Win Teleport",
+    Content = "Auto teleport with floating motion. Only enable ONE world at a time."
+})
+
+AutoWinTab:AddToggle("AutoWinWorld1", {
+    Title = "World 1",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            StopAllAutoWin()
+            StartAutoWin(1)
+            Notify("Auto Win", "World 1 enabled")
+        else
+            StopAutoWin(1)
+            Notify("Auto Win", "World 1 disabled")
+        end
+    end
+})
+
+AutoWinTab:AddToggle("AutoWinWorld2", {
+    Title = "World 2",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            StopAllAutoWin()
+            StartAutoWin(2)
+            Notify("Auto Win", "World 2 enabled")
+        else
+            StopAutoWin(2)
+            Notify("Auto Win", "World 2 disabled")
+        end
+    end
+})
+
+AutoWinTab:AddToggle("AutoWinWorld3", {
+    Title = "World 3",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            StopAllAutoWin()
+            StartAutoWin(3)
+            Notify("Auto Win", "World 3 enabled")
+        else
+            StopAutoWin(3)
+            Notify("Auto Win", "World 3 disabled")
+        end
+    end
+})
+
+AutoWinTab:AddToggle("AutoWinWorld4", {
+    Title = "World 4",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            StopAllAutoWin()
+            StartAutoWin(4)
+            Notify("Auto Win", "World 4 enabled")
+        else
+            StopAutoWin(4)
+            Notify("Auto Win", "World 4 disabled")
+        end
+    end
+})
+
+AutoWinTab:AddToggle("AutoWinWorld5", {
+    Title = "World 5",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            StopAllAutoWin()
+            StartAutoWin(5)
+            Notify("Auto Win", "World 5 enabled")
+        else
+            StopAutoWin(5)
+            Notify("Auto Win", "World 5 disabled")
+        end
+    end
+})
+
+AutoWinTab:AddSlider("AutoWinFloatAmp", {
+    Title = "Float Amplitude (Up/Down Range)",
+    Default = AutoWinYAmplitude,
+    Min = 0,
+    Max = 10,
+    Rounding = 1,
+    Callback = function(Value)
+        AutoWinYAmplitude = Value
+    end
+})
+
+AutoWinTab:AddSlider("AutoWinFloatSpeed", {
+    Title = "Float Speed",
+    Default = AutoWinYSpeed,
+    Min = 0.5,
+    Max = 10,
+    Rounding = 1,
+    Callback = function(Value)
+        AutoWinYSpeed = Value
+    end
+})
+
+
+--========================================================--
+-- AUTO TAB
+--========================================================--
+
+local AutoTab = Window:AddTab({ Title = "Auto", Icon = "solar/magic-stick-bold" })
+AutoTab:AddParagraph({
+    Title = "Automation",
+    Content = "Auto Rebirth and Auto Buy All Shop controls."
+})
+
+AutoTab:AddToggle("AutoRebirth", {
+    Title = "Auto Rebirth",
+    Default = false,
+    Callback = function(Value)
+        AutoRebirthEnabled = Value
+        if Value then
+            StartAutoRebirth()
+            Notify("Auto", "Auto Rebirth enabled")
+        else
+            StopAutoRebirth()
+            Notify("Auto", "Auto Rebirth disabled")
+        end
+    end
+})
+
+AutoTab:AddToggle("AutoBuyAllShop", {
+    Title = "Auto Buy All Shop",
+    Default = false,
+    Callback = function(Value)
+        AutoBuyAllShopEnabled = Value
+        if Value then
+            StartAutoBuyAllShop()
+            Notify("Auto", "Auto Buy All Shop enabled")
+        else
+            StopAutoBuyAllShop()
+            Notify("Auto", "Auto Buy All Shop disabled")
+        end
+    end
+})
+
+local SettingsTab = Window:AddTab({ Title = "Settings", Icon = "solar/palette-bold" })
+SettingsTab:AddSection("Interface")
+
+SettingsTab:AddDropdown("PresetSelector", {
+    Title = "Choose Preset",
+    Values = { "Balanced", "Performance", "Movement" },
+    Default = "Balanced",
+    Callback = function(Value)
+        if Value == "Performance" then
+            DashPower = 90
+            DashDuration = 0.10
+            DashCooldown = 1.0
+        elseif Value == "Movement" then
+            DashPower = 180
+            DashDuration = 0.16
+            DashCooldown = 0.6
+        else
+            DashPower = 110
+            DashDuration = 0.12
+            DashCooldown = 0.8
+        end
+
+        SaveSettings()
+        Notify("Preset", Value .. " applied")
+    end
+})
+
+SettingsTab:AddDropdown("ThemeSelector", {
+    Title = "Choose Theme",
+    Values = ThemeNames,
+    Multi = false,
+    Default = CurrentThemeName,
+    Callback = function(Value)
+        if not ThemeColors[Value] then return end
+        CurrentThemeName = Value
+        pcall(function()
+            Fluent:SetTheme(Value)
+        end)
+        if ApplyFloatingTheme then
+            ApplyFloatingTheme(Value)
+        end
+        SaveSettings()
+        Notify("Theme", Value .. " applied")
+    end
+})
+SettingsTab:AddButton({
+    Title = "Save Settings",
+    Icon = "solar/diskette-bold",
+    Callback = function()
+        if SaveSettings() then
+            Notify("Settings", "Settings saved")
+        else
+            Notify("Settings", "File saving is not supported")
+        end
+    end
+})
+SettingsTab:AddButton({
+    Title = "Load Settings",
+    Icon = "solar/download-bold",
+    Callback = function()
+        LoadSettings()
+        Notify("Settings", "Settings loaded; restart UI to refresh sliders")
+    end
+})
+SettingsTab:AddButton({
+    Title = "Destroy UI",
+    Icon = "solar/trash-bin-trash-bold",
+    Callback = function()
+        StopAntiAFK()
+        StopAntiFling()
+        StopNoClip()
+        StopInfinityJump()
+        StopAutoRebirth()
+        StopAutoBuyAllShop()
+        StopAllAutoWin()
+        if FloatingGui then FloatingGui:Destroy() end
+        Fluent:Destroy()
+    end
+})
+SettingsTab:AddParagraph({
+    Title = "NAZK HUB",
+    Content = "FluentPro interface • Clean & Minimal"
+})
+
+
+--========================================================--
+-- FLOATING N / DASH BUTTONS
+--========================================================--
+
+local FloatingGui = Instance.new("ScreenGui")
+FloatingGui.Name = "NAZK_FloatingControls"
+FloatingGui.ResetOnSpawn = false
+FloatingGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+FloatingGui.Parent = CoreGui
+
+local MenuVisible = true
+local FluentRoot = Window.Root or Window.Main or Window.Window
+
+local NButton = Instance.new("TextButton")
+NButton.Name = "NButton"
+NButton.Size = UDim2.fromOffset(54, 54)
+NButton.Position = UDim2.new(0, 22, 0, 72)
+NButton.BackgroundColor3 = Color3.fromRGB(5, 5, 7)
+NButton.BorderSizePixel = 0
+NButton.Text = "N"
+NButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+NButton.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+NButton.TextStrokeTransparency = 0
+NButton.TextSize = 24
+NButton.Font = Enum.Font.GothamBold
+NButton.AutoButtonColor = false
+NButton.ZIndex = 100
+NButton.Parent = FloatingGui
+
+local NCorner = Instance.new("UICorner")
+NCorner.CornerRadius = UDim.new(1, 0)
+NCorner.Parent = NButton
+local NStroke = Instance.new("UIStroke")
+NStroke.Color = Color3.fromRGB(255, 255, 255)
+NStroke.Thickness = 2
+NStroke.Parent = NButton
+
+local function SetMenuVisible(Visible)
+    MenuVisible = Visible
+    if FluentRoot and FluentRoot:IsA("GuiObject") then
+        FluentRoot.Visible = Visible
+    elseif Window.Minimize then
+        pcall(function()
+            Window:Minimize()
+        end)
+    end
+end
+
+local FloatingDash = Instance.new("TextButton")
+FloatingDash.Name = "FloatingDash"
+FloatingDash.Size = UDim2.fromOffset(82, 48)
+FloatingDash.Position = UDim2.new(1, -108, 0, 75)
+FloatingDash.BackgroundColor3 = Color3.fromRGB(5, 5, 7)
+FloatingDash.BorderSizePixel = 0
+FloatingDash.Text = "Dash"
+FloatingDash.TextColor3 = Color3.fromRGB(0, 0, 0)
+FloatingDash.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+FloatingDash.TextStrokeTransparency = 0
+FloatingDash.TextSize = 17
+FloatingDash.Font = Enum.Font.GothamBold
+FloatingDash.AutoButtonColor = false
+FloatingDash.ZIndex = 100
+FloatingDash.Parent = FloatingGui
+
+local DashCorner = Instance.new("UICorner")
+DashCorner.CornerRadius = UDim.new(0, 18)
+DashCorner.Parent = FloatingDash
+local DashStroke = Instance.new("UIStroke")
+DashStroke.Color = Color3.fromRGB(255, 255, 255)
+DashStroke.Thickness = 2
+DashStroke.Parent = FloatingDash
+
+ApplyFloatingTheme = function(ThemeName)
+    local Color = ThemeColors[ThemeName] or ThemeColors["AMOLED"]
+    if NButton then
+        NButton.BackgroundColor3 = Color
+    end
+    if FloatingDash then
+        FloatingDash.BackgroundColor3 = Color
+    end
+end
+
+ApplyFloatingTheme(CurrentThemeName)
+
+-- دعم السحب بالماوس واللمس للأزرار العائمة
+local function MakeDraggable(Button, ClickCallback)
+    local Dragging = false
+    local DragInput = nil
+    local DragStart = nil
+    local StartPosition = nil
+    local Moved = false
+
+    Button.InputBegan:Connect(function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseButton1
+            or Input.UserInputType == Enum.UserInputType.Touch then
+            Dragging = true
+            Moved = false
+            DragStart = Input.Position
+            StartPosition = Button.Position
+
+            Input.Changed:Connect(function()
+                if Input.UserInputState == Enum.UserInputState.End then
+                    Dragging = false
+                    if not Moved then
+                        ClickCallback()
+                    end
+                end
+            end)
+        end
+    end)
+
+    Button.InputChanged:Connect(function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseMovement
+            or Input.UserInputType == Enum.UserInputType.Touch then
+            DragInput = Input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(Input)
+        if Input == DragInput and Dragging then
+            local Delta = Input.Position - DragStart
+            if math.abs(Delta.X) > 4 or math.abs(Delta.Y) > 4 then
+                Moved = true
+            end
+            Button.Position = UDim2.new(
+                StartPosition.X.Scale,
+                StartPosition.X.Offset + Delta.X,
+                StartPosition.Y.Scale,
+                StartPosition.Y.Offset + Delta.Y
+            )
+        end
+    end)
+end
+
+MakeDraggable(NButton, function()
+    SetMenuVisible(not MenuVisible)
+end)
+MakeDraggable(FloatingDash, DoDash)
+
+-- تصغير FluentPro تلقائيًا على شاشات الهاتف
+if FluentRoot and FluentRoot:IsA("GuiObject") then
+    local FluentScale = Instance.new("UIScale")
+    FluentScale.Name = "NAZK_ResponsiveScale"
+    FluentScale.Parent = FluentRoot
+
+    local function UpdateResponsiveScale()
+        local Camera = Workspace.CurrentCamera
+        if not Camera then return end
+        local Viewport = Camera.ViewportSize
+        FluentScale.Scale = math.clamp(math.min(Viewport.X / 800, Viewport.Y / 600), 0.72, 1)
+    end
+
+    UpdateResponsiveScale()
+    local Camera = Workspace.CurrentCamera
+    if Camera then
+        Camera:GetPropertyChangedSignal("ViewportSize"):Connect(UpdateResponsiveScale)
+    end
+end
+
+SettingsTab:AddButton({
+    Title = "Hide / Show Menu",
+    Icon = "solar/menu-dots-bold",
+    Callback = function()
+        SetMenuVisible(not MenuVisible)
+    end
+})
+SettingsTab:AddButton({
+    Title = "Dash Now",
+    Icon = "solar/bolt-bold",
+    Callback = DoDash
+})
+
+
+--========================================================--
+-- INIT
+--========================================================--
+
+Notify("NAZK HUB", "FluentPro interface loaded successfully")
