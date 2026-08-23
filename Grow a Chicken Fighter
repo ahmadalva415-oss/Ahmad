@@ -1719,6 +1719,65 @@ AutoTab:AddToggle("AutoUpgradeGenerator", {
     end
 })
 
+local ArenaTab = Window:AddTab({ Title = "Arena", Icon = "solar/shield-star-bold" })
+ArenaTab:AddParagraph({
+    Title = "Arena Controls",
+    Content = "Enable auto ability and start arena fights automatically."
+})
+ArenaTab:AddToggle("AutoArenaAbility", {
+    Title = "Auto Turn Auto Skill",
+    Default = false,
+    Callback = function(Value)
+        pcall(function()
+            game:GetService("ReplicatedStorage").Remotes.SetArenaAutoAbility:FireServer(Value)
+        end)
+        Notify("Arena", "Auto Skill " .. (Value and "enabled" or "disabled"))
+    end
+})
+local AutoArenaFightEnabled = false
+local AutoArenaFightConnection = nil
+
+local function StartAutoArenaFight()
+    if AutoArenaFightConnection then
+        AutoArenaFightConnection:Disconnect()
+        AutoArenaFightConnection = nil
+    end
+    AutoArenaFightEnabled = true
+    AutoArenaFightConnection = RunService.Heartbeat:Connect(function()
+        if not AutoArenaFightEnabled then return end
+        -- Only send once per second using a timer check
+        local CurrentTime = tick()
+        if not _G.LastArenaFightTime or (CurrentTime - _G.LastArenaFightTime) >= 1 then
+            _G.LastArenaFightTime = CurrentTime
+            pcall(function()
+                game:GetService("ReplicatedStorage").Remotes.ArenaFight:InvokeServer()
+            end)
+        end
+    end)
+end
+
+local function StopAutoArenaFight()
+    AutoArenaFightEnabled = false
+    if AutoArenaFightConnection then
+        AutoArenaFightConnection:Disconnect()
+        AutoArenaFightConnection = nil
+    end
+end
+
+ArenaTab:AddToggle("AutoFightArena", {
+    Title = "Auto Fight Arena",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            StartAutoArenaFight()
+            Notify("Arena", "Auto Fight Arena enabled")
+        else
+            StopAutoArenaFight()
+            Notify("Arena", "Auto Fight Arena disabled")
+        end
+    end
+})
+
 local SettingsTab = Window:AddTab({ Title = "Settings", Icon = "solar/palette-bold" })
 SettingsTab:AddSection("Interface")
 
