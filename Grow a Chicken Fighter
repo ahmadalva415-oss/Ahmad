@@ -1324,11 +1324,29 @@ local Fluent = loadstring(game:HttpGet(
     "https://github.com/StyearX/Fluent-Modded/releases/download/Fluent/FluentPro"
 ))()
 
+
+-- Device Detection & Sizing
+local Camera = workspace.CurrentCamera
+local Viewport = Camera and Camera.ViewportSize or Vector2.new(1920, 1080)
+local IsTouchDevice = UserInputService.TouchEnabled
+local IsMobile = IsTouchDevice and Viewport.X < 700
+local IsTablet = IsTouchDevice and Viewport.X >= 700
+local DeviceName = IsMobile and "Mobile" or IsTablet and "iPad / Tablet" or "Computer"
+local BaseWindowWidth = IsMobile and 360 or IsTablet and 500 or 580
+local BaseWindowHeight = IsMobile and 430 or IsTablet and 460 or 480
+local WindowWidth = math.min(BaseWindowWidth, math.max(300, Viewport.X - 20))
+local WindowHeight = math.min(BaseWindowHeight, math.max(360, Viewport.Y - 40))
+local WindowSize = UDim2.fromOffset(WindowWidth, WindowHeight)
+local TabWidth = IsMobile and 112 or IsTablet and 140 or 160
+local NSize = IsMobile and 40 or IsTablet and 46 or 50
+local DashWidth = IsMobile and 68 or 78
+local ScreenSidePadding = IsMobile and 10 or 18
+
 local Window = Fluent:CreateWindow({
     Title = "NAZK HUB",
-    SubTitle = "PitScrap • Players • Server • Misc • Auto",
-    TabWidth = 150,
-    Size = UDim2.fromOffset(650, 520),
+    SubTitle = "PitScrap • Players • Server • Misc • Auto | " .. DeviceName,
+    TabWidth = TabWidth,
+    Size = WindowSize,
     Acrylic = true,
     Theme = CurrentThemeName,
     MinimizeKey = Enum.KeyCode.Insert,
@@ -1940,15 +1958,15 @@ local FluentRoot = Window.Root or Window.Main or Window.Window
 
 local NButton = Instance.new("TextButton")
 NButton.Name = "NButton"
-NButton.Size = UDim2.fromOffset(54, 54)
-NButton.Position = UDim2.new(0, 22, 0, 72)
+NButton.Size = UDim2.fromOffset(NSize, NSize)
+NButton.Position = UDim2.new(0, ScreenSidePadding, 0.5, -(NSize / 2))
 NButton.BackgroundColor3 = Color3.fromRGB(5, 5, 7)
 NButton.BorderSizePixel = 0
 NButton.Text = "N"
 NButton.TextColor3 = Color3.fromRGB(0, 0, 0)
 NButton.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
 NButton.TextStrokeTransparency = 0
-NButton.TextSize = 24
+NButton.TextSize = IsMobile and 20 or IsTablet and 23 or 25
 NButton.Font = Enum.Font.GothamBold
 NButton.AutoButtonColor = false
 NButton.ZIndex = 100
@@ -1977,15 +1995,15 @@ end
 
 local FloatingDash = Instance.new("TextButton")
 FloatingDash.Name = "FloatingDash"
-FloatingDash.Size = UDim2.fromOffset(82, 48)
-FloatingDash.Position = UDim2.new(1, -108, 0, 75)
+FloatingDash.Size = UDim2.fromOffset(DashWidth, NSize)
+FloatingDash.Position = UDim2.new(1, -(DashWidth + ScreenSidePadding), 0.5, -(NSize / 2))
 FloatingDash.BackgroundColor3 = Color3.fromRGB(5, 5, 7)
 FloatingDash.BorderSizePixel = 0
 FloatingDash.Text = "Dash"
 FloatingDash.TextColor3 = Color3.fromRGB(0, 0, 0)
 FloatingDash.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
 FloatingDash.TextStrokeTransparency = 0
-FloatingDash.TextSize = 17
+FloatingDash.TextSize = IsMobile and 14 or IsTablet and 16 or 17
 FloatingDash.Font = Enum.Font.GothamBold
 FloatingDash.AutoButtonColor = false
 FloatingDash.ZIndex = 100
@@ -2065,26 +2083,6 @@ MakeDraggable(NButton, function()
     SetMenuVisible(not MenuVisible)
 end)
 MakeDraggable(FloatingDash, DoDash)
-
--- تصغير FluentPro تلقائيًا على شاشات الهاتف
-if FluentRoot and FluentRoot:IsA("GuiObject") then
-    local FluentScale = Instance.new("UIScale")
-    FluentScale.Name = "NAZK_ResponsiveScale"
-    FluentScale.Parent = FluentRoot
-
-    local function UpdateResponsiveScale()
-        local Camera = Workspace.CurrentCamera
-        if not Camera then return end
-        local Viewport = Camera.ViewportSize
-        FluentScale.Scale = math.clamp(math.min(Viewport.X / 800, Viewport.Y / 600), 0.72, 1)
-    end
-
-    UpdateResponsiveScale()
-    local Camera = Workspace.CurrentCamera
-    if Camera then
-        Camera:GetPropertyChangedSignal("ViewportSize"):Connect(UpdateResponsiveScale)
-    end
-end
 
 SettingsTab:AddButton({
     Title = "Hide / Show Menu",
