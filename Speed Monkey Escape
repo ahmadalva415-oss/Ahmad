@@ -689,7 +689,7 @@ DiscordTab:AddParagraph({
     Content = "Click the button below to copy the invite link!"
 })
 
-local DiscordLink = "https://discord.gg/zQjjP9pGr"
+local DiscordLink = "https://discord.gg/ne5vgR9q8"
 
 DiscordTab:AddButton({
     Title = "Copy Discord Link",
