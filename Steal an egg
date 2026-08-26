@@ -1,5 +1,5 @@
 -- NAZK HUB - EGG FARM
--- Fluent UI edition
+-- Fluent UI edition - Enhanced Server Tab
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -63,7 +63,12 @@ local Config = {
     DashDuration = 0.25,
     DashRagdoll = false,
     Ragdoll = false,
-    CurrentTween = nil
+    CurrentTween = nil,
+    -- Server tab new configs
+    ServerPlayerFilter = "Any",
+    ServerSortOrder = "Asc",
+    ServerAutoRefresh = true,
+    SelectedServerId = nil
 }
 
 local SettingsFile = "NAZK_HUB_FluentPro_Settings.json"
@@ -110,7 +115,10 @@ local function SaveSettings()
             DashPower = Config.DashPower,
             DashSpeed = Config.DashSpeed,
             DashDuration = Config.DashDuration,
-            DashRagdoll = Config.DashRagdoll
+            DashRagdoll = Config.DashRagdoll,
+            ServerPlayerFilter = Config.ServerPlayerFilter,
+            ServerSortOrder = Config.ServerSortOrder,
+            ServerAutoRefresh = Config.ServerAutoRefresh
         }))
     end)
 end
@@ -130,6 +138,10 @@ local function LoadSettings()
         if type(Saved.DashSpeed) == "number" then Config.DashSpeed = math.clamp(Saved.DashSpeed, 1, 5) end
         if type(Saved.DashDuration) == "number" then Config.DashDuration = math.clamp(Saved.DashDuration, 0.05, 1) end
         if type(Saved.DashRagdoll) == "boolean" then Config.DashRagdoll = Saved.DashRagdoll end
+        -- Server settings
+        if type(Saved.ServerPlayerFilter) == "string" then Config.ServerPlayerFilter = Saved.ServerPlayerFilter end
+        if type(Saved.ServerSortOrder) == "string" then Config.ServerSortOrder = Saved.ServerSortOrder end
+        if type(Saved.ServerAutoRefresh) == "boolean" then Config.ServerAutoRefresh = Saved.ServerAutoRefresh end
     end)
 end
 
@@ -554,27 +566,279 @@ Tabs.Misc:AddToggle("Ragdoll", {
     SetRagdoll(State)
 end)
 
+-- ============================================================
+-- ENHANCED SERVER TAB - NEW FEATURES
+-- ============================================================
+
+local ServerData = {
+    AllServers = {},
+    FilteredServers = {},
+    LastFetchTime = 0,
+    IsFetching = false,
+    CurrentServerIndex = 1,
+    TotalServers = 0,
+    OnePlayerServers = {},
+    SelectedServerToJoin = nil
+}
+
 local ServerStatus = Tabs.Server:AddParagraph({
     Title = "Server Manager",
-    Content = "Current JobId: " .. string.sub(JobId, 1, 8) .. "..."
+    Content = "Current JobId: " .. string.sub(JobId, 1, 8) .. "...\nPlayers: " .. #Players:GetPlayers() .. "/" .. Players.MaxPlayers
 })
+
 local function SetServerStatus(Text)
     ServerStatus:SetDesc(Text)
 end
 
-local function GetServers()
-    local Url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-    return HttpService:JSONDecode(game:HttpGet(Url))
+-- Player filter options
+local PlayerFilterOptions = { "Any", "1 Player", "2 Players", "3 Players", "4 Players", "5 Players", "6+ Players", "Empty", "Full" }
+local SortOrderOptions = { "Asc", "Desc" }
+
+-- Server list display paragraph
+local ServerListParagraph = Tabs.Server:AddParagraph({
+    Title = "Server List",
+    Content = "Click 'Refresh Servers' to load"
+})
+
+local function UpdateServerListDisplay()
+    local Filtered = ServerData.FilteredServers
+    local Count = #Filtered
+
+    if Count == 0 then
+        ServerListParagraph:SetDesc("No servers match the current filter")
+        return
+    end
+
+    local DisplayText = ""
+    local MaxDisplay = math.min(Count, 10)
+
+    for i = 1, MaxDisplay do
+        local Server = Filtered[i]
+        if Server then
+            local ServerIdShort = string.sub(tostring(Server.id), 1, 8) .. "..."
+            local PingText = Server.ping and (" | Ping: " .. math.floor(Server.ping) .. "ms") or ""
+            DisplayText = DisplayText .. i .. ". " .. ServerIdShort .. " | Players: " .. Server.playing .. "/" .. Server.maxPlayers .. PingText .. "\n"
+        end
+    end
+
+    if Count > MaxDisplay then
+        DisplayText = DisplayText .. "... and " .. (Count - MaxDisplay) .. " more servers"
+    end
+
+    ServerListParagraph:SetDesc(DisplayText)
 end
 
+local function GetServers(Cursor)
+    local Url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=" .. Config.ServerSortOrder .. "&limit=100"
+    if Cursor then
+        Url = Url .. "&cursor=" .. Cursor
+    end
+
+    local Success, Result = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(Url))
+    end)
+
+    if Success and Result and Result.data then
+        return Result
+    end
+    return nil
+end
+
+local function FetchAllServers()
+    if ServerData.IsFetching then return end
+    ServerData.IsFetching = true
+    SetServerStatus("Fetching servers...")
+
+    task.spawn(function()
+        local AllServers = {}
+        local Cursor = nil
+        local MaxPages = 5 -- Limit to 500 servers to avoid rate limits
+        local PageCount = 0
+
+        repeat
+            local Result = GetServers(Cursor)
+            if not Result or not Result.data then break end
+
+            for _, Server in ipairs(Result.data) do
+                if Server.id ~= JobId then
+                    table.insert(AllServers, Server)
+                end
+            end
+
+            Cursor = Result.nextPageCursor
+            PageCount = PageCount + 1
+            task.wait(0.3) -- Rate limit protection
+        until not Cursor or PageCount >= MaxPages
+
+        ServerData.AllServers = AllServers
+        ServerData.TotalServers = #AllServers
+        ServerData.LastFetchTime = tick()
+        ServerData.IsFetching = false
+
+        -- Find one-player servers
+        ServerData.OnePlayerServers = {}
+        for _, Server in ipairs(AllServers) do
+            if Server.playing == 1 then
+                table.insert(ServerData.OnePlayerServers, Server)
+            end
+        end
+
+        SetServerStatus("Loaded " .. #AllServers .. " servers | 1-Player: " .. #ServerData.OnePlayerServers)
+        ApplyServerFilter()
+    end)
+end
+
+local function ApplyServerFilter()
+    local Filtered = {}
+    local Filter = Config.ServerPlayerFilter
+
+    for _, Server in ipairs(ServerData.AllServers) do
+        local Include = false
+        local Playing = Server.playing
+
+        if Filter == "Any" then
+            Include = true
+        elseif Filter == "1 Player" and Playing == 1 then
+            Include = true
+        elseif Filter == "2 Players" and Playing == 2 then
+            Include = true
+        elseif Filter == "3 Players" and Playing == 3 then
+            Include = true
+        elseif Filter == "4 Players" and Playing == 4 then
+            Include = true
+        elseif Filter == "5 Players" and Playing == 5 then
+            Include = true
+        elseif Filter == "6+ Players" and Playing >= 6 then
+            Include = true
+        elseif Filter == "Empty" and Playing == 0 then
+            Include = true
+        elseif Filter == "Full" and Playing >= Server.maxPlayers then
+            Include = true
+        end
+
+        if Include then
+            table.insert(Filtered, Server)
+        end
+    end
+
+    -- Sort by player count
+    if Config.ServerSortOrder == "Asc" then
+        table.sort(Filtered, function(a, b) return a.playing < b.playing end)
+    else
+        table.sort(Filtered, function(a, b) return a.playing > b.playing end)
+    end
+
+    ServerData.FilteredServers = Filtered
+    UpdateServerListDisplay()
+end
+
+-- Filter dropdown
+Tabs.Server:AddDropdown("PlayerFilter", {
+    Title = "Player Filter",
+    Description = "Filter servers by player count",
+    Values = PlayerFilterOptions,
+    Multi = false,
+    Default = Config.ServerPlayerFilter,
+    Callback = function(Value)
+        Config.ServerPlayerFilter = Value
+        SaveSettings()
+        ApplyServerFilter()
+    end
+})
+
+-- Sort order dropdown
+Tabs.Server:AddDropdown("SortOrder", {
+    Title = "Sort Order",
+    Description = "Sort servers by player count",
+    Values = SortOrderOptions,
+    Multi = false,
+    Default = Config.ServerSortOrder,
+    Callback = function(Value)
+        Config.ServerSortOrder = Value
+        SaveSettings()
+        ApplyServerFilter()
+    end
+})
+
+-- Auto refresh toggle
+Tabs.Server:AddToggle("AutoRefresh", {
+    Title = "Auto Refresh",
+    Description = "Refresh server list every second",
+    Default = Config.ServerAutoRefresh
+}):OnChanged(function(State)
+    Config.ServerAutoRefresh = State
+    SaveSettings()
+end)
+
+-- Refresh button
+Tabs.Server:AddButton({
+    Title = "Refresh Servers",
+    Description = "Fetch and display available servers",
+    Callback = function()
+        FetchAllServers()
+    end
+})
+
+-- Join specific server by index
+Tabs.Server:AddInput("JoinServerIndex", {
+    Title = "Join Server by Index",
+    Description = "Enter server number from the list",
+    Default = "",
+    Numeric = true,
+    Finished = true,
+    Callback = function(Value)
+        local Index = tonumber(Value)
+        if Index and ServerData.FilteredServers[Index] then
+            local Server = ServerData.FilteredServers[Index]
+            Config.SelectedServerToJoin = Server.id
+            SetServerStatus("Selected server " .. Index .. " (" .. Server.playing .. " players)")
+        else
+            SetServerStatus("Invalid server index")
+        end
+    end
+})
+
+-- Join selected server button
+Tabs.Server:AddButton({
+    Title = "Join Selected Server",
+    Description = "Join the server you selected by index",
+    Callback = function()
+        if Config.SelectedServerToJoin then
+            SetServerStatus("Joining selected server...")
+            task.wait(0.5)
+            TeleportService:TeleportToPlaceInstance(PlaceId, Config.SelectedServerToJoin, Player)
+        else
+            SetServerStatus("No server selected. Enter an index first.")
+        end
+    end
+})
+
+-- Join 1-Player Server button
+Tabs.Server:AddButton({
+    Title = "Join 1-Player Server",
+    Description = "Join a random server with exactly 1 player",
+    Callback = function()
+        if #ServerData.OnePlayerServers == 0 then
+            SetServerStatus("No 1-player servers found. Refresh first.")
+            return
+        end
+
+        local Server = ServerData.OnePlayerServers[math.random(1, #ServerData.OnePlayerServers)]
+        SetServerStatus("Joining 1-player server...")
+        task.wait(0.5)
+        TeleportService:TeleportToPlaceInstance(PlaceId, Server.id, Player)
+    end
+})
+
+-- Original buttons
 Tabs.Server:AddButton({
     Title = "Hop Low Players Server",
     Description = "Join the available server with the fewest players",
     Callback = function()
         SetServerStatus("Fetching servers...")
         task.spawn(function()
-            local Success, Result = pcall(GetServers)
-            if not Success or not Result or not Result.data then SetServerStatus("Failed to fetch servers"); return end
+            local Result = GetServers()
+            if not Result or not Result.data then SetServerStatus("Failed to fetch servers"); return end
             local BestServer, LowestPlayers = nil, math.huge
             for _, Server in ipairs(Result.data) do
                 if Server.id ~= JobId and Server.playing < Server.maxPlayers and Server.playing < LowestPlayers then
@@ -596,8 +860,8 @@ Tabs.Server:AddButton({
     Callback = function()
         SetServerStatus("Finding random server...")
         task.spawn(function()
-            local Success, Result = pcall(GetServers)
-            if not Success or not Result or not Result.data then SetServerStatus("Failed to fetch servers"); return end
+            local Result = GetServers()
+            if not Result or not Result.data then SetServerStatus("Failed to fetch servers"); return end
             local ValidServers = {}
             for _, Server in ipairs(Result.data) do
                 if Server.id ~= JobId and Server.playing < Server.maxPlayers then table.insert(ValidServers, Server) end
@@ -631,7 +895,21 @@ Tabs.Server:AddToggle("AutoRejoin", {
     SaveSettings()
 end)
 
-Tabs.Settings:AddParagraph({ Title = "Configuration", Content = "NAZK HUB v2.2\nFluent Pro edition" })
+-- Auto refresh loop
+local AutoRefreshConnection
+task.spawn(function()
+    while task.wait(1) do
+        if Config.ServerAutoRefresh and tick() - ServerData.LastFetchTime >= 5 then
+            FetchAllServers()
+        end
+    end
+end)
+
+-- ============================================================
+-- SETTINGS TAB
+-- ============================================================
+
+Tabs.Settings:AddParagraph({ Title = "Configuration", Content = "NAZK HUB v2.3\nFluent Pro edition\nEnhanced Server Tab" })
 
 Tabs.Settings:AddDropdown("Theme", {
     Title = "Interface Theme",
@@ -677,6 +955,9 @@ Tabs.Settings:AddButton({
         Config.DashDuration = 0.25
         Config.DashRagdoll = false
         Config.Ragdoll = false
+        Config.ServerPlayerFilter = "Any"
+        Config.ServerSortOrder = "Asc"
+        Config.ServerAutoRefresh = true
         if typeof(delfile) == "function" and typeof(isfile) == "function" and isfile(SettingsFile) then
             pcall(function() delfile(SettingsFile) end)
         end
@@ -691,6 +972,7 @@ Tabs.Settings:AddButton({
     Callback = function()
         StopRoute()
         if HideNameConnection then HideNameConnection:Disconnect(); HideNameConnection = nil end
+        if AutoRefreshConnection then AutoRefreshConnection:Disconnect(); AutoRefreshConnection = nil end
         pcall(function() Window:Destroy() end)
     end
 })
@@ -847,6 +1129,6 @@ DashButton.MouseLeave:Connect(function()
 end)
 
 Window:SelectTab(1)
-Fluent:Notify({ Title = "NAZK HUB", Content = "Fluent Pro loaded", Duration = 3 })
+Fluent:Notify({ Title = "NAZK HUB", Content = "Fluent Pro loaded | Enhanced Server Tab", Duration = 3 })
 
 -- End
