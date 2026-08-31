@@ -1197,7 +1197,9 @@ local function StartAutoUpgradeGenerator()
 
                 Remotes.UpgradeGenerator:InvokeServer(1)
                 Remotes.UpgradeGenerator:InvokeServer(2)
-                Remotes.UpgradeGenerator:InvokeServer(2)
+                Remotes.UpgradeGenerator:InvokeServer(3)
+                Remotes.UpgradeGenerator:InvokeServer(4)
+                Remotes.UpgradeGenerator:InvokeServer(5)
 
             end)
         end)
@@ -2129,5 +2131,3 @@ task.spawn(function()
         end
     end
 end)
-
-Notify("NAZK HUB", "FluentPro interface loaded successfully")
