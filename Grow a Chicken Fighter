@@ -101,6 +101,11 @@ local AutoRebirthConnection = nil
 
 local AutoTowerEnabled = false
 local AutoTowerConnection = nil
+local TowerDelay = 1.0
+local LastTowerStartTime = 0
+
+local AutoExecuteEnabled = false
+local AutoExecuteScriptURL = ""
 
 local AutoRecyclerEnabled = false
 local AutoRecyclerConnection = nil
@@ -707,6 +712,7 @@ local function HopLowPlayersServer()
                 end
             )
 
+            QueueAutoExecute()
             TeleportService:TeleportToPlaceInstance(
                 PlaceId,
                 Servers[1].id,
@@ -760,7 +766,8 @@ local function HopLowPlayersServer()
                     end
                 )
 
-                TeleportService:TeleportToPlaceInstance(
+                QueueAutoExecute()
+            TeleportService:TeleportToPlaceInstance(
                     PlaceId,
                     AllServers[1].id,
                     LocalPlayer
@@ -1106,9 +1113,11 @@ local function StartAutoTower()
 
     if AutoTowerConnection then
         AutoTowerConnection:Disconnect()
+        AutoTowerConnection = nil
     end
 
     AutoTowerEnabled = true
+    LastTowerStartTime = 0
 
     AutoTowerConnection =
         RunService.Heartbeat:Connect(function()
@@ -1117,8 +1126,13 @@ local function StartAutoTower()
                 return
             end
 
-            pcall(function()
+            local Now = tick()
+            if Now - LastTowerStartTime < TowerDelay then
+                return
+            end
 
+            LastTowerStartTime = Now
+            pcall(function()
                 ReplicatedStorage.Remotes
                     .TowerStart
                     :InvokeServer()
@@ -1282,6 +1296,9 @@ local function SaveSettings()
         DashCooldown = DashCooldown,
         Gravity = CurrentGravity,
         ThemeName = CurrentThemeName,
+        TowerDelay = TowerDelay,
+        AutoExecuteEnabled = AutoExecuteEnabled,
+        AutoExecuteScriptURL = AutoExecuteScriptURL,
     }
 
     local Success = pcall(function()
@@ -1313,10 +1330,35 @@ local function LoadSettings()
         if type(Data.ThemeName) == "string" and ThemeColors[Data.ThemeName] then
             CurrentThemeName = Data.ThemeName
         end
+        if type(Data.TowerDelay) == "number" then
+            TowerDelay = math.clamp(Data.TowerDelay, 0.1, 30)
+        end
+        if type(Data.AutoExecuteEnabled) == "boolean" then
+            AutoExecuteEnabled = Data.AutoExecuteEnabled
+        end
+        if type(Data.AutoExecuteScriptURL) == "string" then
+            AutoExecuteScriptURL = Data.AutoExecuteScriptURL
+        end
     end)
 end
 
 LoadSettings()
+
+
+local function QueueAutoExecute()
+    if not AutoExecuteEnabled or AutoExecuteScriptURL == "" then
+        return false
+    end
+
+    local Queue = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
+    if type(Queue) ~= "function" then
+        return false
+    end
+
+    local URL = string.format('%q', AutoExecuteScriptURL)
+    local Payload = "task.wait(2)\nloadstring(game:HttpGet(" .. URL .. "))()"
+    return pcall(Queue, Payload)
+end
 
 --========================================================--
 -- FLUENTPRO GUI
@@ -1354,6 +1396,7 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.Insert,
     Search = true,
 })
+pcall(function() Fluent:SetTheme(CurrentThemeName) end)
 
 local function Notify(Title, Content)
     Fluent:Notify({ Title = Title, Content = Content, Duration = 3 })
@@ -1722,6 +1765,18 @@ AutoTab:AddToggle("AutoTower", {
         if Value then StartAutoTower() else StopAutoTower() end
     end
 })
+AutoTab:AddSlider("TowerDelay", {
+    Title = "Tower Delay (seconds)",
+    Description = "Time between TowerStart requests.",
+    Default = TowerDelay,
+    Min = 0.1,
+    Max = 30,
+    Rounding = 1,
+    Callback = function(Value)
+        TowerDelay = math.clamp(tonumber(Value) or 1, 0.1, 30)
+        SaveSettings()
+    end
+})
 AutoTab:AddToggle("AutoRecycler", {
     Title = "Auto Recycler",
     Default = AutoRecyclerEnabled,
@@ -1828,6 +1883,32 @@ SettingsTab:AddDropdown("PresetSelector", {
 
         SaveSettings()
         Notify("Preset", Value .. " applied")
+    end
+})
+
+SettingsTab:AddSection("Auto Execute")
+SettingsTab:AddInput("AutoExecuteScriptURL", {
+    Title = "Script URL",
+    Description = "Raw URL used after teleport; required by the executor.",
+    Default = AutoExecuteScriptURL,
+    Placeholder = "https://raw.githubusercontent.com/.../NAZK_HUB.lua",
+    Callback = function(Value)
+        AutoExecuteScriptURL = tostring(Value or "")
+        SaveSettings()
+    end
+})
+SettingsTab:AddToggle("AutoExecuteScript", {
+    Title = "Auto EXECUTE script",
+    Description = "Queue this script to run automatically after teleport.",
+    Default = AutoExecuteEnabled,
+    Callback = function(Value)
+        AutoExecuteEnabled = Value
+        SaveSettings()
+        if Value and AutoExecuteScriptURL == "" then
+            Notify("Auto EXECUTE", "Add a raw script URL first")
+        else
+            Notify("Auto EXECUTE", Value and "enabled" or "disabled")
+        end
     end
 })
 
