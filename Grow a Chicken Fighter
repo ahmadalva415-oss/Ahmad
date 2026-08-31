@@ -113,6 +113,14 @@ local AutoRecyclerConnection = nil
 local AutoUpgradeGeneratorEnabled = false
 local AutoUpgradeGeneratorConnection = nil
 
+local AutoBuyGeneratorFoodChickenEnabled = false
+local AutoBuyGeneratorFoodChickenConnection = nil
+local LastBuyGeneratorFoodChickenTime = 0
+
+local AutoUpgradeCoopEnabled = false
+local AutoUpgradeCoopConnection = nil
+local LastUpgradeCoopTime = 0
+
 --========================================================--
 -- CHARACTER
 --========================================================--
@@ -1230,6 +1238,107 @@ local function StopAutoUpgradeGenerator()
 end
 
 --========================================================--
+-- AUTO BUY GENERATOR FOOD CHICKEN
+--========================================================--
+
+local function StartAutoBuyGeneratorFoodChicken()
+
+    if AutoBuyGeneratorFoodChickenConnection then
+        AutoBuyGeneratorFoodChickenConnection:Disconnect()
+        AutoBuyGeneratorFoodChickenConnection = nil
+    end
+
+    AutoBuyGeneratorFoodChickenEnabled = true
+    LastBuyGeneratorFoodChickenTime = 0
+
+    AutoBuyGeneratorFoodChickenConnection =
+        RunService.Heartbeat:Connect(function()
+
+            if not AutoBuyGeneratorFoodChickenEnabled then
+                return
+            end
+
+            local Now = tick()
+            if Now - LastBuyGeneratorFoodChickenTime < 1 then
+                return
+            end
+
+            LastBuyGeneratorFoodChickenTime = Now
+
+            task.spawn(function()
+                pcall(function()
+                    local BuyGenerator =
+                        ReplicatedStorage:WaitForChild("Remotes")
+                            :WaitForChild("BuyGenerator")
+
+                    for GeneratorId = 1, 6 do
+                        BuyGenerator:InvokeServer(GeneratorId)
+                        task.wait(0.1)
+                    end
+                end)
+            end)
+        end)
+end
+
+local function StopAutoBuyGeneratorFoodChicken()
+
+    AutoBuyGeneratorFoodChickenEnabled = false
+
+    if AutoBuyGeneratorFoodChickenConnection then
+        AutoBuyGeneratorFoodChickenConnection:Disconnect()
+        AutoBuyGeneratorFoodChickenConnection = nil
+    end
+end
+
+--========================================================--
+-- AUTO UPGRADE COOP
+--========================================================--
+
+local function StartAutoUpgradeCoop()
+
+    if AutoUpgradeCoopConnection then
+        AutoUpgradeCoopConnection:Disconnect()
+        AutoUpgradeCoopConnection = nil
+    end
+
+    AutoUpgradeCoopEnabled = true
+    LastUpgradeCoopTime = 0
+
+    AutoUpgradeCoopConnection =
+        RunService.Heartbeat:Connect(function()
+
+            if not AutoUpgradeCoopEnabled then
+                return
+            end
+
+            local Now = tick()
+            if Now - LastUpgradeCoopTime < 1 then
+                return
+            end
+
+            LastUpgradeCoopTime = Now
+
+            task.spawn(function()
+                pcall(function()
+                    ReplicatedStorage:WaitForChild("Remotes")
+                        :WaitForChild("ExpandCoop")
+                        :InvokeServer()
+                end)
+            end)
+        end)
+end
+
+local function StopAutoUpgradeCoop()
+
+    AutoUpgradeCoopEnabled = false
+
+    if AutoUpgradeCoopConnection then
+        AutoUpgradeCoopConnection:Disconnect()
+        AutoUpgradeCoopConnection = nil
+    end
+end
+
+--========================================================--
 --========================================================--
 -- DASH SYSTEM
 --========================================================--
@@ -1791,6 +1900,30 @@ AutoTab:AddToggle("AutoUpgradeGenerator", {
     Callback = function(Value)
         AutoUpgradeGeneratorEnabled = Value
         if Value then StartAutoUpgradeGenerator() else StopAutoUpgradeGenerator() end
+    end
+})
+AutoTab:AddToggle("AutoBuyGeneratorFoodChicken", {
+    Title = "Auto Buy Generator Food Chicken",
+    Default = AutoBuyGeneratorFoodChickenEnabled,
+    Callback = function(Value)
+        AutoBuyGeneratorFoodChickenEnabled = Value
+        if Value then
+            StartAutoBuyGeneratorFoodChicken()
+        else
+            StopAutoBuyGeneratorFoodChicken()
+        end
+    end
+})
+AutoTab:AddToggle("AutoUpgradeCoop", {
+    Title = "Auto Upgrade Coop",
+    Default = AutoUpgradeCoopEnabled,
+    Callback = function(Value)
+        AutoUpgradeCoopEnabled = Value
+        if Value then
+            StartAutoUpgradeCoop()
+        else
+            StopAutoUpgradeCoop()
+        end
     end
 })
 
