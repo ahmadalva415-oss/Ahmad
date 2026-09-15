@@ -3,7 +3,7 @@
 local placeId = tostring(game.PlaceId)
 
 local scripts = {
-    ["142823291"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/fee",
+    ["142823291"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Mm2",
     ["286090429"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/NAZK%20hub%20arsenal",
     ["99664616626491"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween",
     ["14979402479"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween",
