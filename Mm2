@@ -1,0 +1,1535 @@
+--========================================================--
+-- NAZK HUB (CLEAN) | ESP - Sheriff - Dash - Marder
+--========================================================--
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local TeleportService = game:GetService("TeleportService")
+local RunService = game:GetService("RunService")
+local Debris = game:GetService("Debris")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+
+local ShotButton = nil
+local NButton = nil
+local FloatingDash = nil
+
+--========================================================--
+-- SETTINGS
+--========================================================--
+local PlayerTweenEnabled = false
+local PlayerCurrentTween = nil
+local SelectedPlayer = nil
+local FollowEnabled = false
+local FollowConnection = nil
+local FlingEnabled = false
+local FlingConnection = nil
+local AntiAFKEnabled = false
+local AntiAFKConnection = nil
+local NoClipEnabled = false
+local NoClipConnection = nil
+
+local SpeedEnabled = false
+local SpeedValue = 30
+
+local ESPFillEnabled = false
+local ESPBoxEnabled = false
+local ESPLineEnabled = false
+local ESPRenderConnection = nil
+local ESPFillTask = nil
+local ESPHighlights = {}
+local ESPBoxes = {}
+local ESPLines = {}
+
+local HitboxEnabled = false
+local HitboxSize = 20
+local HitboxTask = nil
+local HitboxOriginals = {}
+local Blacklist = {}
+local Whitelist = {}
+
+local DashPower = 45
+local DashDuration = 0.10
+local DashCooldown = 1.2
+local DashOnCooldown = false
+
+local AutoShootEnabled = false
+local AutoShootTask = nil
+local AutoShootDelay = 0.5
+local SelectedTarget = nil
+local ShotButtonVisible = true
+local DashButtonVisible = true
+
+local Keybinds = {
+    Shot = Enum.KeyCode.F,
+    Dash = Enum.KeyCode.Q,
+    ToggleESP = Enum.KeyCode.E,
+    ToggleAutoShoot = Enum.KeyCode.R,
+    HideMenu = Enum.KeyCode.H,
+}
+
+local DefaultGravity = Workspace.Gravity
+local CurrentGravity = DefaultGravity
+local CurrentThemeName = "AMOLED"
+
+local ThemeNames = {
+    "AMOLED", "Dark", "Ash Gray", "Royal Blue", "Deep Ocean",
+    "Neon Cyber", "Neon Purple", "Orange", "Charcoal",
+    "Pearl White", "Midnight Blue", "Galaxy Purple",
+    "Cosmic Violet", "Cotton Candy",
+}
+local ThemeColors = {
+    ["AMOLED"] = Color3.fromRGB(0, 0, 0),
+    ["Dark"] = Color3.fromRGB(35, 35, 35),
+    ["Ash Gray"] = Color3.fromRGB(95, 100, 105),
+    ["Royal Blue"] = Color3.fromRGB(40, 75, 170),
+    ["Deep Ocean"] = Color3.fromRGB(15, 70, 105),
+    ["Neon Cyber"] = Color3.fromRGB(0, 175, 125),
+    ["Neon Purple"] = Color3.fromRGB(125, 35, 190),
+    ["Orange"] = Color3.fromRGB(190, 85, 15),
+    ["Charcoal"] = Color3.fromRGB(55, 55, 55),
+    ["Pearl White"] = Color3.fromRGB(210, 210, 210),
+    ["Midnight Blue"] = Color3.fromRGB(25, 45, 100),
+    ["Galaxy Purple"] = Color3.fromRGB(75, 35, 125),
+    ["Cosmic Violet"] = Color3.fromRGB(105, 25, 155),
+    ["Cotton Candy"] = Color3.fromRGB(220, 105, 175),
+}
+
+--========================================================--
+-- CHARACTER
+--========================================================--
+local function GetCharacter()
+    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+end
+
+local function GetRoot()
+    local Character = GetCharacter()
+    return Character and Character:FindFirstChild("HumanoidRootPart")
+end
+
+local DrawingSupported = pcall(function()
+    return Drawing.new("Line")
+end)
+
+--========================================================--
+-- DASH
+--========================================================--
+local function DoDash()
+    if DashOnCooldown then return end
+    local Root = GetRoot()
+    if not Root then return end
+    DashOnCooldown = true
+    local Camera = Workspace.CurrentCamera
+    local Direction = Camera and Camera.CFrame.LookVector or Root.CFrame.LookVector
+    Direction = Vector3.new(Direction.X, 0, Direction.Z)
+    if Direction.Magnitude < 0.01 then
+        Direction = Vector3.new(Root.CFrame.LookVector.X, 0, Root.CFrame.LookVector.Z)
+    end
+    Direction = Direction.Unit
+    local Velocity = Instance.new("BodyVelocity")
+    Velocity.Name = "NAZK_DashVelocity"
+    Velocity.MaxForce = Vector3.new(1000000, 0, 1000000)
+    Velocity.P = 50000
+    Velocity.Velocity = Direction * DashPower
+    Velocity.Parent = Root
+    task.delay(DashDuration, function()
+        if Velocity and Velocity.Parent then Velocity:Destroy() end
+    end)
+    task.delay(DashCooldown, function()
+        DashOnCooldown = false
+    end)
+end
+
+--========================================================--
+-- SPEED
+--========================================================--
+local function ApplySpeed()
+    if LocalPlayer.Character then
+        local Hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if Hum then Hum.WalkSpeed = SpeedValue end
+    end
+end
+
+local function StopSpeed()
+    if LocalPlayer.Character then
+        local Hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if Hum then Hum.WalkSpeed = 16 end
+    end
+end
+
+--========================================================--
+-- ESP PLAYERS
+--========================================================--
+local function PlayerHasKnife(Player)
+    if not Player then return false end
+    local Backpack = Player:FindFirstChild("Backpack")
+    if Backpack and Backpack:FindFirstChild("Knife") then return true end
+    if Player.Character and Player.Character:FindFirstChild("Knife") then return true end
+    return false
+end
+
+local function PlayerHasGun(Player)
+    if not Player then return false end
+    local Backpack = Player:FindFirstChild("Backpack")
+    if Backpack and Backpack:FindFirstChild("Gun") then return true end
+    if Player.Character and Player.Character:FindFirstChild("Gun") then return true end
+    return false
+end
+
+local function GetESPColor(Player)
+    if PlayerHasKnife(Player) then
+        return Color3.fromRGB(255, 0, 0)
+    elseif PlayerHasGun(Player) then
+        return Color3.fromRGB(0, 100, 255)
+    else
+        return Color3.fromRGB(0, 255, 0)
+    end
+end
+
+local function UpdateFill(Player, Color)
+    if not Player or Player == LocalPlayer then return end
+    local Character = Player.Character
+    if not Character then return end
+
+    if ESPHighlights[Player] then
+        pcall(function() ESPHighlights[Player]:Destroy() end)
+        ESPHighlights[Player] = nil
+    end
+
+    local H = Instance.new("Highlight")
+    H.Name = "NAZK_ESP_Fill"
+    H.Adornee = Character
+    H.FillColor = Color
+    H.FillTransparency = 0.55
+    H.OutlineColor = Color
+    H.OutlineTransparency = 0
+    H.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    H.Parent = Character
+    ESPHighlights[Player] = H
+end
+
+local function UpdateBox(Player, Color, Camera)
+    if not DrawingSupported then return end
+    if not Player or Player == LocalPlayer then return end
+    local Character = Player.Character
+    if not Character then return end
+    local HRP = Character:FindFirstChild("HumanoidRootPart")
+    if not HRP then return end
+
+    local Box = ESPBoxes[Player]
+    if not Box then
+        Box = Drawing.new("Square")
+        Box.Thickness = 1
+        Box.Filled = false
+        Box.Transparency = 1
+        Box.Visible = false
+        ESPBoxes[Player] = Box
+    end
+
+    local Vector, OnScreen = Camera:WorldToViewportPoint(HRP.Position)
+    if OnScreen then
+        local Size = 500 / Vector.Z
+        local Width = Size * 0.6
+        local Height = Size * 0.9
+        Box.Size = Vector2.new(Width, Height)
+        Box.Position = Vector2.new(Vector.X - Width / 2, Vector.Y - Height / 2)
+        Box.Color = Color
+        Box.Visible = true
+    else
+        Box.Visible = false
+    end
+end
+
+local function UpdateLine(Player, Color, Camera)
+    if not DrawingSupported then return end
+    if not Player or Player == LocalPlayer then return end
+    local Character = Player.Character
+    if not Character then return end
+    local HRP = Character:FindFirstChild("HumanoidRootPart")
+    if not HRP then return end
+
+    local Line = ESPLines[Player]
+    if not Line then
+        Line = Drawing.new("Line")
+        Line.Thickness = 2
+        Line.Transparency = 1
+        Line.Visible = false
+        ESPLines[Player] = Line
+    end
+
+    local Vector, OnScreen = Camera:WorldToViewportPoint(HRP.Position)
+    if OnScreen then
+        local Viewport = Camera.ViewportSize
+        Line.From = Vector2.new(Viewport.X / 2, Viewport.Y)
+        Line.To = Vector2.new(Vector.X, Vector.Y)
+        Line.Color = Color
+        Line.Visible = true
+    else
+        Line.Visible = false
+    end
+end
+
+local function ClearESPForPlayer(Player)
+    if ESPHighlights[Player] then
+        pcall(function() ESPHighlights[Player]:Destroy() end)
+        ESPHighlights[Player] = nil
+    end
+    if ESPBoxes[Player] then
+        pcall(function() ESPBoxes[Player]:Remove() end)
+        ESPBoxes[Player] = nil
+    end
+    if ESPLines[Player] then
+        pcall(function() ESPLines[Player]:Remove() end)
+        ESPLines[Player] = nil
+    end
+end
+
+local function StartESP()
+    if not ESPRenderConnection then
+        ESPRenderConnection = RunService.RenderStepped:Connect(function()
+            local Camera = Workspace.CurrentCamera
+            if not Camera then return end
+            for _, Player in ipairs(Players:GetPlayers()) do
+                if Player ~= LocalPlayer then
+                    local Color = GetESPColor(Player)
+                    if ESPBoxEnabled then
+                        UpdateBox(Player, Color, Camera)
+                    elseif ESPBoxes[Player] then
+                        ESPBoxes[Player].Visible = false
+                    end
+                    if ESPLineEnabled then
+                        UpdateLine(Player, Color, Camera)
+                    elseif ESPLines[Player] then
+                        ESPLines[Player].Visible = false
+                    end
+                end
+            end
+        end)
+    end
+
+    if not ESPFillTask then
+        ESPFillTask = task.spawn(function()
+            while ESPFillEnabled do
+                for _, Player in ipairs(Players:GetPlayers()) do
+                    if Player ~= LocalPlayer then
+                        UpdateFill(Player, GetESPColor(Player))
+                    end
+                end
+                task.wait(1)
+            end
+            for Player, _ in pairs(ESPHighlights) do
+                pcall(function() ESPHighlights[Player]:Destroy() end)
+                ESPHighlights[Player] = nil
+            end
+            ESPFillTask = nil
+        end)
+    end
+end
+
+local function StopESP()
+    if ESPRenderConnection then
+        ESPRenderConnection:Disconnect()
+        ESPRenderConnection = nil
+    end
+    if ESPFillTask then
+        pcall(function() task.cancel(ESPFillTask) end)
+        ESPFillTask = nil
+    end
+    for Player, _ in pairs(ESPHighlights) do
+        ClearESPForPlayer(Player)
+    end
+    for _, Player in ipairs(Players:GetPlayers()) do
+        ClearESPForPlayer(Player)
+    end
+    ESPHighlights = {}
+    ESPBoxes = {}
+    ESPLines = {}
+end
+
+local function ToggleESP()
+    if ESPFillEnabled or ESPBoxEnabled or ESPLineEnabled then
+        ESPFillEnabled = false
+        ESPBoxEnabled = false
+        ESPLineEnabled = false
+        StopESP()
+    else
+        ESPFillEnabled = true
+        ESPBoxEnabled = true
+        ESPLineEnabled = true
+        StartESP()
+    end
+end
+
+Players.PlayerRemoving:Connect(function(Player)
+    ClearESPForPlayer(Player)
+end)
+
+--========================================================--
+-- MARDER: HITBOX EXPANDER
+--========================================================--
+local function IsPlayerAllowed(Player)
+    if not Player or Player == LocalPlayer then return false end
+    if next(Whitelist) ~= nil then
+        return Whitelist[Player.Name] == true
+    end
+    if Blacklist[Player.Name] then return false end
+    return true
+end
+
+local function ApplyHitbox(Player)
+    if not Player.Character then return end
+    local HRP = Player.Character:FindFirstChild("HumanoidRootPart")
+    if not HRP then return end
+
+    if not HitboxOriginals[Player] then
+        HitboxOriginals[Player] = {
+            Size = HRP.Size,
+            Transparency = HRP.Transparency,
+            CanCollide = HRP.CanCollide,
+            Massless = HRP.Massless,
+        }
+    end
+
+    HRP.Size = Vector3.new(HitboxSize, HitboxSize, HitboxSize)
+    HRP.Transparency = 0.6
+    HRP.CanCollide = false
+    HRP.Massless = true
+end
+
+local function RestoreHitbox(Player)
+    if HitboxOriginals[Player] then
+        local Original = HitboxOriginals[Player]
+        if Player.Character then
+            local HRP = Player.Character:FindFirstChild("HumanoidRootPart")
+            if HRP then
+                HRP.Size = Original.Size
+                HRP.Transparency = Original.Transparency
+                HRP.CanCollide = Original.CanCollide
+                HRP.Massless = Original.Massless
+            end
+        end
+        HitboxOriginals[Player] = nil
+    end
+end
+
+local function StartHitbox()
+    if HitboxTask then
+        pcall(function() task.cancel(HitboxTask) end)
+    end
+    HitboxEnabled = true
+    HitboxTask = task.spawn(function()
+        while HitboxEnabled do
+            for _, Player in ipairs(Players:GetPlayers()) do
+                if IsPlayerAllowed(Player) and Player.Character then
+                    ApplyHitbox(Player)
+                end
+            end
+            task.wait(0.2)
+        end
+        for Player, _ in pairs(HitboxOriginals) do
+            RestoreHitbox(Player)
+        end
+    end)
+end
+
+local function StopHitbox()
+    HitboxEnabled = false
+    if HitboxTask then
+        pcall(function() task.cancel(HitboxTask) end)
+        HitboxTask = nil
+    end
+    for Player, _ in pairs(HitboxOriginals) do
+        RestoreHitbox(Player)
+    end
+    HitboxOriginals = {}
+end
+
+--========================================================--
+-- SHOT SYSTEM
+--========================================================--
+local function FindKnifeHolder()
+    for _, Player in ipairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer and Player.Character then
+            if PlayerHasKnife(Player) and IsPlayerAllowed(Player) then
+                return Player
+            end
+        end
+    end
+    return nil
+end
+
+local function HasLineOfSight(TargetPlayer)
+    if not TargetPlayer or not TargetPlayer.Character then return false end
+    local MyChar = LocalPlayer.Character
+    if not MyChar then return false end
+    local MyHRP = MyChar:FindFirstChild("HumanoidRootPart")
+    local TargetHRP = TargetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not MyHRP or not TargetHRP then return false end
+
+    local Origin = MyHRP.Position
+    local Direction = TargetHRP.Position - Origin
+
+    local Params = RaycastParams.new()
+    pcall(function()
+        Params.FilterType = Enum.RaycastFilterType.Exclude
+    end)
+    pcall(function()
+        Params.FilterType = Enum.RaycastFilterType.Blacklist
+    end)
+    Params.FilterDescendantsInstances = { MyChar, TargetPlayer.Character }
+    Params.IgnoreWater = true
+
+    local Result = Workspace:Raycast(Origin, Direction, Params)
+    return Result == nil
+end
+
+local function EquipGun()
+    if not LocalPlayer.Character then return nil end
+    local Gun = LocalPlayer.Character:FindFirstChild("Gun")
+    if Gun then return Gun end
+    local Backpack = LocalPlayer:FindFirstChild("Backpack")
+    if Backpack then
+        Gun = Backpack:FindFirstChild("Gun")
+        if Gun then
+            local Hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if Hum then
+                pcall(function() Hum:EquipTool(Gun) end)
+                return Gun
+            end
+        end
+    end
+    return nil
+end
+
+local function ShootAt(TargetPlayer)
+    if not TargetPlayer or not TargetPlayer.Character then
+        return false, "no target"
+    end
+    local TargetHRP = TargetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not TargetHRP then return false, "no HRP" end
+
+    local Gun = EquipGun()
+    if not Gun then return false, "no gun" end
+    task.wait(0.1)
+
+    local MyChar = Workspace:FindFirstChild(LocalPlayer.Name)
+    if not MyChar then return false, "no char" end
+
+    Gun = MyChar:FindFirstChild("Gun")
+    if not Gun then return false, "gun not equipped" end
+
+    local Shoot = Gun:FindFirstChild("Shoot")
+    if not Shoot then return false, "no remote" end
+
+    local MyHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not MyHRP then return false, "no my HRP" end
+
+    pcall(function()
+        Shoot:FireServer(MyHRP.CFrame, CFrame.new(TargetHRP.Position))
+    end)
+    return true, "shot"
+end
+
+local function StartAutoShoot()
+    if AutoShootTask then pcall(function() task.cancel(AutoShootTask) end) end
+    AutoShootEnabled = true
+    AutoShootTask = task.spawn(function()
+        while AutoShootEnabled do
+            local Target = FindKnifeHolder()
+            if Target then
+                if HasLineOfSight(Target) then
+                    ShootAt(Target)
+                end
+            end
+            task.wait(AutoShootDelay)
+        end
+    end)
+end
+
+local function StopAutoShoot()
+    AutoShootEnabled = false
+    if AutoShootTask then
+        pcall(function() task.cancel(AutoShootTask) end)
+        AutoShootTask = nil
+    end
+end
+
+--========================================================--
+-- TWEEN
+--========================================================--
+local function CancelPlayerTween()
+    if PlayerCurrentTween then
+        pcall(function() PlayerCurrentTween:Cancel() end)
+        PlayerCurrentTween = nil
+    end
+end
+
+local function TweenToPlayer(TargetPlayer)
+    local Root = GetRoot()
+    if not Root or not TargetPlayer then return false end
+    local TargetCharacter = TargetPlayer.Character
+    if not TargetCharacter then return false end
+    local TargetRoot = TargetCharacter:FindFirstChild("HumanoidRootPart")
+    if not TargetRoot then return false end
+    local TargetPosition = TargetRoot.Position + Vector3.new(0, 3, 0)
+    local Distance = (Root.Position - TargetPosition).Magnitude
+    if Distance <= 3 then return true end
+    local Duration = math.max(Distance / 35, 0.12)
+    CancelPlayerTween()
+    PlayerCurrentTween = TweenService:Create(
+        Root,
+        TweenInfo.new(Duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+        { CFrame = CFrame.new(TargetPosition) }
+    )
+    PlayerCurrentTween:Play()
+    local Finished = false
+    local Connection = PlayerCurrentTween.Completed:Connect(function() Finished = true end)
+    while PlayerTweenEnabled and PlayerCurrentTween and not Finished do
+        task.wait(0.02)
+    end
+    if Connection then Connection:Disconnect() end
+    if not PlayerTweenEnabled then
+        CancelPlayerTween()
+        return false
+    end
+    PlayerCurrentTween = nil
+    return true
+end
+
+--========================================================--
+-- FOLLOW
+--========================================================--
+local function StartFollow()
+    if FollowConnection then FollowConnection:Disconnect() end
+    FollowEnabled = true
+    FollowConnection = RunService.Heartbeat:Connect(function()
+        if not FollowEnabled or not SelectedPlayer then return end
+        local Root = GetRoot()
+        local TargetCharacter = SelectedPlayer.Character
+        if not Root or not TargetCharacter then return end
+        local TargetRoot = TargetCharacter:FindFirstChild("HumanoidRootPart")
+        if not TargetRoot then return end
+        local Distance = (Root.Position - TargetRoot.Position).Magnitude
+        if Distance > 5 then
+            Root.CFrame = CFrame.new(TargetRoot.Position + Vector3.new(0, 3, 0))
+        end
+    end)
+end
+
+local function StopFollow()
+    FollowEnabled = false
+    if FollowConnection then
+        FollowConnection:Disconnect()
+        FollowConnection = nil
+    end
+end
+
+--========================================================--
+-- FLING
+--========================================================--
+local function DoFling(Target)
+    if not Target then return end
+    local TargetChar = Target.Character
+    if not TargetChar then return end
+    local TargetRoot = TargetChar:FindFirstChild("HumanoidRootPart")
+    if not TargetRoot then return end
+    local BAV = Instance.new("BodyAngularVelocity")
+    BAV.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    BAV.AngularVelocity = Vector3.new(99999, 99999, 99999)
+    BAV.P = 999999
+    BAV.Parent = TargetRoot
+    local BV = Instance.new("BodyVelocity")
+    BV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    BV.Velocity = Vector3.new(math.random(-500, 500), math.random(800, 1200), math.random(-500, 500))
+    BV.P = 999999
+    BV.Parent = TargetRoot
+    Debris:AddItem(BAV, 2)
+    Debris:AddItem(BV, 2)
+end
+
+local function StartFling()
+    if FlingConnection then FlingConnection:Disconnect() end
+    FlingEnabled = true
+    FlingConnection = RunService.Heartbeat:Connect(function()
+        if not FlingEnabled or not SelectedPlayer then return end
+        DoFling(SelectedPlayer)
+    end)
+end
+
+local function StopFling()
+    FlingEnabled = false
+    if FlingConnection then
+        FlingConnection:Disconnect()
+        FlingConnection = nil
+    end
+end
+
+--========================================================--
+-- MISC
+--========================================================--
+local function StartAntiAFK()
+    if AntiAFKConnection then AntiAFKConnection:Disconnect() end
+    AntiAFKEnabled = true
+    AntiAFKConnection = LocalPlayer.Idled:Connect(function()
+        if AntiAFKEnabled then
+            local VirtualUser = game:GetService("VirtualUser")
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end
+    end)
+end
+
+local function StopAntiAFK()
+    AntiAFKEnabled = false
+    if AntiAFKConnection then
+        AntiAFKConnection:Disconnect()
+        AntiAFKConnection = nil
+    end
+end
+
+local function StartNoClip()
+    if NoClipConnection then NoClipConnection:Disconnect() end
+    NoClipEnabled = true
+    NoClipConnection = RunService.Stepped:Connect(function()
+        if not NoClipEnabled then return end
+        local Character = LocalPlayer.Character
+        if not Character then return end
+        for _, Part in ipairs(Character:GetDescendants()) do
+            if Part:IsA("BasePart") then Part.CanCollide = false end
+        end
+    end)
+end
+
+local function StopNoClip()
+    NoClipEnabled = false
+    if NoClipConnection then
+        NoClipConnection:Disconnect()
+        NoClipConnection = nil
+    end
+    local Character = LocalPlayer.Character
+    if Character then
+        for _, Part in ipairs(Character:GetDescendants()) do
+            if Part:IsA("BasePart") then Part.CanCollide = true end
+        end
+    end
+end
+
+--========================================================--
+-- SERVER HOP
+--========================================================--
+local function HopLowPlayersServer()
+    local PlaceId = game.PlaceId
+    pcall(function()
+        local Servers = {}
+        local Cursor = ""
+        repeat
+            local URL = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+            if Cursor ~= "" then URL = URL .. "&cursor=" .. Cursor end
+            local Response = game:HttpGet(URL)
+            local Data = HttpService:JSONDecode(Response)
+            for _, Server in ipairs(Data.data) do
+                if Server.playing <= 1 and Server.id ~= game.JobId then
+                    table.insert(Servers, Server)
+                end
+            end
+            Cursor = Data.nextPageCursor or ""
+        until Cursor == "" or #Servers > 0
+        if #Servers > 0 then
+            table.sort(Servers, function(A, B) return A.playing < B.playing end)
+            TeleportService:TeleportToPlaceInstance(PlaceId, Servers[1].id, LocalPlayer)
+        end
+    end)
+end
+
+--========================================================--
+-- FLUENT GUI
+--========================================================--
+local Fluent = loadstring(game:HttpGet(
+    "https://github.com/StyearX/Fluent-Modded/releases/download/Fluent/FluentPro"
+))()
+
+local Camera = workspace.CurrentCamera
+local Viewport = Camera and Camera.ViewportSize or Vector2.new(1920, 1080)
+local IsTouchDevice = UserInputService.TouchEnabled
+local IsMobile = IsTouchDevice and Viewport.X < 700
+local IsTablet = IsTouchDevice and Viewport.X >= 700
+local DeviceName = IsMobile and "Mobile" or IsTablet and "iPad / Tablet" or "Computer"
+local BaseWindowWidth = IsMobile and 300 or IsTablet and 460 or 580
+local BaseWindowHeight = IsMobile and 320 or IsTablet and 400 or 480
+local WindowWidth = math.min(BaseWindowWidth, math.max(280, Viewport.X - 20))
+local WindowHeight = math.min(BaseWindowHeight, math.max(300, Viewport.Y - 40))
+local WindowSize = UDim2.fromOffset(WindowWidth, WindowHeight)
+local TabWidth = IsMobile and 100 or IsTablet and 130 or 160
+local NSize = IsMobile and 40 or IsTablet and 46 or 50
+local DashWidth = IsMobile and 68 or 78
+local ShotWidth = IsMobile and 70 or 80
+local ScreenSidePadding = IsMobile and 10 or 18
+
+local Window = Fluent:CreateWindow({
+    Title = "NAZK HUB",
+    SubTitle = "ESP - Sheriff - Dash - Marder | " .. DeviceName,
+    TabWidth = TabWidth,
+    Size = WindowSize,
+    Acrylic = false,
+    Theme = CurrentThemeName,
+    MinimizeKey = Enum.KeyCode.Insert,
+    Search = false,
+})
+
+pcall(function() Fluent:SetTheme(CurrentThemeName) end)
+
+local function Notify(Title, Content) end
+
+local function PlayerValues()
+    local Values = {}
+    for _, P in ipairs(Players:GetPlayers()) do
+        if P ~= LocalPlayer then
+            table.insert(Values, P.Name)
+        end
+    end
+    if #Values == 0 then table.insert(Values, "No players") end
+    return Values
+end
+
+--========================================================--
+-- 1. DISCORD TAB
+--========================================================--
+local DiscordTab = Window:AddTab({ Title = "Discord", Icon = "solar/chat-round-bold" })
+local DiscordLink = "https://discord.gg/ne5vgR9q8"
+DiscordTab:AddButton({
+    Title = "Copy Discord Link",
+    Icon = "solar/copy-bold",
+    Callback = function()
+        if type(setclipboard) == "function" then
+            setclipboard(DiscordLink)
+        end
+    end,
+})
+
+--========================================================--
+-- 2. ESP PLAYERS TAB
+--========================================================--
+local ESPTab = Window:AddTab({ Title = "ESP Players", Icon = "solar/eye-bold" })
+
+ESPTab:AddToggle("ESPFillToggle", {
+    Title = "Fill",
+    Default = false,
+    Callback = function(Value)
+        ESPFillEnabled = Value
+        if Value then StartESP() end
+    end,
+})
+
+ESPTab:AddToggle("ESPBoxToggle", {
+    Title = "Box",
+    Default = false,
+    Callback = function(Value)
+        ESPBoxEnabled = Value
+        if Value then StartESP() end
+    end,
+})
+
+ESPTab:AddToggle("ESPLineToggle", {
+    Title = "Line",
+    Default = false,
+    Callback = function(Value)
+        ESPLineEnabled = Value
+        if Value then StartESP() end
+    end,
+})
+
+--========================================================--
+-- 3. SHERIFF TAB
+--========================================================--
+local SheriffTab = Window:AddTab({ Title = "Sheriff", Icon = "solar/shield-bold" })
+
+SheriffTab:AddSection("Shot Button")
+
+SheriffTab:AddButton({
+    Title = "Hide Shot Button",
+    Icon = "solar/eye-closed-bold",
+    Callback = function()
+        if ShotButton then ShotButton.Visible = false end
+        ShotButtonVisible = false
+    end,
+})
+
+SheriffTab:AddButton({
+    Title = "Show Shot Button",
+    Icon = "solar/eye-bold",
+    Callback = function()
+        if ShotButton then ShotButton.Visible = true end
+        ShotButtonVisible = true
+    end,
+})
+
+SheriffTab:AddSection("Auto Shoot")
+
+SheriffTab:AddToggle("AutoShootToggle", {
+    Title = "Auto Shoot",
+    Default = false,
+    Callback = function(Value)
+        if Value then StartAutoShoot()
+        else StopAutoShoot() end
+    end,
+})
+
+SheriffTab:AddSlider("AutoShootDelay", {
+    Title = "Speed",
+    Default = AutoShootDelay * 1000,
+    Min = 100, Max = 3000, Rounding = 0, Suffix = "ms",
+    Callback = function(Value) AutoShootDelay = Value / 1000 end,
+})
+
+--========================================================--
+-- 4. MARDER TAB
+--========================================================--
+local MarderTab = Window:AddTab({ Title = "Marder", Icon = "lucide/slice" })
+
+MarderTab:AddSection("Hitbox Expander")
+
+MarderTab:AddToggle("HitboxToggle", {
+    Title = "Hitbox Expander",
+    Default = false,
+    Callback = function(Value)
+        if Value then StartHitbox()
+        else StopHitbox() end
+    end,
+})
+
+MarderTab:AddSlider("HitboxSize", {
+    Title = "Hitbox Size",
+    Default = HitboxSize,
+    Min = 5, Max = 100, Rounding = 0,
+    Callback = function(Value)
+        HitboxSize = Value
+        if HitboxEnabled then
+            for _, Player in ipairs(Players:GetPlayers()) do
+                if IsPlayerAllowed(Player) and Player.Character then
+                    ApplyHitbox(Player)
+                end
+            end
+        end
+    end,
+})
+
+MarderTab:AddButton({
+    Title = "Reset All Hitboxes",
+    Icon = "solar/restart-bold",
+    Callback = function()
+        for Player, _ in pairs(HitboxOriginals) do
+            RestoreHitbox(Player)
+        end
+        HitboxOriginals = {}
+    end,
+})
+
+MarderTab:AddSection("Blacklist")
+
+local BlacklistInput = MarderTab:AddInput("BlacklistInput", {
+    Title = "Player Name",
+    Default = "",
+    Placeholder = "Player Name",
+    Callback = function() end,
+})
+
+local BlacklistDropdown
+
+MarderTab:AddButton({
+    Title = "Add to Blacklist",
+    Icon = "solar/close-circle-bold",
+    Callback = function()
+        local Name = BlacklistInput.Value
+        if not Name or Name == "" then return end
+        Blacklist[Name] = true
+        Whitelist[Name] = nil
+        BlacklistInput:SetValue("")
+        local List = {}
+        for name, _ in pairs(Blacklist) do
+            table.insert(List, name)
+        end
+        if #List == 0 then List = { "None" } end
+        BlacklistDropdown:SetValues(List)
+    end,
+})
+
+BlacklistDropdown = MarderTab:AddDropdown("BlacklistDropdown", {
+    Title = "Current Blacklist",
+    Values = { "None" },
+    Multi = false,
+    Default = "None",
+    Callback = function(Value)
+        if Value and Value ~= "None" then
+            Blacklist[Value] = nil
+            local List = {}
+            for name, _ in pairs(Blacklist) do
+                table.insert(List, name)
+            end
+            if #List == 0 then List = { "None" } end
+            BlacklistDropdown:SetValues(List)
+        end
+    end,
+})
+
+MarderTab:AddSection("Whitelist")
+
+local WhitelistInput = MarderTab:AddInput("WhitelistInput", {
+    Title = "Player Name",
+    Default = "",
+    Placeholder = "Player Name",
+    Callback = function() end,
+})
+
+local WhitelistDropdown
+
+MarderTab:AddButton({
+    Title = "Add to Whitelist",
+    Icon = "solar/check-circle-bold",
+    Callback = function()
+        local Name = WhitelistInput.Value
+        if not Name or Name == "" then return end
+        Whitelist[Name] = true
+        Blacklist[Name] = nil
+        WhitelistInput:SetValue("")
+        local List = {}
+        for name, _ in pairs(Whitelist) do
+            table.insert(List, name)
+        end
+        if #List == 0 then List = { "None" } end
+        WhitelistDropdown:SetValues(List)
+    end,
+})
+
+WhitelistDropdown = MarderTab:AddDropdown("WhitelistDropdown", {
+    Title = "Current Whitelist",
+    Values = { "None" },
+    Multi = false,
+    Default = "None",
+    Callback = function(Value)
+        if Value and Value ~= "None" then
+            Whitelist[Value] = nil
+            local List = {}
+            for name, _ in pairs(Whitelist) do
+                table.insert(List, name)
+            end
+            if #List == 0 then List = { "None" } end
+            WhitelistDropdown:SetValues(List)
+        end
+    end,
+})
+
+MarderTab:AddButton({
+    Title = "Clear Both Lists",
+    Icon = "solar/trash-bin-trash-bold",
+    Callback = function()
+        Blacklist = {}
+        Whitelist = {}
+        BlacklistDropdown:SetValues({ "None" })
+        WhitelistDropdown:SetValues({ "None" })
+    end,
+})
+
+--========================================================--
+-- 5. DASH TAB
+--========================================================--
+local DashTab = Window:AddTab({ Title = "Dash", Icon = "solar/bolt-bold" })
+
+DashTab:AddSection("Dash Button")
+
+DashTab:AddButton({
+    Title = "Hide Dash Button",
+    Icon = "solar/eye-closed-bold",
+    Callback = function()
+        if FloatingDash then FloatingDash.Visible = false end
+        DashButtonVisible = false
+    end,
+})
+
+DashTab:AddButton({
+    Title = "Show Dash Button",
+    Icon = "solar/eye-bold",
+    Callback = function()
+        if FloatingDash then FloatingDash.Visible = true end
+        DashButtonVisible = true
+    end,
+})
+
+DashTab:AddSection("Settings")
+
+DashTab:AddSlider("DashPower", {
+    Title = "Dash Power",
+    Default = DashPower,
+    Min = 20, Max = 200, Rounding = 0,
+    Callback = function(Value) DashPower = Value end,
+})
+DashTab:AddSlider("DashDuration", {
+    Title = "Dash Duration",
+    Default = DashDuration * 100,
+    Min = 5, Max = 50, Rounding = 0,
+    Callback = function(Value) DashDuration = Value / 100 end,
+})
+DashTab:AddSlider("DashCooldown", {
+    Title = "Dash Cooldown",
+    Default = DashCooldown * 10,
+    Min = 1, Max = 30, Rounding = 0,
+    Callback = function(Value) DashCooldown = Value / 10 end,
+})
+DashTab:AddButton({ Title = "Dash Now", Icon = "solar/bolt-bold", Callback = DoDash })
+
+--========================================================--
+-- 6. PLAYERS TAB
+--========================================================--
+local PlayersTab = Window:AddTab({ Title = "Players", Icon = "solar/users-group-rounded-bold" })
+local SelectedPlayerValue = nil
+local PlayerDropdown = PlayersTab:AddDropdown("SelectedPlayer", {
+    Title = "Select Player",
+    Values = PlayerValues(),
+    Default = PlayerValues()[1],
+    Callback = function(Value)
+        SelectedPlayerValue = Value
+        SelectedPlayer = Players:FindFirstChild(Value)
+    end,
+})
+
+PlayersTab:AddButton({
+    Title = "Refresh List",
+    Icon = "solar/refresh-bold",
+    Callback = function()
+        local Values = PlayerValues()
+        pcall(function()
+            if PlayerDropdown.SetValues then PlayerDropdown:SetValues(Values)
+            elseif PlayerDropdown.SetOptions then PlayerDropdown:SetOptions(Values) end
+        end)
+    end,
+})
+
+PlayersTab:AddToggle("TweenToPlayer", {
+    Title = "Tween to Player",
+    Default = false,
+    Callback = function(Value)
+        PlayerTweenEnabled = Value
+        if not SelectedPlayer then
+            PlayerTweenEnabled = false
+            return
+        end
+        if Value then
+            task.spawn(function()
+                while PlayerTweenEnabled and SelectedPlayer and SelectedPlayer.Parent do
+                    local Success = TweenToPlayer(SelectedPlayer)
+                    task.wait(Success and 0.1 or 0.5)
+                end
+                CancelPlayerTween()
+            end)
+        else
+            CancelPlayerTween()
+        end
+    end,
+})
+
+PlayersTab:AddToggle("FollowPlayer", {
+    Title = "Follow Player",
+    Default = false,
+    Callback = function(Value)
+        if not SelectedPlayer then return end
+        FollowEnabled = Value
+        if Value then StartFollow() else StopFollow() end
+    end,
+})
+
+PlayersTab:AddToggle("FlingPlayer", {
+    Title = "Fling Player",
+    Default = false,
+    Callback = function(Value)
+        if not SelectedPlayer then return end
+        FlingEnabled = Value
+        if Value then StartFling() else StopFling() end
+    end,
+})
+
+--========================================================--
+-- 7. SERVER TAB
+--========================================================--
+local ServerTab = Window:AddTab({ Title = "Server", Icon = "solar/server-square-bold" })
+ServerTab:AddButton({
+    Title = "Hop Low Server",
+    Icon = "solar/transfer-horizontal-bold",
+    Callback = function()
+        task.spawn(HopLowPlayersServer)
+    end,
+})
+ServerTab:AddButton({
+    Title = "Rejoin",
+    Icon = "solar/restart-bold",
+    Callback = function()
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end,
+})
+
+--========================================================--
+-- 8. MISC TAB
+--========================================================--
+local MiscTab = Window:AddTab({ Title = "Misc", Icon = "solar/settings-bold" })
+
+MiscTab:AddSection("Speed")
+MiscTab:AddToggle("SpeedToggle", {
+    Title = "Speed",
+    Default = false,
+    Callback = function(Value)
+        SpeedEnabled = Value
+        if Value then ApplySpeed() else StopSpeed() end
+    end,
+})
+MiscTab:AddSlider("SpeedValue", {
+    Title = "WalkSpeed",
+    Default = SpeedValue,
+    Min = 16, Max = 50, Rounding = 0,
+    Callback = function(Value)
+        SpeedValue = Value
+        if SpeedEnabled then ApplySpeed() end
+    end,
+})
+
+MiscTab:AddSection("Other")
+MiscTab:AddToggle("AntiAFK", {
+    Title = "Anti AFK",
+    Default = false,
+    Callback = function(Value)
+        AntiAFKEnabled = Value
+        if Value then StartAntiAFK() else StopAntiAFK() end
+    end,
+})
+MiscTab:AddToggle("NoClip", {
+    Title = "No Clip",
+    Default = false,
+    Callback = function(Value)
+        NoClipEnabled = Value
+        if Value then StartNoClip() else StopNoClip() end
+    end,
+})
+
+MiscTab:AddSection("Gravity")
+MiscTab:AddSlider("Gravity", {
+    Title = "Gravity",
+    Default = CurrentGravity,
+    Min = 0, Max = 500, Rounding = 0,
+    Callback = function(Value)
+        CurrentGravity = Value
+        Workspace.Gravity = Value
+    end,
+})
+MiscTab:AddButton({
+    Title = "Reset Gravity",
+    Icon = "solar/restart-bold",
+    Callback = function()
+        CurrentGravity = DefaultGravity
+        Workspace.Gravity = DefaultGravity
+    end,
+})
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    if SpeedEnabled then ApplySpeed() end
+end)
+
+--========================================================--
+-- 9. KEYBINDS TAB
+--========================================================--
+local KeyTab = Window:AddTab({ Title = "Keybinds", Icon = "solar/keyboard-bold" })
+
+KeyTab:AddParagraph({
+    Title = "Active Keybinds",
+    Content = "F = Shot | Q = Dash | E = Toggle ESP | R = Auto Shoot | H = Hide Menu"
+})
+
+KeyTab:AddDropdown("KeybindShot", {
+    Title = "Shot Key",
+    Values = { "F", "G", "V", "B", "Z", "X", "C" },
+    Default = "F",
+    Callback = function(Value)
+        local map = { F = Enum.KeyCode.F, G = Enum.KeyCode.G, V = Enum.KeyCode.V, B = Enum.KeyCode.B, Z = Enum.KeyCode.Z, X = Enum.KeyCode.X, C = Enum.KeyCode.C }
+        if map[Value] then Keybinds.Shot = map[Value] end
+    end,
+})
+
+KeyTab:AddDropdown("KeybindDash", {
+    Title = "Dash Key",
+    Values = { "Q", "F", "G", "V", "B", "Z", "X", "C" },
+    Default = "Q",
+    Callback = function(Value)
+        local map = { F = Enum.KeyCode.F, G = Enum.KeyCode.G, V = Enum.KeyCode.V, B = Enum.KeyCode.B, Z = Enum.KeyCode.Z, X = Enum.KeyCode.X, C = Enum.KeyCode.C, Q = Enum.KeyCode.Q }
+        if map[Value] then Keybinds.Dash = map[Value] end
+    end,
+})
+
+KeyTab:AddDropdown("KeybindESP", {
+    Title = "Toggle ESP Key",
+    Values = { "E", "F", "G", "V", "B", "Z", "X", "C" },
+    Default = "E",
+    Callback = function(Value)
+        local map = { F = Enum.KeyCode.F, G = Enum.KeyCode.G, V = Enum.KeyCode.V, B = Enum.KeyCode.B, Z = Enum.KeyCode.Z, X = Enum.KeyCode.X, C = Enum.KeyCode.C, E = Enum.KeyCode.E }
+        if map[Value] then Keybinds.ToggleESP = map[Value] end
+    end,
+})
+
+KeyTab:AddDropdown("KeybindAutoShoot", {
+    Title = "Toggle Auto Shoot Key",
+    Values = { "R", "F", "G", "V", "B", "Z", "X", "C" },
+    Default = "R",
+    Callback = function(Value)
+        local map = { F = Enum.KeyCode.F, G = Enum.KeyCode.G, V = Enum.KeyCode.V, B = Enum.KeyCode.B, Z = Enum.KeyCode.Z, X = Enum.KeyCode.X, C = Enum.KeyCode.C, R = Enum.KeyCode.R }
+        if map[Value] then Keybinds.ToggleAutoShoot = map[Value] end
+    end,
+})
+
+--========================================================--
+-- 10. SETTINGS TAB
+--========================================================--
+local SettingsTab = Window:AddTab({ Title = "Settings", Icon = "solar/palette-bold" })
+
+SettingsTab:AddDropdown("ThemeSelector", {
+    Title = "Choose Theme",
+    Values = ThemeNames,
+    Multi = false,
+    Default = CurrentThemeName,
+    Callback = function(Value)
+        if not ThemeColors[Value] then return end
+        CurrentThemeName = Value
+        pcall(function() Fluent:SetTheme(Value) end)
+        if ApplyFloatingTheme then ApplyFloatingTheme(Value) end
+    end,
+})
+
+SettingsTab:AddButton({
+    Title = "Hide / Show Menu",
+    Icon = "solar/menu-dots-bold",
+    Callback = function()
+        MenuVisible = not MenuVisible
+        if FluentRoot and FluentRoot:IsA("GuiObject") then
+            FluentRoot.Visible = MenuVisible
+        end
+    end,
+})
+
+SettingsTab:AddButton({
+    Title = "Destroy UI",
+    Icon = "solar/trash-bin-trash-bold",
+    Callback = function()
+        PlayerTweenEnabled = false
+        CancelPlayerTween()
+        StopFollow()
+        StopFling()
+        StopAntiAFK()
+        StopNoClip()
+        StopSpeed()
+        StopESP()
+        StopAutoShoot()
+        StopHitbox()
+        if FloatingGui then FloatingGui:Destroy() end
+        Fluent:Destroy()
+    end,
+})
+
+--========================================================--
+-- FLOATING BUTTONS
+--========================================================--
+local FloatingGui = Instance.new("ScreenGui")
+FloatingGui.Name = "NAZK_FloatingControls"
+FloatingGui.ResetOnSpawn = false
+FloatingGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+FloatingGui.Parent = CoreGui
+
+MenuVisible = true
+FluentRoot = Window.Root or Window.Main or Window.Window
+
+NButton = Instance.new("TextButton")
+NButton.Name = "NButton"
+NButton.Size = UDim2.fromOffset(NSize, NSize)
+NButton.Position = UDim2.new(0, ScreenSidePadding, 0.5, -(NSize / 2))
+NButton.BackgroundColor3 = ThemeColors[CurrentThemeName]
+NButton.BorderSizePixel = 0
+NButton.Text = "N"
+NButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+NButton.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+NButton.TextStrokeTransparency = 0
+NButton.TextSize = IsMobile and 20 or 25
+NButton.Font = Enum.Font.GothamBold
+NButton.AutoButtonColor = false
+NButton.ZIndex = 100
+NButton.Parent = FloatingGui
+
+local NCorner = Instance.new("UICorner")
+NCorner.CornerRadius = UDim.new(1, 0)
+NCorner.Parent = NButton
+
+local NStroke = Instance.new("UIStroke")
+NStroke.Color = Color3.fromRGB(255, 255, 255)
+NStroke.Thickness = 2
+NStroke.Parent = NButton
+
+FloatingDash = Instance.new("TextButton")
+FloatingDash.Name = "FloatingDash"
+FloatingDash.Size = UDim2.fromOffset(DashWidth, NSize)
+FloatingDash.Position = UDim2.new(1, -(DashWidth + ScreenSidePadding), 0.5, -(NSize / 2))
+FloatingDash.BackgroundColor3 = ThemeColors[CurrentThemeName]
+FloatingDash.BorderSizePixel = 0
+FloatingDash.Text = "Dash"
+FloatingDash.TextColor3 = Color3.fromRGB(0, 0, 0)
+FloatingDash.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+FloatingDash.TextStrokeTransparency = 0
+FloatingDash.TextSize = IsMobile and 14 or 17
+FloatingDash.Font = Enum.Font.GothamBold
+FloatingDash.AutoButtonColor = false
+FloatingDash.ZIndex = 100
+FloatingDash.Parent = FloatingGui
+
+local DashCorner = Instance.new("UICorner")
+DashCorner.CornerRadius = UDim.new(0, 18)
+DashCorner.Parent = FloatingDash
+
+local DashStroke = Instance.new("UIStroke")
+DashStroke.Color = Color3.fromRGB(255, 255, 255)
+DashStroke.Thickness = 2
+DashStroke.Parent = FloatingDash
+
+ShotButton = Instance.new("TextButton")
+ShotButton.Name = "ShotButton"
+ShotButton.Size = UDim2.fromOffset(ShotWidth, NSize)
+ShotButton.Position = UDim2.new(1, -(ShotWidth + ScreenSidePadding), 0.5, -(NSize / 2) - 60)
+ShotButton.BackgroundColor3 = ThemeColors[CurrentThemeName]
+ShotButton.BorderSizePixel = 0
+ShotButton.Text = "Shot"
+ShotButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+ShotButton.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+ShotButton.TextStrokeTransparency = 0
+ShotButton.TextSize = IsMobile and 14 or 17
+ShotButton.Font = Enum.Font.GothamBold
+ShotButton.AutoButtonColor = false
+ShotButton.ZIndex = 100
+ShotButton.Parent = FloatingGui
+
+local ShotCorner = Instance.new("UICorner")
+ShotCorner.CornerRadius = UDim.new(0, 18)
+ShotCorner.Parent = ShotButton
+
+local ShotStroke = Instance.new("UIStroke")
+ShotStroke.Color = Color3.fromRGB(255, 255, 255)
+ShotStroke.Thickness = 2
+ShotStroke.Parent = ShotButton
+
+ApplyFloatingTheme = function(ThemeName)
+    local Color = ThemeColors[ThemeName] or ThemeColors["AMOLED"]
+    if NButton then NButton.BackgroundColor3 = Color end
+    if FloatingDash then FloatingDash.BackgroundColor3 = Color end
+    if ShotButton then ShotButton.BackgroundColor3 = Color end
+end
+ApplyFloatingTheme(CurrentThemeName)
+
+local function SetMenuVisible(Visible)
+    MenuVisible = Visible
+    if FluentRoot and FluentRoot:IsA("GuiObject") then
+        FluentRoot.Visible = Visible
+    elseif Window.Minimize then
+        pcall(function() Window:Minimize() end)
+    end
+end
+
+local function MakeDraggable(Button, ClickCallback)
+    local IsDragging = false
+    local ThisDragInput = nil
+    local ThisDragStart = nil
+    local ThisStartPos = nil
+    local ThisMoved = false
+
+    Button.InputBegan:Connect(function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseButton1
+            or Input.UserInputType == Enum.UserInputType.Touch then
+            IsDragging = true
+            ThisMoved = false
+            ThisDragStart = Input.Position
+            ThisStartPos = Button.Position
+        end
+    end)
+
+    Button.InputChanged:Connect(function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseMovement
+            or Input.UserInputType == Enum.UserInputType.Touch then
+            ThisDragInput = Input
+        end
+    end)
+
+    Button.InputEnded:Connect(function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseButton1
+            or Input.UserInputType == Enum.UserInputType.Touch then
+            IsDragging = false
+            if not ThisMoved then ClickCallback() end
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(Input)
+        if Input == ThisDragInput and IsDragging then
+            local Delta = Input.Position - ThisDragStart
+            if math.abs(Delta.X) > 4 or math.abs(Delta.Y) > 4 then
+                ThisMoved = true
+            end
+            Button.Position = UDim2.new(
+                ThisStartPos.X.Scale,
+                ThisStartPos.X.Offset + Delta.X,
+                ThisStartPos.Y.Scale,
+                ThisStartPos.Y.Offset + Delta.Y
+            )
+        end
+    end)
+end
+
+local function OnShotPress()
+    ShotButton.Text = "..."
+    local Target = FindKnifeHolder()
+    if not Target then
+        ShotButton.Text = "Shot"
+        return
+    end
+    local Success, Msg = ShootAt(Target)
+    if Success then
+        ShotButton.Text = "OK"
+    else
+        ShotButton.Text = "Shot"
+    end
+    task.wait(0.5)
+    ShotButton.Text = "Shot"
+end
+
+MakeDraggable(NButton, function() SetMenuVisible(not MenuVisible) end)
+MakeDraggable(FloatingDash, DoDash)
+MakeDraggable(ShotButton, OnShotPress)
+
+SettingsTab:AddButton({
+    Title = "Dash Now",
+    Icon = "solar/bolt-bold",
+    Callback = DoDash,
+})
+
+--========================================================--
+-- KEYBIND LISTENER
+--========================================================--
+UserInputService.InputBegan:Connect(function(Input, GameProcessed)
+    if GameProcessed then return end
+
+    if Input.KeyCode == Keybinds.Shot then
+        OnShotPress()
+    elseif Input.KeyCode == Keybinds.Dash then
+        DoDash()
+    elseif Input.KeyCode == Keybinds.ToggleESP then
+        ToggleESP()
+    elseif Input.KeyCode == Keybinds.ToggleAutoShoot then
+        if AutoShootEnabled then StopAutoShoot()
+        else StartAutoShoot() end
+    elseif Input.KeyCode == Keybinds.HideMenu then
+        SetMenuVisible(not MenuVisible)
+    end
+end)
+
+print("NAZK HUB READY - AMOLED")
