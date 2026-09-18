@@ -96,6 +96,15 @@ local ThemeColors = {
     ["Cosmic Violet"]=Color3.fromRGB(105,25,155), ["Cotton Candy"]=Color3.fromRGB(220,105,175),
 }
 
+-- DISCORD WEBHOOK
+local DiscordWebhookURL = ""
+local WebhookEnabled = false
+local WebhookOnRareEgg = true
+local WebhookMinPriority = 2  -- Send webhook for eggs with priority <= this value
+
+-- SETTINGS FILE
+local SettingsFile = "NAZK_HUB_Settings.json"
+
 -- EGG DATA
 local EggPriority = {
     ["Blackhole Egg"]=1, ["Cherub Egg"]=2, ["Aurora Egg"]=3, ["Galaxy Egg"]=4,
@@ -137,6 +146,114 @@ end
 
 local FarmEnabled = false
 local FarmTask = nil
+
+-- DISCORD WEBHOOK FUNCTION
+local function SendWebhook(Title, Description, Color)
+    if not WebhookEnabled or DiscordWebhookURL == "" then return end
+    task.spawn(function()
+        local Payload = {
+            username = "NAZK HUB",
+            embeds = {{
+                title = Title,
+                description = Description,
+                color = Color or 3447003,
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+                footer = { text = "NAZK HUB | Ride A Pet" }
+            }}
+        }
+        local OK, Encoded = pcall(function() return HttpService:JSONEncode(Payload) end)
+        if not OK or not Encoded then return end
+
+        local Success = false
+        pcall(function()
+            if syn and syn.request then
+                syn.request({Url = DiscordWebhookURL, Method = "POST",
+                    Headers = {["Content-Type"] = "application/json"}, Body = Encoded})
+                Success = true
+            elseif request then
+                request({Url = DiscordWebhookURL, Method = "POST",
+                    Headers = {["Content-Type"] = "application/json"}, Body = Encoded})
+                Success = true
+            elseif http_request then
+                http_request({Url = DiscordWebhookURL, Method = "POST",
+                    Headers = {["Content-Type"] = "application/json"}, Body = Encoded})
+                Success = true
+            elseif game.HttpPost then
+                game:HttpPost(DiscordWebhookURL, Encoded, "application/json", true)
+                Success = true
+            end
+        end)
+        if not Success then
+            Notify("Webhook", "Failed to send (no request function)", 3)
+        end
+    end)
+end
+
+-- SAVE/LOAD SETTINGS
+local function SaveSettings()
+    local Data = {
+        WalkSpeed = SpeedValue,
+        SpeedEnabled = SpeedEnabled,
+        TweenSpeed = TweenSpeed,
+        FarmMinPriority = FarmMinPriority,
+        AutoBuySelected = AutoBuySelected,
+        AutoBuyDelay = AutoBuyDelay,
+        SavedHomePosition = SavedHomePosition and {SavedHomePosition.X, SavedHomePosition.Y, SavedHomePosition.Z} or nil,
+        CurrentThemeName = CurrentThemeName,
+        AutoPlaceEggType = AutoPlaceEggType,
+        AutoPlaceEggDelay = AutoPlaceEggDelay,
+        AutoPlaceEggPosition = AutoPlaceEggPosition,
+        AutoPlaceEggRandomize = AutoPlaceEggRandomize,
+        SoundEnabled = SoundEnabled,
+        DiscordWebhookURL = DiscordWebhookURL,
+        WebhookEnabled = WebhookEnabled,
+        WebhookOnRareEgg = WebhookOnRareEgg,
+        WebhookMinPriority = WebhookMinPriority,
+    }
+    local OK, Encoded = pcall(function() return HttpService:JSONEncode(Data) end)
+    if not OK or not Encoded then return false, "encode failed" end
+    local WriteOK = pcall(function() writefile(SettingsFile, Encoded) end)
+    if not WriteOK then return false, "writefile unavailable" end
+    return true, "saved"
+end
+
+local function LoadSettings()
+    local FileOK = pcall(function() return isfile(SettingsFile) end)
+    if not FileOK then return false, "isfile unavailable" end
+    if not isfile(SettingsFile) then return false, "no file" end
+
+    local ReadOK, Content = pcall(function() return readfile(SettingsFile) end)
+    if not ReadOK or not Content then return false, "read failed" end
+
+    local DecodeOK, Data = pcall(function() return HttpService:JSONDecode(Content) end)
+    if not DecodeOK or type(Data) ~= "table" then return false, "decode failed" end
+
+    if Data.WalkSpeed then SpeedValue = Data.WalkSpeed end
+    if Data.SpeedEnabled ~= nil then SpeedEnabled = Data.SpeedEnabled end
+    if Data.TweenSpeed then TweenSpeed = Data.TweenSpeed end
+    if Data.FarmMinPriority then FarmMinPriority = Data.FarmMinPriority end
+    if type(Data.AutoBuySelected) == "table" then AutoBuySelected = Data.AutoBuySelected end
+    if Data.AutoBuyDelay then AutoBuyDelay = Data.AutoBuyDelay end
+    if type(Data.SavedHomePosition) == "table" and #Data.SavedHomePosition == 3 then
+        SavedHomePosition = Vector3.new(Data.SavedHomePosition[1], Data.SavedHomePosition[2], Data.SavedHomePosition[3])
+    end
+    if Data.CurrentThemeName and ThemeColors[Data.CurrentThemeName] then
+        CurrentThemeName = Data.CurrentThemeName
+        pcall(function() Fluent:SetTheme(CurrentThemeName) end)
+        if ApplyFloatingTheme then ApplyFloatingTheme(CurrentThemeName) end
+    end
+    if Data.AutoPlaceEggType then AutoPlaceEggType = Data.AutoPlaceEggType end
+    if Data.AutoPlaceEggDelay then AutoPlaceEggDelay = Data.AutoPlaceEggDelay end
+    if Data.AutoPlaceEggPosition then AutoPlaceEggPosition = Data.AutoPlaceEggPosition end
+    if Data.AutoPlaceEggRandomize ~= nil then AutoPlaceEggRandomize = Data.AutoPlaceEggRandomize end
+    if Data.SoundEnabled ~= nil then SoundEnabled = Data.SoundEnabled end
+    if Data.DiscordWebhookURL then DiscordWebhookURL = Data.DiscordWebhookURL end
+    if Data.WebhookEnabled ~= nil then WebhookEnabled = Data.WebhookEnabled end
+    if Data.WebhookOnRareEgg ~= nil then WebhookOnRareEgg = Data.WebhookOnRareEgg end
+    if Data.WebhookMinPriority then WebhookMinPriority = Data.WebhookMinPriority end
+
+    return true, "loaded"
+end
 
 local function ResetCharacter()
     local Char = LocalPlayer.Character
@@ -494,6 +611,12 @@ local function RunTourOnce()
                 OverallBest = Best
                 PlaySound("Egg", 0.3)
                 Notify("New Best", Best.Name.." (P"..Best.Priority..")", 2)
+                -- Webhook on rare egg
+                if WebhookOnRareEgg and Best.Priority <= WebhookMinPriority then
+                    SendWebhook("Rare Egg Found!",
+                        "**"..Best.Name.."** (Priority "..Best.Priority..")\nPlot: "..Best.PlotOwner,
+                        16711680)
+                end
             end
         end
         task.wait(FARM.WaitAtCoord)
@@ -534,8 +657,13 @@ local function StartFarm()
                     if Picked then
                         Notify("Picked Up", Best.Name, 2)
                         PlaySound("Egg", 0.6)
+                        if WebhookOnRareEgg and Best.Priority <= WebhookMinPriority then
+                            SendWebhook("Egg Picked Up",
+                                "Successfully picked **"..Best.Name.."**",
+                                65280)
+                        end
                     else
-                        Notify("Failed", "ما قدرت أشيل "..Best.Name, 2)
+                        Notify("Failed", "Could not pick up "..Best.Name, 2)
                     end
                     task.wait(0.4)
                     if not FarmEnabled then break end
@@ -548,7 +676,7 @@ local function StartFarm()
 
                     local ReachedPlot = false
                     if ReturnPos then
-                        Notify("Returning", "رجوع للبيت...", 2)
+                        Notify("Returning", "Going back home...", 2)
                         SmoothMove(ReturnPos, TweenSpeed)
                         if not FarmEnabled then break end
                         task.wait(FARM.PostReturnWait)
@@ -556,23 +684,23 @@ local function StartFarm()
                         local Root = GetRoot()
                         if Root then
                             local Dist = (Root.Position - ReturnPos).Magnitude
-                            Notify("Position", "المسافة: "..math.floor(Dist), 2)
+                            Notify("Position", "Distance: "..math.floor(Dist), 2)
                             if Dist < 30 then ReachedPlot = true end
                         end
                     else
-                        Notify("No Home", "احفظ موقع البيت أول!", 3)
+                        Notify("No Home", "Save home position first!", 3)
                     end
 
                     if not FarmEnabled then break end
 
                     if FARM.AutoReset and ReachedPlot then
-                        Notify("Reset", "إعادة اللاعب...", 2)
+                        Notify("Reset", "Resetting character...", 2)
                         ResetCharacter()
                         task.wait(FARM.PostResetWait)
                     end
                 end
             else
-                Notify("NAZK HUB", "ما فيه بيضة تناسب الفلتر", 3)
+                Notify("NAZK HUB", "No egg matches the filter", 3)
             end
 
             if not FarmEnabled then break end
@@ -635,7 +763,7 @@ local function StartAutoPlaceEgg()
     AutoPlaceEggTask = task.spawn(function()
         while AutoPlaceEggEnabled do
             local OK, Err = PlaceEggOnce()
-            if not OK then Notify("Auto Place Egg", "فشل: "..tostring(Err), 2) end
+            if not OK then Notify("Auto Place Egg", "Failed: "..tostring(Err), 2) end
             task.wait(AutoPlaceEggDelay)
         end
     end)
@@ -692,7 +820,7 @@ local function StartAutoBuy()
         while AutoBuyEnabled do
             local Selected = GetSelectedRadars()
             if #Selected == 0 then
-                Notify("Buy", "اختر رادار على الأقل!", 2)
+                Notify("Buy", "Select at least one radar!", 2)
                 AutoBuyEnabled = false
                 if Refs.AutoBuyToggle then
                     pcall(function() Refs.AutoBuyToggle:SetValue(false) end)
@@ -816,7 +944,7 @@ local function HopToLowestServer(MaxPlayers)
             Cursor = Data.nextPageCursor or ""
         until Cursor == "" or #Servers >= 20
     end)
-    if not Success or #Servers == 0 then Fluent:Notify({ Title="NAZK HUB", Content="ما فيه سيرفر مناسب", Duration=4 }); return end
+    if not Success or #Servers == 0 then Fluent:Notify({ Title="NAZK HUB", Content="No suitable server found", Duration=4 }); return end
     table.sort(Servers, function(A,B) return A.playing < B.playing end)
     TeleportService:TeleportToPlaceInstance(PlaceId, Servers[1].id, LocalPlayer)
 end
@@ -855,7 +983,7 @@ DiscordTab:AddButton({
     Callback = function()
         if type(setclipboard) == "function" then
             setclipboard("https://discord.gg/ne5vgR9q8")
-            Fluent:Notify({ Title="NAZK HUB", Content="تم نسخ الرابط", Duration=2 })
+            Fluent:Notify({ Title="NAZK HUB", Content="Link copied", Duration=2 })
         end
     end,
 })
@@ -864,7 +992,7 @@ local FarmTab = Window:AddTab({ Title = "Auto Farm", Icon = "solar/magnifer-bold
 
 FarmTab:AddSection("Home Position")
 FarmTab:AddButton({
-    Title = "Save Home (وقف في بلوتك واضغط)",
+    Title = "Save Home (stand in your plot & press)",
     Icon = "solar/home-bold",
     Callback = function()
         local Root = GetRoot()
@@ -872,7 +1000,7 @@ FarmTab:AddButton({
             SavedHomePosition = Root.Position
             Notify("Home Saved", "X="..math.floor(Root.Position.X).." Z="..math.floor(Root.Position.Z), 4)
         else
-            Notify("Error", "ما لقيت موقعك", 3)
+            Notify("Error", "Could not find your position", 3)
         end
     end,
 })
@@ -883,9 +1011,9 @@ FarmTab:AddButton({
     Callback = function()
         if SavedHomePosition then
             TeleportToPosition(SavedHomePosition)
-            Notify("Teleported", "للبيت", 2)
+            Notify("Teleported", "Back home", 2)
         else
-            Notify("Error", "احفظ الموقع أول", 3)
+            Notify("Error", "Save home first", 3)
         end
     end,
 })
@@ -897,17 +1025,17 @@ FarmTab:AddButton({
         if SavedHomePosition then
             task.spawn(function()
                 FarmEnabled = true
-                Notify("Testing", "بيتحرك للبيت...", 2)
+                Notify("Testing", "Moving to home...", 2)
                 SmoothMove(SavedHomePosition, TweenSpeed)
                 FarmEnabled = false
                 local Root = GetRoot()
                 if Root then
                     local Dist = (Root.Position - SavedHomePosition).Magnitude
-                    Notify("Done", "المسافة النهائية: "..math.floor(Dist), 4)
+                    Notify("Done", "Final distance: "..math.floor(Dist), 4)
                 end
             end)
         else
-            Notify("Error", "احفظ الموقع أول", 3)
+            Notify("Error", "Save home first", 3)
         end
     end,
 })
@@ -918,9 +1046,9 @@ FarmTab:AddButton({
     Callback = function()
         local P = GetMyPlot()
         if P then
-            Notify("My Plot", "الاسم: "..P.Name.." | المالك: "..GetPlotOwnerName(P), 4)
+            Notify("My Plot", "Name: "..P.Name.." | Owner: "..GetPlotOwnerName(P), 4)
         else
-            Notify("Error", "ما لقيت بلوتك", 4)
+            Notify("Error", "Could not find your plot", 4)
         end
     end,
 })
@@ -931,7 +1059,7 @@ Refs.FarmToggle = FarmTab:AddToggle("FarmToggle", {
     Callback = function(Value)
         if Value then
             if not SavedHomePosition then
-                Notify("تنبيه", "احفظ موقع البيت أول!", 4)
+                Notify("Warning", "Save home position first!", 4)
             end
             StartFarm()
             if FloatingEgg then FloatingEgg.Text = "ON" end
@@ -954,7 +1082,7 @@ Refs.Rarity = FarmTab:AddDropdown("Rarity", {
         elseif Value == "Legendary+ (Top 1-12)" then FarmMinPriority = 12
         elseif Value == "Epic+ (Top 1-16)" then FarmMinPriority = 16
         else FarmMinPriority = 999 end
-        Notify("Rarity", "تم التغيير إلى: "..Value, 2)
+        Notify("Rarity", "Changed to: "..Value, 2)
     end,
 })
 
@@ -995,14 +1123,14 @@ AutoTab:AddButton({
     Title = "Place Once Now", Icon = "solar/bolt-bold",
     Callback = function()
         local OK, Err = PlaceEggOnce()
-        Notify("Place Egg", OK and ("تم إرسال: "..AutoPlaceEggType) or ("فشل: "..tostring(Err)), 3)
+        Notify("Place Egg", OK and ("Sent: "..AutoPlaceEggType) or ("Failed: "..tostring(Err)), 3)
     end,
 })
 AutoTab:AddButton({
     Title = "Check Egg Remote", Icon = "solar/radar-bold",
     Callback = function()
         local R = GetEggRemote()
-        Notify(R and "Remote Found" or "Remote Missing", R and "EggPlaced موجود" or "ما لقيت EggPlaced", 3)
+        Notify(R and "Remote Found" or "Remote Missing", R and "EggPlaced exists" or "EggPlaced not found", 3)
     end,
 })
 
@@ -1032,7 +1160,7 @@ Refs.AutoBuyToggle = BuyTab:AddToggle("AutoBuyToggle", {
         if Value then
             local Selected = GetSelectedRadars()
             if #Selected == 0 then
-                Notify("Buy", "اختر رادار واحد على الأقل أول!", 3)
+                Notify("Buy", "Select at least one radar first!", 3)
                 PlaySound("Off", 0.3)
                 task.wait(0.1)
                 if Refs.AutoBuyToggle then
@@ -1041,11 +1169,11 @@ Refs.AutoBuyToggle = BuyTab:AddToggle("AutoBuyToggle", {
                 return
             end
             StartAutoBuy()
-            Notify("Buy", "بدأ الشراء التلقائي ("..#Selected.." عنصر)", 2)
+            Notify("Buy", "Auto buy started ("..#Selected.." items)", 2)
             PlaySound("Toggle", 0.3)
         else
             StopAutoBuy()
-            Notify("Buy", "وقف الشراء", 2)
+            Notify("Buy", "Buy stopped", 2)
             PlaySound("Off", 0.3)
         end
     end,
@@ -1063,7 +1191,7 @@ BuyTab:AddButton({
     Callback = function()
         local Selected = GetSelectedRadars()
         if #Selected == 0 then
-            Notify("Buy", "ما اخترت شي!", 2)
+            Notify("Buy", "Nothing selected!", 2)
             return
         end
         task.spawn(function()
@@ -1074,7 +1202,7 @@ BuyTab:AddButton({
                     task.wait(0.3)
                 end
             end
-            Notify("Buy", "تم محاولة شراء "..#Selected.." عنصر", 3)
+            Notify("Buy", "Attempted to buy "..#Selected.." items", 3)
         end)
     end,
 })
@@ -1086,7 +1214,7 @@ for _, RadarName in ipairs(RadarList) do
         Icon = "solar/star-bold",
         Callback = function()
             local OK, Err = BuyRadarOnce(RadarName)
-            Notify("Buy", OK and ("تم إرسال: "..RadarName) or ("فشل: "..tostring(Err)), 2)
+            Notify("Buy", OK and ("Sent: "..RadarName) or ("Failed: "..tostring(Err)), 2)
         end,
     })
 end
@@ -1097,7 +1225,7 @@ BuyTab:AddButton({
     Callback = function()
         local R = GetBuyRemote()
         Notify(R and "Remote Found" or "Remote Missing",
-               R and "BuyWithCash موجود" or "ما لقيت BuyWithCash", 3)
+               R and "BuyWithCash exists" or "BuyWithCash not found", 3)
     end,
 })
 
@@ -1106,6 +1234,72 @@ BuyTab:AddParagraph({
     Content = "Advanced = Rare | Jewel = Epic | Royal = Legendary\nMagic = Mythic | Angelic = Divine | Eternal = Ethereal",
 })
 
+-- WEBHOOK TAB
+local WebhookTab = Window:AddTab({ Title = "Webhook", Icon = "solar/letter-bold" })
+
+WebhookTab:AddSection("Discord Webhook")
+Refs.WebhookURL = WebhookTab:AddInput("WebhookURL", {
+    Title = "Webhook URL",
+    Default = "",
+    Placeholder = "https://discord.com/api/webhooks/...",
+    Numeric = false, Finished = false,
+    Callback = function(Value) DiscordWebhookURL = Value end,
+})
+
+Refs.WebhookToggle = WebhookTab:AddToggle("WebhookToggle", {
+    Title = "Enable Webhook", Default = false,
+    Callback = function(Value)
+        WebhookEnabled = Value
+        if Value then
+            if DiscordWebhookURL == "" then
+                Notify("Webhook", "Set the URL first!", 3)
+                task.wait(0.1)
+                if Refs.WebhookToggle then
+                    pcall(function() Refs.WebhookToggle:SetValue(false) end)
+                end
+                WebhookEnabled = false
+                return
+            end
+            Notify("Webhook", "Enabled", 2)
+            PlaySound("Toggle", 0.3)
+        else
+            Notify("Webhook", "Disabled", 2)
+            PlaySound("Off", 0.3)
+        end
+    end,
+})
+
+Refs.WebhookRareEgg = WebhookTab:AddToggle("WebhookRareEgg", {
+    Title = "Send on Rare Egg Found", Default = true,
+    Callback = function(Value) WebhookOnRareEgg = Value end,
+})
+
+Refs.WebhookMinPriority = WebhookTab:AddSlider("WebhookMinPriority", {
+    Title = "Only Rare Eggs (Priority <=)",
+    Default = 2, Min = 1, Max = 12, Rounding = 0,
+    Callback = function(Value) WebhookMinPriority = Value end,
+})
+
+WebhookTab:AddButton({
+    Title = "Send Test Message", Icon = "solar/paper-plane-bold",
+    Callback = function()
+        if DiscordWebhookURL == "" then
+            Notify("Webhook", "Set the URL first!", 3)
+            return
+        end
+        SendWebhook("NAZK HUB Test",
+            "Webhook test successful!\nPlayer: **"..LocalPlayer.Name.."**",
+            3447003)
+        Notify("Webhook", "Test message sent", 2)
+    end,
+})
+
+WebhookTab:AddParagraph({
+    Title = "How to get a Webhook URL",
+    Content = "1. Discord → Server Settings → Integrations → Webhooks\n2. Click 'New Webhook'\n3. Copy the URL and paste it above",
+})
+
+-- DASH TAB
 local DashTab = Window:AddTab({ Title = "Dash", Icon = "solar/bolt-bold" })
 DashTab:AddSection("Dash Button")
 DashTab:AddButton({
@@ -1119,6 +1313,7 @@ DashTab:AddButton({
 DashTab:AddSection("Actions")
 DashTab:AddButton({ Title = "Dash Now", Icon = "solar/bolt-bold", Callback = DoDash })
 
+-- SERVER TAB
 local ServerTab = Window:AddTab({ Title = "Server", Icon = "solar/server-square-bold" })
 ServerTab:AddButton({ Title = "Hop Low Server", Icon = "solar/transfer-horizontal-bold",
     Callback = function() task.spawn(function() HopToLowestServer(1) end) end })
@@ -1127,6 +1322,7 @@ ServerTab:AddButton({ Title = "Rejoin", Icon = "solar/restart-bold",
 ServerTab:AddButton({ Title = "Hop to Lowest Server (Max 3)", Icon = "solar/transfer-horizontal-bold",
     Callback = function() task.spawn(function() HopToLowestServer(3) end) end })
 
+-- MISC TAB
 local MiscTab = Window:AddTab({ Title = "Misc", Icon = "solar/settings-bold" })
 MiscTab:AddSection("Speed")
 MiscTab:AddToggle("SpeedToggle", { Title = "Speed", Default = false,
@@ -1155,6 +1351,7 @@ MiscTab:AddButton({ Title = "Reset Gravity", Icon = "solar/restart-bold",
     Callback = function() CurrentGravity = DefaultGravity; Workspace.Gravity = DefaultGravity end })
 LocalPlayer.CharacterAdded:Connect(function() task.wait(1); if SpeedEnabled then ApplySpeed() end end)
 
+-- VISUALS TAB
 local VisualsTab = Window:AddTab({ Title = "Visuals", Icon = "solar/sun-bold" })
 VisualsTab:AddSection("Lighting")
 VisualsTab:AddToggle("FullbrightToggle", { Title = "Fullbright", Default = false,
@@ -1165,6 +1362,7 @@ VisualsTab:AddSlider("FOVSlider", { Title = "Field of View", Default = 70, Min =
 VisualsTab:AddButton({ Title = "Reset Visuals", Icon = "solar/restart-bold",
     Callback = function() FullbrightEnabled = false; ApplyFullbright(); FOVValue = 70; ApplyFOV(70) end })
 
+-- KEYBINDS TAB
 local KeyTab = Window:AddTab({ Title = "Keybinds", Icon = "solar/keyboard-bold" })
 KeyTab:AddParagraph({ Title = "Active Keybinds", Content = "Q = Dash | G = Auto Farm | H = Hide Menu" })
 KeyTab:AddDropdown("KeybindDash", { Title = "Dash Key", Values = {"Q","F","G","V","B","Z","X","C"}, Default = "Q",
@@ -1183,6 +1381,7 @@ KeyTab:AddDropdown("KeybindHide", { Title = "Hide Menu Key", Values = {"H","F","
         if map[Value] then Keybinds.HideMenu = map[Value] end
     end })
 
+-- SETTINGS TAB
 local SettingsTab = Window:AddTab({ Title = "Settings", Icon = "solar/palette-bold" })
 SettingsTab:AddDropdown("ThemeSelector", {
     Title = "Theme", Values = ThemeNames, Multi = false, Default = CurrentThemeName,
@@ -1200,6 +1399,34 @@ SettingsTab:AddButton({
         if FluentRoot and FluentRoot:IsA("GuiObject") then FluentRoot.Visible = MenuVisible end
     end,
 })
+
+SettingsTab:AddSection("Save / Load")
+SettingsTab:AddButton({
+    Title = "Save Current Settings", Icon = "solar/diskette-bold",
+    Callback = function()
+        local OK, Msg = SaveSettings()
+        Notify("Settings", OK and "Saved successfully!" or ("Failed: "..tostring(Msg)), 3)
+        if OK then PlaySound("Toggle", 0.4) end
+    end,
+})
+SettingsTab:AddButton({
+    Title = "Load Saved Settings", Icon = "solar/folder-open-bold",
+    Callback = function()
+        local OK, Msg = LoadSettings()
+        Notify("Settings", OK and "Loaded! Reopening may be needed." or ("Failed: "..tostring(Msg)), 4)
+        if OK then PlaySound("Toggle", 0.4) end
+    end,
+})
+SettingsTab:AddButton({
+    Title = "Delete Saved Settings", Icon = "solar/trash-bin-minimalistic-bold",
+    Callback = function()
+        local OK = pcall(function()
+            if isfile and isfile(SettingsFile) then delfile(SettingsFile) end
+        end)
+        Notify("Settings", OK and "File deleted" or "Failed to delete", 3)
+    end,
+})
+
 SettingsTab:AddSection("Actions")
 SettingsTab:AddButton({
     Title = "Destroy UI", Icon = "solar/trash-bin-trash-bold",
@@ -1216,6 +1443,7 @@ SettingsTab:AddButton({
     end,
 })
 
+-- FLOATING UI
 FloatingGui = Instance.new("ScreenGui")
 FloatingGui.Name = "NAZK_FloatingControls"
 FloatingGui.ResetOnSpawn = false
@@ -1300,6 +1528,7 @@ local function SetMenuVisible(Visible)
         pcall(function() Window:Minimize() end)
     end
 end
+
 local function MakeDraggable(Button, ClickCallback)
     local IsDragging = false
     local ThisDragInput, ThisDragStart, ThisStartPos = nil, nil, nil
@@ -1333,6 +1562,7 @@ local function MakeDraggable(Button, ClickCallback)
         end
     end)
 end
+
 MakeDraggable(NButton, function() SetMenuVisible(not MenuVisible) end)
 MakeDraggable(FloatingDash, DoDash)
 MakeDraggable(FloatingEgg, function()
@@ -1362,4 +1592,15 @@ UserInputService.InputBegan:Connect(function(Input, GameProcessed)
     end
 end)
 
-print("NAZK HUB (Farm + Home + Buy) READY - "..CurrentThemeName)
+-- Auto-load settings on startup
+task.spawn(function()
+    task.wait(2)
+    local OK = pcall(function()
+        if isfile and isfile(SettingsFile) then LoadSettings() end
+    end)
+    if OK then
+        Notify("NAZK HUB", "Settings loaded from file", 3)
+    end
+end)
+
+print("NAZK HUB (Farm + Home + Buy + Webhook + Save/Load) READY - "..CurrentThemeName)
