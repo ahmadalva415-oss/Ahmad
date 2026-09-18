@@ -1,0 +1,849 @@
+--========================================================--
+-- NAZK HUB | Auto Farm (Fixed Quest Detection)
+--========================================================--
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+
+--========================================================--
+-- SETTINGS
+--========================================================--
+local AutoFarmEnabled = false
+local AutoFarmConnection = nil
+local MIN_LEVEL = 7
+local QuestCoords = Vector3.new(-425.64, 1243.00, -950.63)
+local AboveHeadHeight = 3
+local TweenSpeed = 40
+local ProneAngle = 90
+
+-- Cache
+local CachedEnemies = {}
+local CacheTime = 0
+local CACHE_INTERVAL = 0.5
+
+-- State
+local CurrentTarget = nil
+local IsApproaching = false
+local IsLocked = false
+local CurrentTween = nil
+local CurrentQuestType = nil
+local QuestInProgress = false
+local LastQuestTime = 0
+local LastAttackTime = 0
+local AttackSequenceRunning = false
+
+-- Level
+local PlayerLevel = 0
+local PlayerExp = 0
+local PlayerMaxExp = 0
+local LevelParagraph = nil
+local QuestStatusParagraph = nil
+local StateParagraph = nil
+
+-- Combo
+local ComboMoves = {
+    {1, true,  0.038, false},
+    {2, false, -0.033, true},
+    {3, false,  0,    false},
+    {4, false,  0,    false},
+    {5, false,  0.15, false},
+}
+
+local MenuVisible = true
+local FloatingGui = nil
+local FluentRoot = nil
+local NButton = nil
+local CurrentThemeName = "AMOLED"
+
+--========================================================--
+-- HELPERS
+--========================================================--
+local function GetRoot()
+    local Char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    return Char and Char:FindFirstChild("HumanoidRootPart")
+end
+
+local function GetSignalEvent()
+    local Comm = ReplicatedStorage:FindFirstChild("Communication")
+    if not Comm then return nil end
+    local SC = Comm:FindFirstChild("ServerAndClient")
+    if not SC then return nil end
+    local Signals = SC:FindFirstChild("Signals")
+    if not Signals then return nil end
+    return Signals:FindFirstChild("SignalEvent")
+end
+
+local function FireSignal(...)
+    local SignalEvent = GetSignalEvent()
+    if not SignalEvent then return false end
+    local args = {...}
+    return pcall(function()
+        if SignalEvent:FindFirstChild("Event") then
+            SignalEvent.Event:FireServer(table.unpack(args))
+        else
+            SignalEvent:FireServer(table.unpack(args))
+        end
+    end)
+end
+
+--========================================================--
+-- LEVEL READER
+--========================================================--
+local function FindLevelData()
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if pg then
+        for _, obj in ipairs(pg:GetDescendants()) do
+            if obj:IsA("TextLabel") then
+                local lvMatch = obj.Text:match("Lv%s*(%d+)")
+                if lvMatch then
+                    local Level = tonumber(lvMatch)
+                    local Exp, MaxExp = 0, 0
+                    local parent = obj.Parent
+                    if parent then
+                        for _, sib in ipairs(parent:GetDescendants()) do
+                            if sib:IsA("TextLabel") and sib ~= obj then
+                                local xp, mxp = sib.Text:match("(%d+)%s*/%s*(%d+)")
+                                if xp and mxp then
+                                    Exp = tonumber(xp)
+                                    MaxExp = tonumber(mxp)
+                                    break
+                                end
+                            end
+                        end
+                    end
+                    return Level, Exp, MaxExp
+                end
+            end
+        end
+    end
+    for name, value in pairs(LocalPlayer:GetAttributes()) do
+        if typeof(value) == "number" then
+            local n = string.lower(name)
+            if n:find("level") or n == "lv" then return value, 0, 0 end
+        end
+    end
+    return 0, 0, 0
+end
+
+local function UpdateLevel()
+    local lv, exp, max = FindLevelData()
+    PlayerLevel = lv
+    PlayerExp = exp
+    PlayerMaxExp = max
+end
+
+--========================================================--
+-- QUEST DETECTION
+--========================================================--
+local function GetQuestInfo()
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return false, nil, 0, 0 end
+
+    local hasQuest = false
+    local questType = nil
+    local progress = 0
+    local max = 0
+
+    for _, obj in ipairs(pg:GetDescendants()) do
+        if obj:IsA("TextLabel") and obj.Text ~= "" then
+            local text = obj.Text
+
+            -- Boss Quest
+            if text:find("Defeat The Bandit Boss") or text:find("Defeat Zuko") then
+                hasQuest = true
+                questType = "boss"
+                local cur, mx = text:match("(%d+)%s*/%s*(%d+)")
+                if cur then
+                    progress = tonumber(cur)
+                    max = tonumber(mx)
+                end
+            end
+
+            -- Bandit Quest
+            if text:find("Defeat 3 bandits") or text:find("Bandits remaining") then
+                if not hasQuest then
+                    hasQuest = true
+                    questType = "bandit"
+                end
+                local cur, mx = text:match("(%d+)%s*/%s*(%d+)")
+                if cur then
+                    progress = tonumber(cur)
+                    max = tonumber(mx)
+                end
+            end
+        end
+    end
+
+    return hasQuest, questType, progress, max
+end
+
+local function HasActiveQuest()
+    local hasQuest = GetQuestInfo()
+    return hasQuest
+end
+
+-- ✅ الإصلاح: خلصت فقط لما نصل للهدف (بدون progress == 0)
+local function IsQuestComplete()
+    local hasQuest, questType, progress, max = GetQuestInfo()
+    if not hasQuest then return false end
+    if max <= 0 then return false end
+    return progress >= max
+end
+
+--========================================================--
+-- ENEMY CACHE
+--========================================================--
+local function RefreshEnemyCache()
+    CachedEnemies = {}
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj.Name == "Bandit" or obj.Name == "Zuko" then
+            local Hum = obj:FindFirstChildOfClass("Humanoid")
+            local Root = obj:FindFirstChild("HumanoidRootPart")
+                or obj:FindFirstChild("UpperTorso")
+                or obj:FindFirstChild("Torso")
+            if Hum or Root then
+                table.insert(CachedEnemies, obj)
+            end
+        end
+    end
+    CacheTime = tick()
+end
+
+local function GetCachedEnemies()
+    if tick() - CacheTime > CACHE_INTERVAL then
+        RefreshEnemyCache()
+    end
+    return CachedEnemies
+end
+
+local function GetEnemyRoot(Enemy)
+    if not Enemy then return nil end
+    return Enemy:FindFirstChild("HumanoidRootPart")
+        or Enemy:FindFirstChild("UpperTorso")
+        or Enemy:FindFirstChild("Torso")
+        or Enemy:FindFirstChildWhichIsA("BasePart")
+end
+
+local function IsEnemyAlive(Enemy)
+    if not Enemy or not Enemy.Parent then return false end
+    local Hum = Enemy:FindFirstChildOfClass("Humanoid")
+    if Hum then return Hum.Health > 0 end
+    return GetEnemyRoot(Enemy) ~= nil
+end
+
+local function IsZukoAlive()
+    for _, Enemy in ipairs(GetCachedEnemies()) do
+        if Enemy.Name == "Zuko" and IsEnemyAlive(Enemy) then
+            return true
+        end
+    end
+    return false
+end
+
+--========================================================--
+-- PRONE CFrame
+--========================================================--
+local function GetProneCFrame(Enemy)
+    if not Enemy then return nil end
+    local Head = Enemy:FindFirstChild("Head")
+    if not Head then return nil end
+    local AbovePos = Head.Position + Vector3.new(0, AboveHeadHeight, 0)
+    return CFrame.new(AbovePos) * CFrame.Angles(math.rad(-ProneAngle), 0, 0)
+end
+
+--========================================================--
+-- TAKE QUEST
+--========================================================--
+local function TakeQuest(questType)
+    if QuestInProgress then return end
+    QuestInProgress = true
+
+    task.spawn(function()
+        UpdateLevel()
+
+        -- 1. نروح للأحداثيات
+        local MyRoot = GetRoot()
+        if MyRoot then
+            MyRoot.CFrame = CFrame.new(QuestCoords)
+            task.wait(0.3)
+        end
+
+        -- 2. نرسل الريموت
+        if questType == "boss" then
+            FireSignal("AddQuest", "Ill take the bandit boss(Lv 7)")
+            CurrentQuestType = "boss"
+            print("[Auto Quest] → Boss Quest")
+        elseif questType == "bandit" then
+            FireSignal("AddQuest", "Ill take 3 bandits")
+            CurrentQuestType = "bandit"
+            print("[Auto Quest] → Bandit Quest")
+        else
+            -- auto حسب Zuko والفل
+            if PlayerLevel >= MIN_LEVEL and IsZukoAlive() then
+                FireSignal("AddQuest", "Ill take the bandit boss(Lv 7)")
+                CurrentQuestType = "boss"
+                print("[Auto Quest] Zuko موجود → Boss")
+            else
+                FireSignal("AddQuest", "Ill take 3 bandits")
+                CurrentQuestType = "bandit"
+                print("[Auto Quest] → Bandits")
+            end
+        end
+
+        task.wait(0.3)
+        QuestInProgress = false
+        LastQuestTime = tick()
+    end)
+end
+
+--========================================================--
+-- FIND TARGET
+--========================================================--
+local function FindTargetEnemy()
+    local MyRoot = GetRoot()
+    if not MyRoot then return nil end
+
+    local Enemies = GetCachedEnemies()
+    local Nearest = nil
+    local ShortestDist = math.huge
+
+    if CurrentQuestType == "boss" then
+        for _, Enemy in ipairs(Enemies) do
+            if Enemy.Name == "Zuko" and IsEnemyAlive(Enemy) then
+                local ERoot = GetEnemyRoot(Enemy)
+                if ERoot then
+                    local Dist = (MyRoot.Position - ERoot.Position).Magnitude
+                    if Dist < ShortestDist then
+                        ShortestDist = Dist
+                        Nearest = Enemy
+                    end
+                end
+            end
+        end
+        if not Nearest then
+            for _, Enemy in ipairs(Enemies) do
+                if Enemy.Name == "Bandit" and IsEnemyAlive(Enemy) then
+                    local ERoot = GetEnemyRoot(Enemy)
+                    if ERoot then
+                        local Dist = (MyRoot.Position - ERoot.Position).Magnitude
+                        if Dist < ShortestDist then
+                            ShortestDist = Dist
+                            Nearest = Enemy
+                        end
+                    end
+                end
+            end
+        end
+        return Nearest
+    end
+
+    if CurrentQuestType == "bandit" then
+        for _, Enemy in ipairs(Enemies) do
+            if Enemy.Name == "Bandit" and IsEnemyAlive(Enemy) then
+                local ERoot = GetEnemyRoot(Enemy)
+                if ERoot then
+                    local Dist = (MyRoot.Position - ERoot.Position).Magnitude
+                    if Dist < ShortestDist then
+                        ShortestDist = Dist
+                        Nearest = Enemy
+                    end
+                end
+            end
+        end
+        return Nearest
+    end
+
+    return nil
+end
+
+--========================================================--
+-- APPROACH
+--========================================================--
+local function CancelCurrentTween()
+    if CurrentTween then
+        pcall(function() CurrentTween:Cancel() end)
+        CurrentTween = nil
+    end
+end
+
+local function ApproachEnemy(Enemy)
+    if not Enemy or IsApproaching then return end
+    IsApproaching = true
+    IsLocked = false
+
+    task.spawn(function()
+        local MyRoot = GetRoot()
+        if not MyRoot then IsApproaching = false return end
+
+        local TargetCF = GetProneCFrame(Enemy)
+        if not TargetCF then IsApproaching = false return end
+
+        local MyPos = MyRoot.Position
+        local TargetPos = TargetCF.Position
+        local HorizDist = (Vector3.new(MyPos.X, 0, MyPos.Z)
+            - Vector3.new(TargetPos.X, 0, TargetPos.Z)).Magnitude
+
+        if HorizDist > 0.3 then
+            local Duration = math.max(HorizDist / TweenSpeed, 0.15)
+            local HorizCF = CFrame.new(
+                Vector3.new(TargetPos.X, MyPos.Y, TargetPos.Z)
+            ) * CFrame.Angles(math.rad(-ProneAngle), 0, 0)
+
+            CancelCurrentTween()
+            CurrentTween = TweenService:Create(MyRoot,
+                TweenInfo.new(Duration, Enum.EasingStyle.Linear),
+                { CFrame = HorizCF })
+
+            local Done = false
+            local Conn = CurrentTween.Completed:Connect(function() Done = true end)
+            CurrentTween:Play()
+
+            local Elapsed = 0
+            while not Done and Elapsed < Duration + 0.3 do
+                task.wait(0.03)
+                Elapsed = Elapsed + 0.03
+                if not AutoFarmEnabled then
+                    CancelCurrentTween()
+                    if Conn then Conn:Disconnect() end
+                    IsApproaching = false
+                    return
+                end
+            end
+            if Conn then Conn:Disconnect() end
+        end
+
+        MyRoot = GetRoot()
+        if not MyRoot then IsApproaching = false return end
+
+        local VertDist = TargetPos.Y - MyRoot.Position.Y
+        if math.abs(VertDist) > 0.3 then
+            local Duration = math.max(math.abs(VertDist) / TweenSpeed, 0.1)
+            CancelCurrentTween()
+            CurrentTween = TweenService:Create(MyRoot,
+                TweenInfo.new(Duration, Enum.EasingStyle.Linear),
+                { CFrame = TargetCF })
+
+            local Done = false
+            local Conn = CurrentTween.Completed:Connect(function() Done = true end)
+            CurrentTween:Play()
+
+            local Elapsed = 0
+            while not Done and Elapsed < Duration + 0.3 do
+                task.wait(0.03)
+                Elapsed = Elapsed + 0.03
+                if not AutoFarmEnabled then
+                    CancelCurrentTween()
+                    if Conn then Conn:Disconnect() end
+                    IsApproaching = false
+                    return
+                end
+            end
+            if Conn then Conn:Disconnect() end
+        end
+
+        IsLocked = true
+        IsApproaching = false
+    end)
+end
+
+--========================================================--
+-- COMBO
+--========================================================--
+local function RunAttackSequence()
+    if AttackSequenceRunning then return end
+    AttackSequenceRunning = true
+
+    task.spawn(function()
+        for _, Move in ipairs(ComboMoves) do
+            if not AutoFarmEnabled then break end
+            FireSignal("Combat_Service", "Combat", Move[1], Move[2], Move[3], Move[4])
+            local WaitTime = math.abs(Move[3])
+            if WaitTime < 0.05 then WaitTime = 0.15 end
+            task.wait(WaitTime)
+        end
+        AttackSequenceRunning = false
+    end)
+end
+
+--========================================================--
+-- MAIN LOOP
+--========================================================--
+local function StartAutoFarm()
+    if AutoFarmConnection then AutoFarmConnection:Disconnect() end
+    AutoFarmEnabled = true
+    CurrentTarget = nil
+    IsApproaching = false
+    IsLocked = false
+    CurrentQuestType = nil
+
+    RefreshEnemyCache()
+    UpdateLevel()
+
+    -- ارسل المهمة أول
+    if not HasActiveQuest() then
+        TakeQuest()
+        task.wait(0.5)
+    end
+
+    AutoFarmConnection = RunService.Heartbeat:Connect(function(dt)
+        if not AutoFarmEnabled then return end
+
+        local MyRoot = GetRoot()
+        if not MyRoot then return end
+
+        -- اقرأ المهمة
+        local hasQuest, questType, progress, max = GetQuestInfo()
+        if hasQuest then
+            CurrentQuestType = questType
+        end
+
+        -- لو ما فيه مهمة → ارسل وحدة
+        if not hasQuest then
+            if tick() - LastQuestTime > 1.5 and not QuestInProgress then
+                TakeQuest()
+                LastQuestTime = tick()
+            end
+            return
+        end
+
+        -- لو المهمة خلصت → ارسل وحدة
+        if IsQuestComplete() then
+            if tick() - LastQuestTime > 1.5 and not QuestInProgress then
+                print("[Auto Farm] ✅ Quest Complete! (" .. (questType or "?") .. ")")
+                CurrentTarget = nil
+                IsLocked = false
+                IsApproaching = false
+                CancelCurrentTween()
+                TakeQuest()
+                LastQuestTime = tick()
+            end
+            return
+        end
+
+        -- ابحث عن الهدف
+        local Target = FindTargetEnemy()
+        if not Target then
+            CurrentTarget = nil
+            IsLocked = false
+            IsApproaching = false
+            return
+        end
+
+        -- هدف جديد → اقترب
+        if Target ~= CurrentTarget then
+            CurrentTarget = Target
+            IsLocked = false
+            ApproachEnemy(Target)
+        end
+
+        -- قفل + ضرب
+        if IsLocked and CurrentTarget and CurrentTarget.Parent then
+            local ProneCF = GetProneCFrame(CurrentTarget)
+            if ProneCF then
+                MyRoot.CFrame = ProneCF
+                if not AttackSequenceRunning then
+                    if tick() - LastAttackTime > 0.5 then
+                        RunAttackSequence()
+                        LastAttackTime = tick()
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function StopAutoFarm()
+    AutoFarmEnabled = false
+    AttackSequenceRunning = false
+    CurrentTarget = nil
+    IsApproaching = false
+    IsLocked = false
+    QuestInProgress = false
+    CurrentQuestType = nil
+    CancelCurrentTween()
+    if AutoFarmConnection then
+        AutoFarmConnection:Disconnect()
+        AutoFarmConnection = nil
+    end
+end
+
+--========================================================--
+-- FLUENT GUI
+--========================================================--
+local Fluent = loadstring(game:HttpGet(
+    "https://github.com/StyearX/Fluent-Modded/releases/download/Fluent/FluentPro"
+))()
+
+local Camera = workspace.CurrentCamera
+local Viewport = Camera and Camera.ViewportSize or Vector2.new(1920, 1080)
+local IsTouch = UserInputService.TouchEnabled
+local IsMobile = IsTouch and Viewport.X < 700
+
+local Window = Fluent:CreateWindow({
+    Title = "NAZK HUB",
+    SubTitle = "Auto Farm",
+    TabWidth = IsMobile and 100 or 130,
+    Size = UDim2.fromOffset(
+        math.min(IsMobile and 300 or 460, Viewport.X - 20),
+        math.min(IsMobile and 400 or 500, Viewport.Y - 40)
+    ),
+    Acrylic = false,
+    Theme = CurrentThemeName,
+    MinimizeKey = Enum.KeyCode.Insert,
+    Search = false,
+})
+
+pcall(function() Fluent:SetTheme(CurrentThemeName) end)
+
+--========================================================--
+-- 1. MAIN TAB
+--========================================================--
+local MainTab = Window:AddTab({ Title = "Main", Icon = "solar/user-bold" })
+
+LevelParagraph = MainTab:AddParagraph({
+    Title = "Level",
+    Content = "جاري القراءة..."
+})
+
+QuestStatusParagraph = MainTab:AddParagraph({
+    Title = "Quest",
+    Content = "ما فيه مهمة"
+})
+
+StateParagraph = MainTab:AddParagraph({
+    Title = "State",
+    Content = "متوقف"
+})
+
+--========================================================--
+-- 2. AUTO TAB
+--========================================================--
+local AutoTab = Window:AddTab({ Title = "Auto", Icon = "solar/sword-bold" })
+
+AutoTab:AddSection("Auto Farm")
+
+AutoTab:AddToggle("AutoFarmToggle", {
+    Title = "Auto Farm",
+    Default = false,
+    Callback = function(Value)
+        if Value then StartAutoFarm()
+        else StopAutoFarm() end
+    end,
+})
+
+AutoTab:AddSection("Position")
+
+AutoTab:AddSlider("AboveHeadHeightSlider", {
+    Title = "Above Head Height",
+    Default = AboveHeadHeight,
+    Min = 1, Max = 15, Rounding = 1,
+    Callback = function(Value) AboveHeadHeight = Value end,
+})
+
+AutoTab:AddSlider("ProneAngleSlider", {
+    Title = "Prone Angle",
+    Default = ProneAngle,
+    Min = 0, Max = 180, Rounding = 0,
+    Callback = function(Value) ProneAngle = Value end,
+})
+
+AutoTab:AddSlider("TweenSpeedSlider", {
+    Title = "Tween Speed",
+    Default = TweenSpeed,
+    Min = 10, Max = 100, Rounding = 0,
+    Callback = function(Value) TweenSpeed = Value end,
+})
+
+AutoTab:AddSection("Manual Actions")
+
+AutoTab:AddButton({
+    Title = "Take Boss Quest",
+    Icon = "solar/document-add-bold",
+    Callback = function() TakeQuest("boss") end,
+})
+
+AutoTab:AddButton({
+    Title = "Take Bandit Quest",
+    Icon = "solar/document-add-bold",
+    Callback = function() TakeQuest("bandit") end,
+})
+
+AutoTab:AddButton({
+    Title = "Run Combo Once",
+    Icon = "solar/sword-bold",
+    Callback = function() RunAttackSequence() end,
+})
+
+AutoTab:AddButton({
+    Title = "Count Enemies",
+    Icon = "solar/magnifer-bold",
+    Callback = function()
+        RefreshEnemyCache()
+        print("عدد الأعداء:", #CachedEnemies)
+        print("Zuko موجود؟", IsZukoAlive())
+    end,
+})
+
+--========================================================--
+-- 3. SETTINGS TAB
+--========================================================--
+local SettingsTab = Window:AddTab({ Title = "Settings", Icon = "solar/palette-bold" })
+
+SettingsTab:AddButton({
+    Title = "Hide / Show Menu",
+    Icon = "solar/menu-dots-bold",
+    Callback = function()
+        MenuVisible = not MenuVisible
+        if FluentRoot and FluentRoot:IsA("GuiObject") then
+            FluentRoot.Visible = MenuVisible
+        end
+    end,
+})
+
+SettingsTab:AddButton({
+    Title = "Destroy UI",
+    Icon = "solar/trash-bin-trash-bold",
+    Callback = function()
+        StopAutoFarm()
+        if FloatingGui then FloatingGui:Destroy() end
+        Fluent:Destroy()
+    end,
+})
+
+--========================================================--
+-- FLOATING BUTTON (N)
+--========================================================--
+FloatingGui = Instance.new("ScreenGui")
+FloatingGui.Name = "NAZK_Floating"
+FloatingGui.ResetOnSpawn = false
+FloatingGui.Parent = CoreGui
+FluentRoot = Window.Root or Window.Main or Window.Window
+
+NButton = Instance.new("TextButton")
+NButton.Size = UDim2.fromOffset(42, 42)
+NButton.Position = UDim2.new(0, 12, 0.5, -21)
+NButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+NButton.BorderSizePixel = 0
+NButton.Text = "N"
+NButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+NButton.TextSize = 22
+NButton.Font = Enum.Font.GothamBold
+NButton.AutoButtonColor = false
+NButton.Parent = FloatingGui
+
+local NCorner = Instance.new("UICorner")
+NCorner.CornerRadius = UDim.new(1, 0)
+NCorner.Parent = NButton
+
+local NStroke = Instance.new("UIStroke")
+NStroke.Color = Color3.fromRGB(255, 255, 255)
+NStroke.Thickness = 2
+NStroke.Parent = NButton
+
+local IsDragging = false
+local DragInput = nil
+local DragStart = nil
+local StartPos = nil
+local Moved = false
+
+NButton.InputBegan:Connect(function(Input)
+    if Input.UserInputType == Enum.UserInputType.MouseButton1
+        or Input.UserInputType == Enum.UserInputType.Touch then
+        IsDragging = true
+        Moved = false
+        DragStart = Input.Position
+        StartPos = NButton.Position
+    end
+end)
+
+NButton.InputChanged:Connect(function(Input)
+    if Input.UserInputType == Enum.UserInputType.MouseMovement
+        or Input.UserInputType == Enum.UserInputType.Touch then
+        DragInput = Input
+    end
+end)
+
+NButton.InputEnded:Connect(function(Input)
+    if Input.UserInputType == Enum.UserInputType.MouseButton1
+        or Input.UserInputType == Enum.UserInputType.Touch then
+        IsDragging = false
+        if not Moved then
+            MenuVisible = not MenuVisible
+            if FluentRoot and FluentRoot:IsA("GuiObject") then
+                FluentRoot.Visible = MenuVisible
+            end
+        end
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(Input)
+    if Input == DragInput and IsDragging then
+        local Delta = Input.Position - DragStart
+        if math.abs(Delta.X) > 4 or math.abs(Delta.Y) > 4 then Moved = true end
+        NButton.Position = UDim2.new(
+            StartPos.X.Scale, StartPos.X.Offset + Delta.X,
+            StartPos.Y.Scale, StartPos.Y.Offset + Delta.Y
+        )
+    end
+end)
+
+--========================================================--
+-- LIVE UPDATES
+--========================================================--
+task.spawn(function()
+    while true do
+        task.wait(1)
+        UpdateLevel()
+        if LevelParagraph and PlayerLevel > 0 then
+            pcall(function()
+                LevelParagraph:SetDesc("Level: " .. PlayerLevel .. " | XP: " .. PlayerExp .. "/" .. PlayerMaxExp)
+            end)
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        local hasQuest, questType, progress, max = GetQuestInfo()
+        if QuestStatusParagraph then
+            if hasQuest then
+                pcall(function()
+                    QuestStatusParagraph:SetDesc("Has Quest | " .. (questType or "?") ..
+                        " (" .. progress .. "/" .. max .. ")")
+                end)
+            else
+                pcall(function()
+                    QuestStatusParagraph:SetDesc("ما فيه مهمة (Abandoned)")
+                end)
+            end
+        end
+        if StateParagraph then
+            local state = "متوقف"
+            if AutoFarmEnabled then
+                if QuestInProgress then state = "يرسل المهمة"
+                elseif not hasQuest then state = "ينتظر مهمة"
+                elseif IsQuestComplete() then state = "المهمة خلصت"
+                elseif not CurrentTarget then state = "يبحث عن عدو"
+                elseif IsApproaching then state = "يتوجه للهدف"
+                elseif IsLocked then state = "يقاتل"
+                end
+            end
+            pcall(function()
+                StateParagraph:SetDesc(state)
+            end)
+        end
+    end
+end)
+
+UpdateLevel()
+if LevelParagraph and PlayerLevel > 0 then
+    LevelParagraph:SetDesc("Level: " .. PlayerLevel .. " | XP: " .. PlayerExp .. "/" .. PlayerMaxExp)
+end
+
+print("NAZK HUB - Loaded")
