@@ -1,0 +1,1365 @@
+--========================================================--
+-- NAZK HUB (Ride A Pet) | Auto Farm + Home Save + Buy
+--========================================================--
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local TeleportService = game:GetService("TeleportService")
+local RunService = game:GetService("RunService")
+local Debris = game:GetService("Debris")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local VirtualUser = game:GetService("VirtualUser")
+local LocalPlayer = Players.LocalPlayer
+
+if _G.NAZK_HUB_RUNNING then
+    pcall(function() if _G.NAZK_HUB_CLEANUP then _G.NAZK_HUB_CLEANUP() end end)
+    for _, Gui in ipairs(CoreGui:GetChildren()) do
+        if Gui:IsA("ScreenGui") and (Gui.Name == "Fluent" or Gui.Name:find("NAZK")) then
+            pcall(function() Gui:Destroy() end)
+        end
+    end
+    task.wait(0.3)
+end
+for _, Gui in ipairs(CoreGui:GetChildren()) do
+    if Gui.Name == "NAZK_FloatingControls" or Gui.Name == "Fluent" then
+        pcall(function() Gui:Destroy() end)
+    end
+end
+_G.NAZK_HUB_RUNNING = true
+
+local NButton, FloatingDash, FloatingEgg = nil, nil, nil
+local MenuVisible = true
+local FluentRoot, FloatingGui = nil, nil
+
+-- SETTINGS
+local DashPower, DashDuration, DashCooldown = 45, 0.10, 1.2
+local DashOnCooldown = false
+local SpeedEnabled, SpeedValue = false, 30
+local AntiAFKEnabled, AntiAFKConnection = false, nil
+local NoClipEnabled, NoClipConnection = false, nil
+local AntiFlingEnabled, AntiFlingConnection = false, nil
+local LastGoodCFrame = nil
+local AutoRejoinEnabled, AutoRejoinConnection = false, nil
+local InfiniteJumpEnabled, InfiniteJumpConnection = false, nil
+local SoundEnabled = true
+local FullbrightEnabled = false
+local FOVValue = 70
+local TweenSpeed = 200
+local SavedHomePosition = nil
+
+local FARM = {
+    WaitAtCoord    = 2.0,
+    TeleportDelay  = 0.1,
+    LoopDelay      = 5.0,
+    PickupDelay    = 0.9,
+    PostReturnWait = 0.5,
+    PostResetWait  = 2.5,
+    AutoPickup     = true,
+    AutoReset      = true,
+    AutoTeleport   = true,
+    Loop           = true,
+    OnlyMyPlot     = false,
+    Notify         = true,
+}
+
+local AutoPlaceEggEnabled = false
+local AutoPlaceEggTask = nil
+local AutoPlaceEggType = "Cherub Egg"
+local AutoPlaceEggDelay = 1.0
+local AutoPlaceEggPosition = "My Plot"
+local AutoPlaceEggRandomize = true
+
+local SoundIds = {
+    Toggle = "rbxassetid://4590662766",
+    Off    = "rbxassetid://4590667848",
+    Hop    = "rbxassetid://6042053626",
+    Egg    = "rbxassetid://3709202609",
+}
+
+local Keybinds = { Dash = Enum.KeyCode.Q, HideMenu = Enum.KeyCode.H, AutoFarm = Enum.KeyCode.G }
+
+local DefaultGravity = Workspace.Gravity
+local CurrentGravity = DefaultGravity
+local CurrentThemeName = "AMOLED"
+local ThemeNames = {"AMOLED","Dark","Ash Gray","Royal Blue","Deep Ocean","Neon Cyber","Neon Purple","Orange","Charcoal","Pearl White","Midnight Blue","Galaxy Purple","Cosmic Violet","Cotton Candy"}
+local ThemeColors = {
+    ["AMOLED"]=Color3.fromRGB(0,0,0), ["Dark"]=Color3.fromRGB(35,35,35),
+    ["Ash Gray"]=Color3.fromRGB(95,100,105), ["Royal Blue"]=Color3.fromRGB(40,75,170),
+    ["Deep Ocean"]=Color3.fromRGB(15,70,105), ["Neon Cyber"]=Color3.fromRGB(0,175,125),
+    ["Neon Purple"]=Color3.fromRGB(125,35,190), ["Orange"]=Color3.fromRGB(190,85,15),
+    ["Charcoal"]=Color3.fromRGB(55,55,55), ["Pearl White"]=Color3.fromRGB(210,210,210),
+    ["Midnight Blue"]=Color3.fromRGB(25,45,100), ["Galaxy Purple"]=Color3.fromRGB(75,35,125),
+    ["Cosmic Violet"]=Color3.fromRGB(105,25,155), ["Cotton Candy"]=Color3.fromRGB(220,105,175),
+}
+
+-- EGG DATA
+local EggPriority = {
+    ["Blackhole Egg"]=1, ["Cherub Egg"]=2, ["Aurora Egg"]=3, ["Galaxy Egg"]=4,
+    ["Crystal Egg"]=5, ["Skull Egg"]=6, ["Dominus Egg"]=7, ["Flaming Egg"]=8,
+    ["Sinister Egg"]=9, ["Soul Egg"]=10, ["Glass Egg"]=11, ["Golden Egg"]=12,
+    ["Mushroom Egg"]=13, ["Flower Egg"]=14, ["Slime Egg"]=15, ["Ice Egg"]=16,
+    ["Cracked Egg"]=17, ["Easter Egg"]=18, ["Stone Egg"]=19, ["Leaf Egg"]=20,
+    ["Brown Egg"]=21,
+}
+
+local RareEggCoords = {
+    Vector3.new(-2942.09, 40438.17, -875.49),
+    Vector3.new(-2138.92, 40754.70, 1884.01),
+    Vector3.new(-368.63, 40917.25, 4194.90),
+    Vector3.new(2245.58, 40415.62, 2790.96),
+    Vector3.new(2959.17, 40564.66, 963.85),
+    Vector3.new(2408.39, 40491.88, -455.24),
+    Vector3.new(1055.74, 40490.80, -1552.79),
+    Vector3.new(-931.87, 40489.17, -1793.59),
+    Vector3.new(-1777.22, 40401.79, -581.81),
+}
+local RareEggCoordNames = {"Coord 1","Coord 2","Coord 3","Coord 4","Coord 5","Coord 6","Coord 7","Coord 8","Coord 9"}
+
+local FarmMinPriority = 12
+
+local function PlaySound(SoundName, Volume)
+    if not SoundEnabled then return end
+    local Id = SoundIds[SoundName]; if not Id then return end
+    local Sound = Instance.new("Sound")
+    Sound.SoundId = Id; Sound.Volume = Volume or 0.5
+    Sound.Parent = CoreGui; Sound:Play()
+    Debris:AddItem(Sound, 5)
+end
+
+local function GetRoot()
+    local Char = LocalPlayer.Character
+    return Char and Char:FindFirstChild("HumanoidRootPart")
+end
+
+local FarmEnabled = false
+local FarmTask = nil
+
+local function ResetCharacter()
+    local Char = LocalPlayer.Character
+    if not Char then return end
+    local Hum = Char:FindFirstChildOfClass("Humanoid")
+    if Hum then
+        pcall(function() Hum.Health = 0 end)
+        if Hum.Health > 0 then pcall(function() Char:BreakJoints() end) end
+    else pcall(function() Char:BreakJoints() end) end
+end
+
+local function TeleportToPosition(Pos)
+    local Root = GetRoot(); if not Root or not Pos then return end
+    Root.CFrame = CFrame.new(Pos + Vector3.new(0, 5, 0))
+    if Root.AssemblyLinearVelocity then Root.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+    if Root.AssemblyAngularVelocity then Root.AssemblyAngularVelocity = Vector3.new(0,0,0) end
+end
+
+local function SmoothMove(TargetPos, Speed)
+    Speed = Speed or TweenSpeed
+    local Root = GetRoot()
+    if not Root or not TargetPos then return false end
+
+    local Char = LocalPlayer.Character
+    if not Char then return false end
+
+    local Hum = Char:FindFirstChildOfClass("Humanoid")
+    if not Hum or Hum.Health <= 0 then return false end
+
+    local OldAutoRotate = Hum.AutoRotate
+    Hum.AutoRotate = false
+
+    local OriginalCollide = {}
+    local PartsList = {}
+    for _, Part in ipairs(Char:GetDescendants()) do
+        if Part:IsA("BasePart") then
+            OriginalCollide[Part] = Part.CanCollide
+            Part.CanCollide = false
+            table.insert(PartsList, Part)
+        end
+    end
+
+    local TempNoClipConn
+    if not NoClipEnabled then
+        TempNoClipConn = RunService.Stepped:Connect(function()
+            if not Char or not Char.Parent then return end
+            for _, Part in ipairs(PartsList) do
+                if Part and Part.Parent then Part.CanCollide = false end
+            end
+        end)
+    end
+
+    local StartPos = Root.Position
+    local FinalPos = TargetPos + Vector3.new(0, 5, 0)
+    local Distance = (FinalPos - StartPos).Magnitude
+    local Duration = math.max(Distance / Speed, 0.3)
+
+    local StartTime = tick()
+    local Done = false
+    local HeartbeatConn
+
+    HeartbeatConn = RunService.Heartbeat:Connect(function()
+        if not FarmEnabled then Done = true; return end
+        if not Root or not Root.Parent then Done = true; return end
+        if not Char.Parent then Done = true; return end
+        if not Hum.Parent or Hum.Health <= 0 then Done = true; return end
+
+        local Elapsed = tick() - StartTime
+        if Elapsed > 30 then Done = true; return end
+
+        local Alpha = math.min(Elapsed / Duration, 1)
+        local SmoothAlpha = Alpha * Alpha * (3 - 2 * Alpha)
+
+        Root.CFrame = CFrame.new(StartPos:Lerp(FinalPos, SmoothAlpha))
+        Root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        Root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+
+        if Alpha >= 1 then Done = true end
+    end)
+
+    local Timeout = tick() + 32
+    while not Done and tick() < Timeout do
+        task.wait(0.02)
+    end
+
+    if HeartbeatConn then HeartbeatConn:Disconnect() end
+    if TempNoClipConn then TempNoClipConn:Disconnect() end
+
+    if Char and Char.Parent then
+        if Hum and Hum.Parent then
+            Hum.AutoRotate = OldAutoRotate
+        end
+        if not NoClipEnabled then
+            for Part, OldVal in pairs(OriginalCollide) do
+                if Part and Part.Parent then Part.CanCollide = OldVal end
+            end
+        end
+    end
+
+    return true
+end
+
+-- PLOT
+local function GetMyPlot()
+    local Plots = Workspace:FindFirstChild("Plots")
+    if not Plots then return nil end
+    for _, Plot in ipairs(Plots:GetChildren()) do
+        local Data = Plot:FindFirstChild("Data")
+        if Data then
+            local Owner = Data:FindFirstChild("Owner")
+            if Owner then
+                if Owner:IsA("ObjectValue") and Owner.Value == LocalPlayer then return Plot end
+                if Owner:IsA("StringValue") and Owner.Value == LocalPlayer.Name then return Plot end
+                if Owner:IsA("NumberValue") and tostring(Owner.Value) == tostring(LocalPlayer.UserId) then return Plot end
+                if Owner:IsA("IntValue") and tostring(Owner.Value) == tostring(LocalPlayer.UserId) then return Plot end
+            end
+        end
+    end
+    return nil
+end
+
+local function GetPlotOwnerName(Plot)
+    if not Plot then return "?" end
+    local Data = Plot:FindFirstChild("Data")
+    if Data then
+        local Owner = Data:FindFirstChild("Owner")
+        if Owner and Owner.Value ~= nil then return tostring(Owner.Value) end
+    end
+    return Plot.Name
+end
+
+local function IsEggInPlot(Egg, Plot)
+    if not Egg or not Plot then return false end
+    local Cur = Egg
+    while Cur and Cur ~= Workspace do
+        if Cur == Plot then return true end
+        Cur = Cur.Parent
+    end
+    return false
+end
+
+local function GetPlotCenter(Plot)
+    if not Plot then return nil end
+    if Plot:IsA("Model") then
+        local ok, pivot = pcall(function() return Plot:GetPivot() end)
+        if ok and pivot then return pivot.Position end
+    end
+    local Biggest, BiggestSize = nil, 0
+    for _, Desc in ipairs(Plot:GetDescendants()) do
+        if Desc:IsA("BasePart") then
+            local Size = Desc.Size.X * Desc.Size.Z
+            if Size > BiggestSize then
+                Biggest = Desc
+                BiggestSize = Size
+            end
+        end
+    end
+    if Biggest then return Biggest.Position end
+    return nil
+end
+
+-- VISUALS
+local OriginalLighting = {
+    ClockTime=Lighting.ClockTime, Brightness=Lighting.Brightness,
+    Ambient=Lighting.Ambient, OutdoorAmbient=Lighting.OutdoorAmbient,
+    GlobalShadows=Lighting.GlobalShadows, FogEnd=Lighting.FogEnd,
+    FogStart=Lighting.FogStart, ExposureCompensation=Lighting.ExposureCompensation,
+}
+local function ApplyFullbright()
+    if FullbrightEnabled then
+        Lighting.ClockTime = 12; Lighting.Brightness = 3
+        Lighting.Ambient = Color3.fromRGB(255,255,255)
+        Lighting.OutdoorAmbient = Color3.fromRGB(255,255,255)
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 100000; Lighting.FogStart = 0
+        Lighting.ExposureCompensation = 0.5
+    else
+        for k, v in pairs(OriginalLighting) do Lighting[k] = v end
+    end
+end
+local function ApplyFOV(Value)
+    local Cam = Workspace.CurrentCamera
+    if Cam then Cam.FieldOfView = Value end
+end
+Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+    task.wait(0.1); if FOVValue then ApplyFOV(FOVValue) end
+end)
+
+-- DASH
+local function DoDash()
+    if DashOnCooldown then return end
+    local Root = GetRoot(); if not Root then return end
+    DashOnCooldown = true
+    PlaySound("Toggle", 0.3)
+    local Camera = Workspace.CurrentCamera
+    local Direction = Camera and Camera.CFrame.LookVector or Root.CFrame.LookVector
+    Direction = Vector3.new(Direction.X, 0, Direction.Z)
+    if Direction.Magnitude < 0.01 then
+        Direction = Vector3.new(Root.CFrame.LookVector.X, 0, Root.CFrame.LookVector.Z)
+    end
+    Direction = Direction.Unit
+    local V = Instance.new("BodyVelocity")
+    V.Name = "NAZK_DashVelocity"
+    V.MaxForce = Vector3.new(1000000, 0, 1000000)
+    V.P = 50000
+    V.Velocity = Direction * DashPower
+    V.Parent = Root
+    task.delay(DashDuration, function() if V and V.Parent then V:Destroy() end end)
+    task.delay(DashCooldown, function() DashOnCooldown = false end)
+end
+
+-- SPEED
+local function ApplySpeed()
+    if LocalPlayer.Character then
+        local Hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if Hum then Hum.WalkSpeed = SpeedValue end
+    end
+end
+local function StopSpeed()
+    if LocalPlayer.Character then
+        local Hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if Hum then Hum.WalkSpeed = 16 end
+    end
+end
+
+-- INFINITE JUMP
+local function StartInfiniteJump()
+    if InfiniteJumpConnection then InfiniteJumpConnection:Disconnect() end
+    InfiniteJumpEnabled = true
+    InfiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
+        if not InfiniteJumpEnabled then return end
+        local Char = LocalPlayer.Character; if not Char then return end
+        local Hum = Char:FindFirstChildOfClass("Humanoid"); if not Hum then return end
+        Hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    end)
+end
+local function StopInfiniteJump()
+    InfiniteJumpEnabled = false
+    if InfiniteJumpConnection then InfiniteJumpConnection:Disconnect(); InfiniteJumpConnection = nil end
+end
+
+-- AUTO FARM
+local function GetEggPosition(Egg)
+    if not Egg then return nil end
+    if Egg:IsA("BasePart") then return Egg.Position end
+    if Egg:IsA("Model") then
+        if Egg.PrimaryPart then return Egg.PrimaryPart.Position end
+        local AnyPart = Egg:FindFirstChildWhichIsA("BasePart")
+        if AnyPart then return AnyPart.Position end
+    end
+    for _, Desc in ipairs(Egg:GetDescendants()) do
+        if Desc:IsA("BasePart") then return Desc.Position end
+    end
+    return nil
+end
+
+local function GetEggPriority(Name)
+    if not Name then return 999 end
+    return EggPriority[Name] or 999
+end
+
+local function ScanBestEgg()
+    local MyPlot = FARM.OnlyMyPlot and GetMyPlot() or nil
+    local Containers = {}
+    if MyPlot then
+        local PE = MyPlot:FindFirstChild("Eggs")
+        if PE then table.insert(Containers, PE) end
+        table.insert(Containers, MyPlot)
+    else
+        local RE = Workspace:FindFirstChild("RenderedEggs")
+        if RE then table.insert(Containers, RE) end
+        local GE = Workspace:FindFirstChild("Eggs")
+        if GE then table.insert(Containers, GE) end
+    end
+    local Best = nil
+    for _, Container in ipairs(Containers) do
+        for _, Egg in ipairs(Container:GetChildren()) do
+            local Priority = GetEggPriority(Egg.Name)
+            if Priority <= FarmMinPriority then
+                local Pos = GetEggPosition(Egg)
+                if Pos then
+                    local Valid = true
+                    if MyPlot then Valid = IsEggInPlot(Egg, MyPlot) end
+                    if Valid and (not Best or Priority < Best.Priority) then
+                        Best = {Name=Egg.Name, Priority=Priority, Position=Pos, Instance=Egg,
+                                PlotOwner=MyPlot and GetPlotOwnerName(MyPlot) or "Global"}
+                    end
+                end
+            end
+        end
+    end
+    return Best
+end
+
+local function Notify(Title, Content, Duration)
+    if not FARM.Notify then return end
+    pcall(function()
+        Fluent:Notify({ Title = Title, Content = Content, Duration = Duration or 2 })
+    end)
+end
+
+local function TryPickupEgg(Egg)
+    if not Egg then return false, "no egg" end
+    for _, Desc in ipairs(Egg:GetDescendants()) do
+        if Desc:IsA("ProximityPrompt") then
+            pcall(function() fireproximityprompt(Desc) end); return true, "ProximityPrompt"
+        end
+    end
+    for _, Desc in ipairs(Egg:GetDescendants()) do
+        if Desc:IsA("ClickDetector") then
+            pcall(function() fireclickdetector(Desc) end); return true, "ClickDetector"
+        end
+    end
+    for _, Desc in ipairs(Egg:GetDescendants()) do
+        if (Desc:IsA("TextButton") or Desc:IsA("ImageButton")) and Desc.Visible then
+            local Txt = (Desc.Text or ""):lower()
+            if Txt:find("pick") or Txt:find("collect") or Txt:find("take") then
+                pcall(function() Desc:Activate() end); return true, "Button"
+            end
+        end
+    end
+    local PG = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if PG then
+        for _, Gui in ipairs(PG:GetDescendants()) do
+            if (Gui:IsA("TextButton") or Gui:IsA("ImageButton")) and Gui.Visible then
+                local Txt = (Gui.Text or ""):lower()
+                if Txt:find("pick") or Txt:find("collect") or Txt:find("take") then
+                    pcall(function() Gui:Activate() end); return true, "ScreenGui"
+                end
+            end
+        end
+    end
+    for _, Gui in ipairs(Workspace:GetDescendants()) do
+        if (Gui:IsA("TextButton") or Gui:IsA("ImageButton")) and Gui.Visible then
+            local Txt = (Gui.Text or ""):lower()
+            if Txt:find("pick") or Txt:find("collect") or Txt:find("take") then
+                pcall(function() Gui:Activate() end); return true, "Workspace"
+            end
+        end
+    end
+    return false, "no prompt"
+end
+
+local function RunTourOnce()
+    local Total = #RareEggCoords
+    local OverallBest = nil
+    for i = 1, Total do
+        if not FarmEnabled then return nil end
+        TeleportToPosition(RareEggCoords[i])
+        task.wait(FARM.TeleportDelay)
+        if not FarmEnabled then return nil end
+        local Best = ScanBestEgg()
+        if Best then
+            if not OverallBest or Best.Priority < OverallBest.Priority then
+                OverallBest = Best
+                PlaySound("Egg", 0.3)
+                Notify("New Best", Best.Name.." (P"..Best.Priority..")", 2)
+            end
+        end
+        task.wait(FARM.WaitAtCoord)
+    end
+    return OverallBest
+end
+
+local function StartFarm()
+    if FarmTask then pcall(function() task.cancel(FarmTask) end) end
+    FarmEnabled = true
+    FarmTask = task.spawn(function()
+        repeat
+            if not FarmEnabled then break end
+            local Best = RunTourOnce()
+            if not FarmEnabled then break end
+
+            if Best and FarmEnabled then
+                Notify("Best Egg", Best.Name.." (P"..Best.Priority..")", 4)
+                task.wait(0.3)
+                if not FarmEnabled then break end
+
+                local Recheck = ScanBestEgg()
+                local TargetPos = Best.Position
+                if Recheck and Recheck.Name == Best.Name then
+                    TargetPos = Recheck.Position
+                    Best.Instance = Recheck.Instance
+                end
+
+                if not FarmEnabled then break end
+                TeleportToPosition(TargetPos)
+                PlaySound("Egg", 0.5)
+
+                if FARM.AutoPickup then
+                    task.wait(FARM.PickupDelay)
+                    if not FarmEnabled then break end
+
+                    local Picked, Method = TryPickupEgg(Best.Instance)
+                    if Picked then
+                        Notify("Picked Up", Best.Name, 2)
+                        PlaySound("Egg", 0.6)
+                    else
+                        Notify("Failed", "ما قدرت أشيل "..Best.Name, 2)
+                    end
+                    task.wait(0.4)
+                    if not FarmEnabled then break end
+
+                    local ReturnPos = SavedHomePosition
+                    if not ReturnPos then
+                        local MyPlot = GetMyPlot()
+                        if MyPlot then ReturnPos = GetPlotCenter(MyPlot) end
+                    end
+
+                    local ReachedPlot = false
+                    if ReturnPos then
+                        Notify("Returning", "رجوع للبيت...", 2)
+                        SmoothMove(ReturnPos, TweenSpeed)
+                        if not FarmEnabled then break end
+                        task.wait(FARM.PostReturnWait)
+
+                        local Root = GetRoot()
+                        if Root then
+                            local Dist = (Root.Position - ReturnPos).Magnitude
+                            Notify("Position", "المسافة: "..math.floor(Dist), 2)
+                            if Dist < 30 then ReachedPlot = true end
+                        end
+                    else
+                        Notify("No Home", "احفظ موقع البيت أول!", 3)
+                    end
+
+                    if not FarmEnabled then break end
+
+                    if FARM.AutoReset and ReachedPlot then
+                        Notify("Reset", "إعادة اللاعب...", 2)
+                        ResetCharacter()
+                        task.wait(FARM.PostResetWait)
+                    end
+                end
+            else
+                Notify("NAZK HUB", "ما فيه بيضة تناسب الفلتر", 3)
+            end
+
+            if not FarmEnabled then break end
+            if FARM.Loop and FarmEnabled then task.wait(FARM.LoopDelay) else break end
+        until not FarmEnabled
+
+        FarmEnabled = false
+        if FloatingEgg then FloatingEgg.Text = "Farm" end
+        if Refs.FarmToggle then pcall(function() Refs.FarmToggle:SetValue(false) end) end
+    end)
+end
+
+local function StopFarm()
+    FarmEnabled = false
+    if FarmTask then
+        pcall(function() task.cancel(FarmTask) end)
+        FarmTask = nil
+    end
+    if FloatingEgg then FloatingEgg.Text = "Farm" end
+end
+
+-- AUTO PLACE EGG
+local function GetEggRemote()
+    local RS = ReplicatedStorage
+    local Remotes = RS:FindFirstChild("Remotes"); if not Remotes then return nil end
+    local GameR = Remotes:FindFirstChild("Game"); if not GameR then return nil end
+    return GameR:FindFirstChild("EggPlaced")
+end
+
+local function GetPlacePosition()
+    if AutoPlaceEggPosition == "My Plot" then
+        local MyPlot = GetMyPlot()
+        if MyPlot then return GetPlotCenter(MyPlot) end
+        return nil
+    else
+        local Root = GetRoot()
+        return Root and Root.Position
+    end
+end
+
+local function PlaceEggOnce()
+    local Remote = GetEggRemote()
+    if not Remote then return false, "no remote" end
+    local Pos = GetPlacePosition()
+    if not Pos then return false, "no position" end
+    if AutoPlaceEggRandomize then
+        Pos = Pos + Vector3.new(math.random(-8, 8), 0, math.random(-8, 8))
+    end
+    local Ok1 = pcall(function() Remote:FireServer({ PlantPosition = Pos, EggName = AutoPlaceEggType, EggType = AutoPlaceEggType }) end)
+    if not Ok1 then
+        local Ok2 = pcall(function() Remote:FireServer({ PlantPosition = Pos, EggName = AutoPlaceEggType }) end)
+        if not Ok2 then pcall(function() Remote:FireServer({ PlantPosition = Pos }) end) end
+    end
+    return true, "sent"
+end
+
+local function StartAutoPlaceEgg()
+    if AutoPlaceEggTask then pcall(function() task.cancel(AutoPlaceEggTask) end) end
+    AutoPlaceEggEnabled = true
+    AutoPlaceEggTask = task.spawn(function()
+        while AutoPlaceEggEnabled do
+            local OK, Err = PlaceEggOnce()
+            if not OK then Notify("Auto Place Egg", "فشل: "..tostring(Err), 2) end
+            task.wait(AutoPlaceEggDelay)
+        end
+    end)
+end
+
+local function StopAutoPlaceEgg()
+    AutoPlaceEggEnabled = false
+    if AutoPlaceEggTask then pcall(function() task.cancel(AutoPlaceEggTask) end); AutoPlaceEggTask = nil end
+end
+
+-- BUY SYSTEM
+local RadarList = {
+    "Advanced Radar",   -- Rare
+    "Jewel Radar",      -- Epic
+    "Royal Radar",      -- Legendary
+    "Magic Radar",      -- Mythic
+    "Angelic Radar",    -- Divine
+    "Eternal Radar",    -- Ethereal
+}
+
+local AutoBuyEnabled = false
+local AutoBuyTask = nil
+local AutoBuyDelay = 0.5
+local AutoBuySelected = {}
+
+local function GetBuyRemote()
+    local RS = ReplicatedStorage
+    local Remotes = RS:FindFirstChild("Remotes"); if not Remotes then return nil end
+    local GameR = Remotes:FindFirstChild("Game"); if not GameR then return nil end
+    return GameR:FindFirstChild("BuyWithCash")
+end
+
+local function BuyRadarOnce(RadarName)
+    local Remote = GetBuyRemote()
+    if not Remote then return false, "no remote" end
+    local OK = pcall(function()
+        Remote:FireServer(table.unpack({"Gears", RadarName}))
+    end)
+    return OK, OK and "sent" or "fire failed"
+end
+
+local function GetSelectedRadars()
+    local List = {}
+    for _, Name in ipairs(RadarList) do
+        if AutoBuySelected[Name] then table.insert(List, Name) end
+    end
+    return List
+end
+
+local function StartAutoBuy()
+    if AutoBuyTask then pcall(function() task.cancel(AutoBuyTask) end) end
+    AutoBuyEnabled = true
+    AutoBuyTask = task.spawn(function()
+        while AutoBuyEnabled do
+            local Selected = GetSelectedRadars()
+            if #Selected == 0 then
+                Notify("Buy", "اختر رادار على الأقل!", 2)
+                AutoBuyEnabled = false
+                if Refs.AutoBuyToggle then
+                    pcall(function() Refs.AutoBuyToggle:SetValue(false) end)
+                end
+                break
+            end
+
+            for i = #RadarList, 1, -1 do
+                if not AutoBuyEnabled then break end
+                local Name = RadarList[i]
+                if AutoBuySelected[Name] then
+                    BuyRadarOnce(Name)
+                    task.wait(AutoBuyDelay)
+                end
+            end
+
+            task.wait(AutoBuyDelay)
+        end
+    end)
+end
+
+local function StopAutoBuy()
+    AutoBuyEnabled = false
+    if AutoBuyTask then
+        pcall(function() task.cancel(AutoBuyTask) end)
+        AutoBuyTask = nil
+    end
+end
+
+-- MISC
+local function StartAntiAFK()
+    if AntiAFKConnection then AntiAFKConnection:Disconnect() end
+    AntiAFKEnabled = true
+    AntiAFKConnection = LocalPlayer.Idled:Connect(function()
+        if AntiAFKEnabled then VirtualUser:CaptureController(); VirtualUser:ClickButton2(Vector2.new()) end
+    end)
+end
+local function StopAntiAFK()
+    AntiAFKEnabled = false
+    if AntiAFKConnection then AntiAFKConnection:Disconnect(); AntiAFKConnection = nil end
+end
+
+local function StartNoClip()
+    if NoClipConnection then NoClipConnection:Disconnect() end
+    NoClipEnabled = true
+    NoClipConnection = RunService.Stepped:Connect(function()
+        if not NoClipEnabled then return end
+        local Char = LocalPlayer.Character; if not Char then return end
+        for _, Part in ipairs(Char:GetDescendants()) do
+            if Part:IsA("BasePart") then Part.CanCollide = false end
+        end
+    end)
+end
+local function StopNoClip()
+    NoClipEnabled = false
+    if NoClipConnection then NoClipConnection:Disconnect(); NoClipConnection = nil end
+    local Char = LocalPlayer.Character
+    if Char then
+        for _, Part in ipairs(Char:GetDescendants()) do
+            if Part:IsA("BasePart") then Part.CanCollide = true end
+        end
+    end
+end
+
+local function StartAntiFling()
+    if AntiFlingConnection then AntiFlingConnection:Disconnect() end
+    AntiFlingEnabled = true
+    AntiFlingConnection = RunService.Heartbeat:Connect(function()
+        if not AntiFlingEnabled then return end
+        local Char = LocalPlayer.Character; if not Char then return end
+        local HRP = Char:FindFirstChild("HumanoidRootPart"); if not HRP then return end
+        if HRP.Position.Y < -50 then
+            HRP.CFrame = LastGoodCFrame and (LastGoodCFrame + Vector3.new(0,10,0)) or CFrame.new(0,50,0)
+            return
+        end
+        if HRP.Position.Y > 0 then LastGoodCFrame = HRP.CFrame end
+        if HRP.AssemblyLinearVelocity.Magnitude > 200 then
+            HRP.AssemblyLinearVelocity = Vector3.new(0,0,0)
+            HRP.AssemblyAngularVelocity = Vector3.new(0,0,0)
+            if LastGoodCFrame then HRP.CFrame = LastGoodCFrame end
+        end
+    end)
+end
+local function StopAntiFling()
+    AntiFlingEnabled = false
+    if AntiFlingConnection then AntiFlingConnection:Disconnect(); AntiFlingConnection = nil end
+end
+
+local function StartAutoRejoin()
+    if AutoRejoinConnection then AutoRejoinConnection:Disconnect() end
+    AutoRejoinEnabled = true
+    AutoRejoinConnection = LocalPlayer.OnTeleport:Connect(function(State)
+        if not AutoRejoinEnabled then return end
+        if State == Enum.TeleportState.Failed then
+            task.wait(3)
+            pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end)
+        end
+    end)
+end
+local function StopAutoRejoin()
+    AutoRejoinEnabled = false
+    if AutoRejoinConnection then AutoRejoinConnection:Disconnect(); AutoRejoinConnection = nil end
+end
+
+local function HopToLowestServer(MaxPlayers)
+    MaxPlayers = tonumber(MaxPlayers) or 3
+    local PlaceId = game.PlaceId
+    local Servers = {}
+    local Success = pcall(function()
+        local Cursor = ""
+        repeat
+            local URL = "https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
+            if Cursor ~= "" then URL = URL.."&cursor="..Cursor end
+            local Response = game:HttpGet(URL)
+            local Data = HttpService:JSONDecode(Response)
+            for _, Server in ipairs(Data.data) do
+                if Server.id ~= game.JobId and Server.playing < Server.maxPlayers and Server.playing <= MaxPlayers then
+                    table.insert(Servers, Server)
+                end
+            end
+            Cursor = Data.nextPageCursor or ""
+        until Cursor == "" or #Servers >= 20
+    end)
+    if not Success or #Servers == 0 then Fluent:Notify({ Title="NAZK HUB", Content="ما فيه سيرفر مناسب", Duration=4 }); return end
+    table.sort(Servers, function(A,B) return A.playing < B.playing end)
+    TeleportService:TeleportToPlaceInstance(PlaceId, Servers[1].id, LocalPlayer)
+end
+
+-- FLUENT GUI
+local Fluent = loadstring(game:HttpGet("https://github.com/StyearX/Fluent-Modded/releases/download/Fluent/FluentPro"))()
+_G.NAZK_HUB_INSTANCE = Fluent
+
+local Camera = workspace.CurrentCamera
+local Viewport = Camera and Camera.ViewportSize or Vector2.new(1920,1080)
+local IsTouchDevice = UserInputService.TouchEnabled
+local IsMobile = IsTouchDevice and Viewport.X < 700
+local IsTablet = IsTouchDevice and Viewport.X >= 700
+local DeviceName = IsMobile and "Mobile" or IsTablet and "iPad / Tablet" or "Computer"
+
+local WindowWidth  = math.min(IsMobile and 300 or IsTablet and 460 or 580, math.max(280, Viewport.X - 20))
+local WindowHeight = math.min(IsMobile and 320 or IsTablet and 400 or 480, math.max(300, Viewport.Y - 40))
+local WindowSize = UDim2.fromOffset(WindowWidth, WindowHeight)
+local TabWidth = IsMobile and 100 or IsTablet and 130 or 160
+local NSize = IsMobile and 40 or IsTablet and 46 or 50
+local DashWidth = IsMobile and 68 or 78
+local EggWidth  = IsMobile and 68 or 78
+local SidePad = IsMobile and 10 or 18
+
+local Window = Fluent:CreateWindow({
+    Title = "NAZK HUB", SubTitle = "Auto Farm | "..DeviceName,
+    TabWidth = TabWidth, Size = WindowSize, Acrylic = false, Theme = CurrentThemeName,
+    MinimizeKey = Enum.KeyCode.Insert, Search = false,
+})
+pcall(function() Fluent:SetTheme(CurrentThemeName) end)
+local Refs = {}
+
+local DiscordTab = Window:AddTab({ Title = "Discord", Icon = "solar/chat-round-bold" })
+DiscordTab:AddButton({
+    Title = "Copy Discord Link", Icon = "solar/copy-bold",
+    Callback = function()
+        if type(setclipboard) == "function" then
+            setclipboard("https://discord.gg/ne5vgR9q8")
+            Fluent:Notify({ Title="NAZK HUB", Content="تم نسخ الرابط", Duration=2 })
+        end
+    end,
+})
+
+local FarmTab = Window:AddTab({ Title = "Auto Farm", Icon = "solar/magnifer-bold" })
+
+FarmTab:AddSection("Home Position")
+FarmTab:AddButton({
+    Title = "Save Home (وقف في بلوتك واضغط)",
+    Icon = "solar/home-bold",
+    Callback = function()
+        local Root = GetRoot()
+        if Root then
+            SavedHomePosition = Root.Position
+            Notify("Home Saved", "X="..math.floor(Root.Position.X).." Z="..math.floor(Root.Position.Z), 4)
+        else
+            Notify("Error", "ما لقيت موقعك", 3)
+        end
+    end,
+})
+
+FarmTab:AddButton({
+    Title = "Teleport to Home",
+    Icon = "solar/map-point-bold",
+    Callback = function()
+        if SavedHomePosition then
+            TeleportToPosition(SavedHomePosition)
+            Notify("Teleported", "للبيت", 2)
+        else
+            Notify("Error", "احفظ الموقع أول", 3)
+        end
+    end,
+})
+
+FarmTab:AddButton({
+    Title = "Test SmoothMove to Home",
+    Icon = "solar/route-bold",
+    Callback = function()
+        if SavedHomePosition then
+            task.spawn(function()
+                FarmEnabled = true
+                Notify("Testing", "بيتحرك للبيت...", 2)
+                SmoothMove(SavedHomePosition, TweenSpeed)
+                FarmEnabled = false
+                local Root = GetRoot()
+                if Root then
+                    local Dist = (Root.Position - SavedHomePosition).Magnitude
+                    Notify("Done", "المسافة النهائية: "..math.floor(Dist), 4)
+                end
+            end)
+        else
+            Notify("Error", "احفظ الموقع أول", 3)
+        end
+    end,
+})
+
+FarmTab:AddButton({
+    Title = "Show My Plot Info",
+    Icon = "solar/home-bold",
+    Callback = function()
+        local P = GetMyPlot()
+        if P then
+            Notify("My Plot", "الاسم: "..P.Name.." | المالك: "..GetPlotOwnerName(P), 4)
+        else
+            Notify("Error", "ما لقيت بلوتك", 4)
+        end
+    end,
+})
+
+FarmTab:AddSection("Auto Farm")
+Refs.FarmToggle = FarmTab:AddToggle("FarmToggle", {
+    Title = "Auto Farm Best Egg", Default = false,
+    Callback = function(Value)
+        if Value then
+            if not SavedHomePosition then
+                Notify("تنبيه", "احفظ موقع البيت أول!", 4)
+            end
+            StartFarm()
+            if FloatingEgg then FloatingEgg.Text = "ON" end
+            PlaySound("Toggle", 0.5)
+        else
+            StopFarm()
+            PlaySound("Off", 0.3)
+        end
+    end,
+})
+
+Refs.Rarity = FarmTab:AddDropdown("Rarity", {
+    Title = "Minimum Rarity",
+    Values = {"Ethereal Only (Top 1-2)","Divine+ (Top 1-4)","Mythic+ (Top 1-10)","Legendary+ (Top 1-12)","Epic+ (Top 1-16)","Any Egg"},
+    Multi = false, Default = "Legendary+ (Top 1-12)",
+    Callback = function(Value)
+        if Value == "Ethereal Only (Top 1-2)" then FarmMinPriority = 2
+        elseif Value == "Divine+ (Top 1-4)" then FarmMinPriority = 4
+        elseif Value == "Mythic+ (Top 1-10)" then FarmMinPriority = 10
+        elseif Value == "Legendary+ (Top 1-12)" then FarmMinPriority = 12
+        elseif Value == "Epic+ (Top 1-16)" then FarmMinPriority = 16
+        else FarmMinPriority = 999 end
+        Notify("Rarity", "تم التغيير إلى: "..Value, 2)
+    end,
+})
+
+Refs.TweenSpeed = FarmTab:AddSlider("TweenSpeed", {
+    Title = "Tween Speed", Default = 200, Min = 50, Max = 250, Rounding = 0,
+    Callback = function(Value) TweenSpeed = Value end,
+})
+
+local AutoTab = Window:AddTab({ Title = "Auto", Icon = "solar/rocket-bold" })
+AutoTab:AddSection("Auto Place Egg")
+Refs.AutoPlaceEgg = AutoTab:AddToggle("AutoPlaceEggToggle", {
+    Title = "Auto Place Egg", Default = false,
+    Callback = function(Value)
+        if Value then StartAutoPlaceEgg(); PlaySound("Toggle", 0.3)
+        else StopAutoPlaceEgg(); PlaySound("Off", 0.3) end
+    end,
+})
+Refs.AutoPlaceEggType = AutoTab:AddDropdown("AutoPlaceEggType", {
+    Title = "Egg Type",
+    Values = {"Blackhole Egg","Cherub Egg","Aurora Egg","Galaxy Egg","Crystal Egg","Skull Egg","Dominus Egg","Flaming Egg","Sinister Egg","Soul Egg","Glass Egg","Golden Egg","Mushroom Egg","Flower Egg","Slime Egg","Ice Egg","Cracked Egg","Easter Egg","Stone Egg","Leaf Egg","Brown Egg"},
+    Multi = false, Default = "Cherub Egg",
+    Callback = function(Value) AutoPlaceEggType = Value end,
+})
+Refs.AutoPlaceEggPosition = AutoTab:AddDropdown("AutoPlaceEggPosition", {
+    Title = "Place Position", Values = {"My Plot","Current Position"},
+    Multi = false, Default = "My Plot",
+    Callback = function(Value) AutoPlaceEggPosition = Value end,
+})
+Refs.AutoPlaceEggDelay = AutoTab:AddSlider("AutoPlaceEggDelay", {
+    Title = "Place Delay", Default = 10, Min = 1, Max = 100, Rounding = 0, Suffix = " x0.1s",
+    Callback = function(Value) AutoPlaceEggDelay = Value / 10 end,
+})
+Refs.AutoPlaceEggRandomize = AutoTab:AddToggle("AutoPlaceEggRandomize", {
+    Title = "Randomize Position", Default = true,
+    Callback = function(Value) AutoPlaceEggRandomize = Value end,
+})
+AutoTab:AddButton({
+    Title = "Place Once Now", Icon = "solar/bolt-bold",
+    Callback = function()
+        local OK, Err = PlaceEggOnce()
+        Notify("Place Egg", OK and ("تم إرسال: "..AutoPlaceEggType) or ("فشل: "..tostring(Err)), 3)
+    end,
+})
+AutoTab:AddButton({
+    Title = "Check Egg Remote", Icon = "solar/radar-bold",
+    Callback = function()
+        local R = GetEggRemote()
+        Notify(R and "Remote Found" or "Remote Missing", R and "EggPlaced موجود" or "ما لقيت EggPlaced", 3)
+    end,
+})
+
+-- BUY TAB
+local BuyTab = Window:AddTab({ Title = "Buy", Icon = "solar/cart-bold" })
+
+BuyTab:AddSection("Select Items")
+Refs.AutoBuySelect = BuyTab:AddDropdown("AutoBuySelect", {
+    Title = "Choose Items to Buy",
+    Values = RadarList,
+    Multi = true,
+    Default = {},
+    Callback = function(Selected)
+        AutoBuySelected = {}
+        if type(Selected) == "table" then
+            for Name, IsOn in pairs(Selected) do
+                if IsOn then AutoBuySelected[Name] = true end
+            end
+        end
+    end,
+})
+
+BuyTab:AddSection("Auto Buy")
+Refs.AutoBuyToggle = BuyTab:AddToggle("AutoBuyToggle", {
+    Title = "Enable Auto Buy", Default = false,
+    Callback = function(Value)
+        if Value then
+            local Selected = GetSelectedRadars()
+            if #Selected == 0 then
+                Notify("Buy", "اختر رادار واحد على الأقل أول!", 3)
+                PlaySound("Off", 0.3)
+                task.wait(0.1)
+                if Refs.AutoBuyToggle then
+                    pcall(function() Refs.AutoBuyToggle:SetValue(false) end)
+                end
+                return
+            end
+            StartAutoBuy()
+            Notify("Buy", "بدأ الشراء التلقائي ("..#Selected.." عنصر)", 2)
+            PlaySound("Toggle", 0.3)
+        else
+            StopAutoBuy()
+            Notify("Buy", "وقف الشراء", 2)
+            PlaySound("Off", 0.3)
+        end
+    end,
+})
+
+Refs.AutoBuyDelay = BuyTab:AddSlider("AutoBuyDelay", {
+    Title = "Delay Between Buys",
+    Default = 5, Min = 1, Max = 50, Rounding = 0, Suffix = " x0.1s",
+    Callback = function(Value) AutoBuyDelay = Value / 10 end,
+})
+
+BuyTab:AddSection("Manual Buy")
+BuyTab:AddButton({
+    Title = "Buy Selected Now", Icon = "solar/bolt-bold",
+    Callback = function()
+        local Selected = GetSelectedRadars()
+        if #Selected == 0 then
+            Notify("Buy", "ما اخترت شي!", 2)
+            return
+        end
+        task.spawn(function()
+            for i = #RadarList, 1, -1 do
+                local Name = RadarList[i]
+                if AutoBuySelected[Name] then
+                    BuyRadarOnce(Name)
+                    task.wait(0.3)
+                end
+            end
+            Notify("Buy", "تم محاولة شراء "..#Selected.." عنصر", 3)
+        end)
+    end,
+})
+
+BuyTab:AddSection("Quick Buy (Single)")
+for _, RadarName in ipairs(RadarList) do
+    BuyTab:AddButton({
+        Title = "Buy "..RadarName,
+        Icon = "solar/star-bold",
+        Callback = function()
+            local OK, Err = BuyRadarOnce(RadarName)
+            Notify("Buy", OK and ("تم إرسال: "..RadarName) or ("فشل: "..tostring(Err)), 2)
+        end,
+    })
+end
+
+BuyTab:AddSection("Info")
+BuyTab:AddButton({
+    Title = "Check Buy Remote", Icon = "solar/radar-bold",
+    Callback = function()
+        local R = GetBuyRemote()
+        Notify(R and "Remote Found" or "Remote Missing",
+               R and "BuyWithCash موجود" or "ما لقيت BuyWithCash", 3)
+    end,
+})
+
+BuyTab:AddParagraph({
+    Title = "Radar Rarities",
+    Content = "Advanced = Rare | Jewel = Epic | Royal = Legendary\nMagic = Mythic | Angelic = Divine | Eternal = Ethereal",
+})
+
+local DashTab = Window:AddTab({ Title = "Dash", Icon = "solar/bolt-bold" })
+DashTab:AddSection("Dash Button")
+DashTab:AddButton({
+    Title = "Hide Dash Button", Icon = "solar/eye-closed-bold",
+    Callback = function() if FloatingDash then FloatingDash.Visible = false end end,
+})
+DashTab:AddButton({
+    Title = "Show Dash Button", Icon = "solar/eye-bold",
+    Callback = function() if FloatingDash then FloatingDash.Visible = true end end,
+})
+DashTab:AddSection("Actions")
+DashTab:AddButton({ Title = "Dash Now", Icon = "solar/bolt-bold", Callback = DoDash })
+
+local ServerTab = Window:AddTab({ Title = "Server", Icon = "solar/server-square-bold" })
+ServerTab:AddButton({ Title = "Hop Low Server", Icon = "solar/transfer-horizontal-bold",
+    Callback = function() task.spawn(function() HopToLowestServer(1) end) end })
+ServerTab:AddButton({ Title = "Rejoin", Icon = "solar/restart-bold",
+    Callback = function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end })
+ServerTab:AddButton({ Title = "Hop to Lowest Server (Max 3)", Icon = "solar/transfer-horizontal-bold",
+    Callback = function() task.spawn(function() HopToLowestServer(3) end) end })
+
+local MiscTab = Window:AddTab({ Title = "Misc", Icon = "solar/settings-bold" })
+MiscTab:AddSection("Speed")
+MiscTab:AddToggle("SpeedToggle", { Title = "Speed", Default = false,
+    Callback = function(Value) SpeedEnabled = Value; if Value then ApplySpeed() else StopSpeed() end end })
+MiscTab:AddSlider("SpeedValue", { Title = "WalkSpeed", Default = 30, Min = 16, Max = 250, Rounding = 0,
+    Callback = function(Value) SpeedValue = Value; if SpeedEnabled then ApplySpeed() end end })
+MiscTab:AddSection("Other")
+MiscTab:AddToggle("AntiAFK", { Title = "Anti AFK", Default = false,
+    Callback = function(Value) AntiAFKEnabled = Value; if Value then StartAntiAFK() else StopAntiAFK() end end })
+MiscTab:AddToggle("NoClip", { Title = "No Clip", Default = false,
+    Callback = function(Value) NoClipEnabled = Value; if Value then StartNoClip() else StopNoClip() end end })
+MiscTab:AddSection("Fun")
+MiscTab:AddToggle("InfiniteJumpToggle", { Title = "Infinite Jump", Default = false,
+    Callback = function(Value) if Value then StartInfiniteJump() else StopInfiniteJump() end end })
+MiscTab:AddToggle("SoundToggle", { Title = "Sound Effects", Default = true,
+    Callback = function(Value) SoundEnabled = Value end })
+MiscTab:AddSection("Safety")
+MiscTab:AddToggle("AntiFlingToggle", { Title = "Anti-Fling", Default = false,
+    Callback = function(Value) AntiFlingEnabled = Value; if Value then StartAntiFling() else StopAntiFling() end end })
+MiscTab:AddToggle("AutoRejoinToggle", { Title = "Auto Rejoin", Default = false,
+    Callback = function(Value) AutoRejoinEnabled = Value; if Value then StartAutoRejoin() else StopAutoRejoin() end end })
+MiscTab:AddSection("Gravity")
+MiscTab:AddSlider("Gravity", { Title = "Gravity", Default = CurrentGravity, Min = 0, Max = 500, Rounding = 0,
+    Callback = function(Value) CurrentGravity = Value; Workspace.Gravity = Value end })
+MiscTab:AddButton({ Title = "Reset Gravity", Icon = "solar/restart-bold",
+    Callback = function() CurrentGravity = DefaultGravity; Workspace.Gravity = DefaultGravity end })
+LocalPlayer.CharacterAdded:Connect(function() task.wait(1); if SpeedEnabled then ApplySpeed() end end)
+
+local VisualsTab = Window:AddTab({ Title = "Visuals", Icon = "solar/sun-bold" })
+VisualsTab:AddSection("Lighting")
+VisualsTab:AddToggle("FullbrightToggle", { Title = "Fullbright", Default = false,
+    Callback = function(Value) FullbrightEnabled = Value; ApplyFullbright() end })
+VisualsTab:AddSection("Camera")
+VisualsTab:AddSlider("FOVSlider", { Title = "Field of View", Default = 70, Min = 40, Max = 120, Rounding = 0, Suffix = "°",
+    Callback = function(Value) FOVValue = Value; ApplyFOV(Value) end })
+VisualsTab:AddButton({ Title = "Reset Visuals", Icon = "solar/restart-bold",
+    Callback = function() FullbrightEnabled = false; ApplyFullbright(); FOVValue = 70; ApplyFOV(70) end })
+
+local KeyTab = Window:AddTab({ Title = "Keybinds", Icon = "solar/keyboard-bold" })
+KeyTab:AddParagraph({ Title = "Active Keybinds", Content = "Q = Dash | G = Auto Farm | H = Hide Menu" })
+KeyTab:AddDropdown("KeybindDash", { Title = "Dash Key", Values = {"Q","F","G","V","B","Z","X","C"}, Default = "Q",
+    Callback = function(Value)
+        local map = {F=Enum.KeyCode.F,G=Enum.KeyCode.G,V=Enum.KeyCode.V,B=Enum.KeyCode.B,Z=Enum.KeyCode.Z,X=Enum.KeyCode.X,C=Enum.KeyCode.C,Q=Enum.KeyCode.Q}
+        if map[Value] then Keybinds.Dash = map[Value] end
+    end })
+KeyTab:AddDropdown("KeybindFarm", { Title = "Auto Farm Key", Values = {"G","F","Q","V","B","Z","X","C"}, Default = "G",
+    Callback = function(Value)
+        local map = {F=Enum.KeyCode.F,G=Enum.KeyCode.G,V=Enum.KeyCode.V,B=Enum.KeyCode.B,Z=Enum.KeyCode.Z,X=Enum.KeyCode.X,C=Enum.KeyCode.C,Q=Enum.KeyCode.Q}
+        if map[Value] then Keybinds.AutoFarm = map[Value] end
+    end })
+KeyTab:AddDropdown("KeybindHide", { Title = "Hide Menu Key", Values = {"H","F","Q","G","V","B","Z","X","C"}, Default = "H",
+    Callback = function(Value)
+        local map = {F=Enum.KeyCode.F,G=Enum.KeyCode.G,V=Enum.KeyCode.V,B=Enum.KeyCode.B,Z=Enum.KeyCode.Z,X=Enum.KeyCode.X,C=Enum.KeyCode.C,Q=Enum.KeyCode.Q,H=Enum.KeyCode.H}
+        if map[Value] then Keybinds.HideMenu = map[Value] end
+    end })
+
+local SettingsTab = Window:AddTab({ Title = "Settings", Icon = "solar/palette-bold" })
+SettingsTab:AddDropdown("ThemeSelector", {
+    Title = "Theme", Values = ThemeNames, Multi = false, Default = CurrentThemeName,
+    Callback = function(Value)
+        if not ThemeColors[Value] then return end
+        CurrentThemeName = Value
+        pcall(function() Fluent:SetTheme(Value) end)
+        if ApplyFloatingTheme then ApplyFloatingTheme(Value) end
+    end,
+})
+SettingsTab:AddButton({
+    Title = "Hide / Show Menu", Icon = "solar/menu-dots-bold",
+    Callback = function()
+        MenuVisible = not MenuVisible
+        if FluentRoot and FluentRoot:IsA("GuiObject") then FluentRoot.Visible = MenuVisible end
+    end,
+})
+SettingsTab:AddSection("Actions")
+SettingsTab:AddButton({
+    Title = "Destroy UI", Icon = "solar/trash-bin-trash-bold",
+    Callback = function()
+        StopAntiAFK(); StopNoClip(); StopFarm(); StopAutoPlaceEgg()
+        StopSpeed(); StopAntiFling(); StopAutoRejoin(); StopInfiniteJump()
+        StopAutoBuy()
+        FullbrightEnabled = false; ApplyFullbright()
+        local Cam = Workspace.CurrentCamera
+        if Cam then Cam.FieldOfView = 70 end
+        if FloatingGui then FloatingGui:Destroy() end
+        pcall(function() Fluent:Destroy() end)
+        _G.NAZK_HUB_RUNNING = false
+    end,
+})
+
+FloatingGui = Instance.new("ScreenGui")
+FloatingGui.Name = "NAZK_FloatingControls"
+FloatingGui.ResetOnSpawn = false
+FloatingGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+FloatingGui.Parent = CoreGui
+MenuVisible = true
+FluentRoot = Window.Root or Window.Main or Window.Window
+
+NButton = Instance.new("TextButton")
+NButton.Size = UDim2.fromOffset(NSize, NSize)
+NButton.Position = UDim2.new(0, SidePad, 0.5, -(NSize/2))
+NButton.BackgroundColor3 = ThemeColors[CurrentThemeName]
+NButton.BorderSizePixel = 0; NButton.Text = "N"
+NButton.TextColor3 = Color3.fromRGB(0,0,0)
+NButton.TextStrokeColor3 = Color3.fromRGB(255,255,255)
+NButton.TextSize = IsMobile and 20 or 25
+NButton.Font = Enum.Font.GothamBold
+NButton.AutoButtonColor = false; NButton.ZIndex = 100
+NButton.Parent = FloatingGui
+local NC = Instance.new("UICorner"); NC.CornerRadius = UDim.new(1,0); NC.Parent = NButton
+local NS = Instance.new("UIStroke"); NS.Color = Color3.fromRGB(255,255,255); NS.Thickness = 2; NS.Parent = NButton
+
+FloatingDash = Instance.new("TextButton")
+FloatingDash.Size = UDim2.fromOffset(DashWidth, NSize)
+FloatingDash.Position = UDim2.new(1, -(DashWidth + SidePad), 0.5, -(NSize/2))
+FloatingDash.BackgroundColor3 = ThemeColors[CurrentThemeName]
+FloatingDash.BorderSizePixel = 0; FloatingDash.Text = "Dash"
+FloatingDash.TextColor3 = Color3.fromRGB(0,0,0)
+FloatingDash.TextStrokeColor3 = Color3.fromRGB(255,255,255)
+FloatingDash.TextSize = IsMobile and 14 or 17
+FloatingDash.Font = Enum.Font.GothamBold
+FloatingDash.AutoButtonColor = false; FloatingDash.ZIndex = 100
+FloatingDash.Parent = FloatingGui
+local DC = Instance.new("UICorner"); DC.CornerRadius = UDim.new(0,18); DC.Parent = FloatingDash
+local DS = Instance.new("UIStroke"); DS.Color = Color3.fromRGB(255,255,255); DS.Thickness = 2; DS.Parent = FloatingDash
+
+FloatingEgg = Instance.new("TextButton")
+FloatingEgg.Size = UDim2.fromOffset(EggWidth, NSize)
+FloatingEgg.Position = UDim2.new(1, -(EggWidth + SidePad), 0.5, -(NSize/2) - 60)
+FloatingEgg.BackgroundColor3 = ThemeColors[CurrentThemeName]
+FloatingEgg.BorderSizePixel = 0; FloatingEgg.Text = "Farm"
+FloatingEgg.TextColor3 = Color3.fromRGB(0,0,0)
+FloatingEgg.TextStrokeColor3 = Color3.fromRGB(255,255,255)
+FloatingEgg.TextSize = IsMobile and 13 or 16
+FloatingEgg.Font = Enum.Font.GothamBold
+FloatingEgg.AutoButtonColor = false; FloatingEgg.ZIndex = 100
+FloatingEgg.Parent = FloatingGui
+local EC = Instance.new("UICorner"); EC.CornerRadius = UDim.new(0,18); EC.Parent = FloatingEgg
+local ES = Instance.new("UIStroke"); ES.Color = Color3.fromRGB(255,255,255); ES.Thickness = 2; ES.Parent = FloatingEgg
+
+function ApplyFloatingTheme(ThemeName)
+    local Color = ThemeColors[ThemeName] or ThemeColors["AMOLED"]
+    if NButton then NButton.BackgroundColor3 = Color end
+    if FloatingDash then FloatingDash.BackgroundColor3 = Color end
+    if FloatingEgg then FloatingEgg.BackgroundColor3 = Color end
+end
+ApplyFloatingTheme(CurrentThemeName)
+
+_G.NAZK_HUB_CLEANUP = function()
+    pcall(function() if FloatingGui then FloatingGui:Destroy() end end)
+    pcall(function() if Fluent and Fluent.Destroy then Fluent:Destroy() end end)
+    if AntiAFKConnection then pcall(function() AntiAFKConnection:Disconnect() end) end
+    if NoClipConnection then pcall(function() NoClipConnection:Disconnect() end) end
+    if AntiFlingConnection then pcall(function() AntiFlingConnection:Disconnect() end) end
+    if AutoRejoinConnection then pcall(function() AutoRejoinConnection:Disconnect() end) end
+    if InfiniteJumpConnection then pcall(function() InfiniteJumpConnection:Disconnect() end) end
+    if FarmTask then pcall(function() task.cancel(FarmTask) end) end
+    if AutoPlaceEggTask then pcall(function() task.cancel(AutoPlaceEggTask) end) end
+    if AutoBuyTask then pcall(function() task.cancel(AutoBuyTask) end) end
+    pcall(function()
+        FullbrightEnabled = false; ApplyFullbright()
+        local Cam = Workspace.CurrentCamera
+        if Cam then Cam.FieldOfView = 70 end
+    end)
+end
+
+local function SetMenuVisible(Visible)
+    MenuVisible = Visible
+    if FluentRoot and FluentRoot:IsA("GuiObject") then
+        FluentRoot.Visible = Visible
+    elseif Window.Minimize then
+        pcall(function() Window:Minimize() end)
+    end
+end
+local function MakeDraggable(Button, ClickCallback)
+    local IsDragging = false
+    local ThisDragInput, ThisDragStart, ThisStartPos = nil, nil, nil
+    local ThisMoved = false
+    Button.InputBegan:Connect(function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+            IsDragging = true; ThisMoved = false
+            ThisDragStart = Input.Position
+            ThisStartPos = Button.Position
+        end
+    end)
+    Button.InputChanged:Connect(function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
+            ThisDragInput = Input
+        end
+    end)
+    Button.InputEnded:Connect(function(Input)
+        if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+            IsDragging = false
+            if not ThisMoved then ClickCallback() end
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(Input)
+        if Input == ThisDragInput and IsDragging then
+            local Delta = Input.Position - ThisDragStart
+            if math.abs(Delta.X) > 4 or math.abs(Delta.Y) > 4 then ThisMoved = true end
+            Button.Position = UDim2.new(
+                ThisStartPos.X.Scale, ThisStartPos.X.Offset + Delta.X,
+                ThisStartPos.Y.Scale, ThisStartPos.Y.Offset + Delta.Y
+            )
+        end
+    end)
+end
+MakeDraggable(NButton, function() SetMenuVisible(not MenuVisible) end)
+MakeDraggable(FloatingDash, DoDash)
+MakeDraggable(FloatingEgg, function()
+    if FarmEnabled then
+        StopFarm()
+        if Refs.FarmToggle then pcall(function() Refs.FarmToggle:SetValue(false) end) end
+        PlaySound("Off", 0.3)
+    else
+        StartFarm()
+        if Refs.FarmToggle then pcall(function() Refs.FarmToggle:SetValue(true) end) end
+        PlaySound("Toggle", 0.3)
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(Input, GameProcessed)
+    if GameProcessed then return end
+    if Input.KeyCode == Keybinds.Dash then DoDash()
+    elseif Input.KeyCode == Keybinds.HideMenu then SetMenuVisible(not MenuVisible)
+    elseif Input.KeyCode == Keybinds.AutoFarm then
+        if FarmEnabled then
+            StopFarm()
+            if Refs.FarmToggle then pcall(function() Refs.FarmToggle:SetValue(false) end) end
+        else
+            StartFarm()
+            if Refs.FarmToggle then pcall(function() Refs.FarmToggle:SetValue(true) end) end
+        end
+    end
+end)
+
+print("NAZK HUB (Farm + Home + Buy) READY - "..CurrentThemeName)
