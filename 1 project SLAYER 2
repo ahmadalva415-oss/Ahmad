@@ -1,5 +1,5 @@
 --========================================================--
--- NAZK HUB | Full Smart Auto Farm (Properly Ordered)
+-- NAZK HUB | Full Auto Farm (No Emoji + Noclip + Auto Farm Tab)
 --========================================================--
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -19,9 +19,15 @@ local LocalPlayer = Players.LocalPlayer
 local AutoFarmEnabled = false
 local AutoFarmConnection = nil
 
+-- Noclip
+local NoclipEnabled = false
+local NoclipConnection = nil
+
 local BanditCoords = Vector3.new(-425.64, 1243.00, -950.63)
 local BearCoords   = Vector3.new(505.82, 1123.73, -975.17)
 local KaidenCoords = Vector3.new(466.77, 1148.50, -1259.45)
+local HoyuzoCoords = Vector3.new(723.61, 1021.70, -799.38)
+local HoyuzoBossCoords = Vector3.new(716.09, 1003.92, -1406.78)
 
 local BANDIT_REGULAR_MAX = 6
 local BANDIT_BOSS_MIN    = 7
@@ -29,8 +35,9 @@ local BANDIT_BOSS_MAX    = 10
 local BEAR_MIN_LEVEL     = 11
 local BEAR_BOSS_LEVEL    = 18
 local KAIDEN_MIN_LEVEL   = 26
-local KAIDEN_MAX_LEVEL   = 33
 local KAIDEN_BOSS_LEVEL  = 34
+local HOYUZO_MIN_LEVEL   = 40
+local HOYUZO_BOSS_LEVEL  = 50
 
 local AboveHeadHeight = 3
 local TweenSpeed = 40
@@ -41,6 +48,9 @@ local QuestCheckInterval = 3
 local BossSwitchDelay = 1.5
 local HeavyCheckInterval = 1.5
 local LevelUpdateInterval = 2
+
+local AttackPosition = "above"
+local AttackDistance = 5
 
 local SelectedWeapon = "Regular Katana"
 
@@ -83,6 +93,7 @@ local StateParagraph = nil
 local RegionParagraph = nil
 local FpsParagraph = nil
 local HeavyCheckParagraph = nil
+local AttackModeParagraph = nil
 
 local ComboMoves = {
     {1, true, 0.125, false},
@@ -155,6 +166,36 @@ local function IsInsideQuestPanel(obj)
         p = p.Parent
     end
     return false
+end
+
+--========================================================--
+-- NOCLIP
+--========================================================--
+local function EnableNoclip()
+    if NoclipEnabled then return end
+    NoclipEnabled = true
+    NoclipConnection = RunService.Stepped:Connect(function()
+        if not NoclipEnabled then return end
+        local char = LocalPlayer.Character
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") and part.CanCollide then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end)
+    print("[Noclip] Enabled")
+end
+
+local function DisableNoclip()
+    if not NoclipEnabled then return end
+    NoclipEnabled = false
+    if NoclipConnection then
+        NoclipConnection:Disconnect()
+        NoclipConnection = nil
+    end
+    print("[Noclip] Disabled")
 end
 
 --========================================================--
@@ -262,7 +303,7 @@ local function EnableAntiLag()
             RunAntiLagPass()
         end
     end)
-    print("[Anti-Lag] ✅ مفعّل")
+    print("[Anti-Lag] Enabled")
 end
 
 local function DisableAntiLag()
@@ -287,7 +328,7 @@ local function DisableAntiLag()
         settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
         if Terrain then Terrain.Decoration = true end
     end)
-    print("[Anti-Lag] ❌ متوقف")
+    print("[Anti-Lag] Disabled")
 end
 
 --========================================================--
@@ -399,6 +440,27 @@ local function GetQuestInfo()
         if obj:IsA("TextLabel") and obj.Text ~= "" then
             local text = obj.Text
 
+            if (text:find("Defeat Hoyuzo") or text:find("take care of Hoyuzo")) and not hasQuest then
+                local cur, mx = text:match("(%d+)%s*/%s*(%d+)")
+                if cur then
+                    hasQuest = true
+                    questType = "hoyuzoboss"
+                    progress = tonumber(cur)
+                    max = tonumber(mx)
+                end
+            end
+
+            if (text:find("Clear Hoyuzo") or text:find("Guards defeated")
+                or text:find("Hoyuzo's Guard")) and not hasQuest then
+                local cur, mx = text:match("(%d+)%s*/%s*(%d+)")
+                if cur then
+                    hasQuest = true
+                    questType = "hoyuzo"
+                    progress = tonumber(cur)
+                    max = tonumber(mx)
+                end
+            end
+
             if (text:find("Defeat Kaiden") or text:find("at Kaiden")
                 or text:find("Ill deal with Kaiden")) and not hasQuest then
                 local cur, mx = text:match("(%d+)%s*/%s*(%d+)")
@@ -483,8 +545,8 @@ local function RefreshEnemyCache()
     for _, obj in ipairs(scanRoot:GetDescendants()) do
         if obj.Name == "Bear Cub" or obj.Name == "Mother Bear"
             or obj.Name == "Bandit" or obj.Name == "Zuko"
-            or obj.Name == "Kaiden Subordinate"
-            or obj.Name == "Kaiden" then
+            or obj.Name == "Kaiden Subordinate" or obj.Name == "Kaiden"
+            or obj.Name == "Hoyuzo Subordinate" or obj.Name == "Hoyuzo" then
             local Hum = obj:FindFirstChildOfClass("Humanoid")
             if Hum then
                 table.insert(CachedEnemies, obj)
@@ -537,15 +599,65 @@ local function IsKaidenAlive()
     return false
 end
 
+local function IsHoyuzoAlive()
+    for _, Enemy in ipairs(GetCachedEnemies()) do
+        if Enemy.Name == "Hoyuzo" and IsEnemyAlive(Enemy) then return true end
+    end
+    return false
+end
+
 --========================================================--
--- PRONE CFrame
+-- HOYUZO BOSS CHECK
 --========================================================--
-local function GetProneCFrame(Enemy)
+local function CheckHoyuzoBossAlive()
+    local MyRoot = GetRoot()
+    if not MyRoot then return false end
+    local savedCF = MyRoot.CFrame
+
+    pcall(function()
+        MyRoot.AssemblyLinearVelocity = Vector3.zero
+        MyRoot.AssemblyAngularVelocity = Vector3.zero
+    end)
+    MyRoot.CFrame = CFrame.new(HoyuzoBossCoords)
+    task.wait(0.35)
+
+    RefreshEnemyCache()
+    local alive = IsHoyuzoAlive()
+
+    pcall(function()
+        MyRoot.CFrame = savedCF
+    end)
+    task.wait(0.1)
+
+    return alive
+end
+
+--========================================================--
+-- ATTACK CFrame
+--========================================================--
+local function GetAttackCFrame(Enemy)
     if not Enemy then return nil end
     local Head = Enemy:FindFirstChild("Head")
     if not Head then return nil end
-    local AbovePos = Head.Position + Vector3.new(0, AboveHeadHeight, 0)
-    return CFrame.new(AbovePos) * CFrame.Angles(math.rad(-ProneAngle), 0, 0)
+
+    if AttackPosition == "above" then
+        local AbovePos = Head.Position + Vector3.new(0, AboveHeadHeight, 0)
+        return CFrame.new(AbovePos) * CFrame.Angles(math.rad(-ProneAngle), 0, 0)
+    end
+
+    if AttackPosition == "behind" then
+        local EnemyRoot = GetEnemyRoot(Enemy)
+        local LookVec = EnemyRoot and EnemyRoot.CFrame.LookVector or Head.CFrame.LookVector
+        local BehindPos = Head.Position - LookVec * AttackDistance + Vector3.new(0, 2, 0)
+        return CFrame.lookAt(BehindPos, Head.Position)
+    end
+
+    if AttackPosition == "below" then
+        local BelowPos = Head.Position - Vector3.new(0, AttackDistance, 0)
+        return CFrame.new(BelowPos) * CFrame.Angles(math.rad(90), 0, 0)
+    end
+
+    return nil
 end
 
 --========================================================--
@@ -590,21 +702,22 @@ local function DecideRegionAndQuest()
     UpdateLevel()
     RefreshEnemyCache()
 
+    if PlayerLevel >= HOYUZO_MIN_LEVEL then
+        CurrentRegion = "hoyuzo"
+        CurrentQuestCoords = HoyuzoCoords
+        return "hoyuzo"
+    end
+
     if PlayerLevel >= KAIDEN_MIN_LEVEL then
         CurrentRegion = "kaiden"
         CurrentQuestCoords = KaidenCoords
-
         if PlayerLevel >= KAIDEN_BOSS_LEVEL then
             if IsKaidenAlive() then
-                print("[Logic] ⚔️ Lv " .. PlayerLevel .. " (34+) + Kaiden → BOSS")
                 return "kaidenboss"
             else
-                print("[Logic] Lv " .. PlayerLevel .. " (34+) + Kaiden مو موجود → Subordinate")
                 return "kaiden"
             end
         end
-
-        print("[Logic] Lv " .. PlayerLevel .. " (26-33) → Subordinate")
         return "kaiden"
     end
 
@@ -651,12 +764,43 @@ local function TakeQuest(forceType)
     task.spawn(function()
         UpdateLevel()
 
-        local questType = forceType or DecideRegionAndQuest()
+        local questType = forceType
+
+        if not questType and PlayerLevel >= HOYUZO_MIN_LEVEL and PlayerLevel >= HOYUZO_BOSS_LEVEL then
+            print("[Auto Quest] Checking Hoyuzo Boss...")
+            local bossAlive = CheckHoyuzoBossAlive()
+            if bossAlive then
+                print("[Auto Quest] Hoyuzo Found -> Boss Quest")
+                questType = "hoyuzoboss"
+            else
+                print("[Auto Quest] Hoyuzo Not Found -> Guards Quest")
+                questType = "hoyuzo"
+            end
+        end
+
+        if not questType then
+            questType = DecideRegionAndQuest()
+        end
+
+        if questType == "hoyuzo" or questType == "hoyuzoboss" then
+            CurrentRegion = "hoyuzo"
+            CurrentQuestCoords = HoyuzoCoords
+        elseif questType == "kaiden" or questType == "kaidenboss" then
+            CurrentRegion = "kaiden"
+            CurrentQuestCoords = KaidenCoords
+        elseif questType == "bearcub" or questType == "bearboss" then
+            CurrentRegion = "bear"
+            CurrentQuestCoords = BearCoords
+        elseif questType == "bandit" or questType == "banditboss" then
+            CurrentRegion = "bandit"
+            CurrentQuestCoords = BanditCoords
+        end
+
         local coords = CurrentQuestCoords
 
         local ok = TeleportToQuest(coords)
         if not ok then
-            print("[Auto Quest] ⚠ ما قدر يوصل للإحداثيات")
+            print("[Auto Quest] Failed to reach coordinates")
         end
 
         task.wait(0.4)
@@ -674,28 +818,30 @@ local function TakeQuest(forceType)
         if questType == "banditboss" then
             FireSignal("AddQuest", "Ill take the bandit boss(Lv 7)")
             CurrentQuestType = "banditboss"
-            print("[Auto Quest] → Bandit Boss (Zuko)")
         elseif questType == "bandit" then
             FireSignal("AddQuest", "Ill take 3 bandits")
             CurrentQuestType = "bandit"
-            print("[Auto Quest] → 3 Bandits")
         elseif questType == "bearboss" then
             FireSignal("AddQuest", "Ill fell the Mother Bear(Lv 18)")
             CurrentQuestType = "bearboss"
-            print("[Auto Quest] → Mother Bear Boss")
         elseif questType == "bearcub" then
             FireSignal("AddQuest", "Ill drive the bears back(Lv 10)")
             CurrentQuestType = "bearcub"
-            print("[Auto Quest] → Bear Cubs")
         elseif questType == "kaiden" then
             FireSignal("AddQuest", "Ill clear out his subordinates(Lv 26)")
             CurrentQuestType = "kaiden"
-            print("[Auto Quest] → Kaiden Subordinate")
         elseif questType == "kaidenboss" then
             FireSignal("AddQuest", "Ill deal with Kaiden(Lv 34)")
             CurrentQuestType = "kaidenboss"
-            print("[Auto Quest] → Kaiden BOSS (Lv 34)")
+        elseif questType == "hoyuzo" then
+            FireSignal("AddQuest", "I will clear out his guards(Lv 40)")
+            CurrentQuestType = "hoyuzo"
+        elseif questType == "hoyuzoboss" then
+            FireSignal("AddQuest", "I will take care of Hoyuzo(Lv 50)")
+            CurrentQuestType = "hoyuzoboss"
         end
+
+        print("[Auto Quest] -> " .. tostring(CurrentQuestType) .. " | Coords: " .. tostring(coords))
 
         task.wait(0.3)
         QuestInProgress = false
@@ -713,6 +859,53 @@ local function FindTargetEnemy()
     local Enemies = GetCachedEnemies()
     local Nearest = nil
     local ShortestDist = math.huge
+
+    if CurrentQuestType == "hoyuzoboss" then
+        for _, Enemy in ipairs(Enemies) do
+            if Enemy.Name == "Hoyuzo" and IsEnemyAlive(Enemy) then
+                local ERoot = GetEnemyRoot(Enemy)
+                if ERoot then
+                    local Dist = (MyRoot.Position - ERoot.Position).Magnitude
+                    if Dist < ShortestDist then ShortestDist = Dist Nearest = Enemy end
+                end
+            end
+        end
+        if not Nearest then
+            local distToBossZone = (MyRoot.Position - HoyuzoBossCoords).Magnitude
+            if distToBossZone > 100 then
+                pcall(function()
+                    MyRoot.AssemblyLinearVelocity = Vector3.zero
+                    MyRoot.AssemblyAngularVelocity = Vector3.zero
+                end)
+                MyRoot.CFrame = CFrame.new(HoyuzoBossCoords)
+                task.wait(0.4)
+                RefreshEnemyCache()
+                for _, Enemy in ipairs(CachedEnemies) do
+                    if Enemy.Name == "Hoyuzo" and IsEnemyAlive(Enemy) then
+                        local ERoot = GetEnemyRoot(Enemy)
+                        if ERoot then
+                            local Dist = (MyRoot.Position - ERoot.Position).Magnitude
+                            if Dist < ShortestDist then ShortestDist = Dist Nearest = Enemy end
+                        end
+                    end
+                end
+            end
+        end
+        return Nearest
+    end
+
+    if CurrentQuestType == "hoyuzo" then
+        for _, Enemy in ipairs(Enemies) do
+            if Enemy.Name == "Hoyuzo Subordinate" and IsEnemyAlive(Enemy) then
+                local ERoot = GetEnemyRoot(Enemy)
+                if ERoot then
+                    local Dist = (MyRoot.Position - ERoot.Position).Magnitude
+                    if Dist < ShortestDist then ShortestDist = Dist Nearest = Enemy end
+                end
+            end
+        end
+        return Nearest
+    end
 
     if CurrentQuestType == "banditboss" then
         for _, Enemy in ipairs(Enemies) do
@@ -758,17 +951,6 @@ local function FindTargetEnemy()
                 if ERoot then
                     local Dist = (MyRoot.Position - ERoot.Position).Magnitude
                     if Dist < ShortestDist then ShortestDist = Dist Nearest = Enemy end
-                end
-            end
-        end
-        if not Nearest then
-            for _, Enemy in ipairs(Enemies) do
-                if Enemy.Name == "Bear Cub" and IsEnemyAlive(Enemy) then
-                    local ERoot = GetEnemyRoot(Enemy)
-                    if ERoot then
-                        local Dist = (MyRoot.Position - ERoot.Position).Magnitude
-                        if Dist < ShortestDist then ShortestDist = Dist Nearest = Enemy end
-                    end
                 end
             end
         end
@@ -836,42 +1018,15 @@ local function ApproachEnemy(Enemy)
         local MyRoot = GetRoot()
         if not MyRoot then IsApproaching = false return end
 
-        local TargetCF = GetProneCFrame(Enemy)
+        local TargetCF = GetAttackCFrame(Enemy)
         if not TargetCF then IsApproaching = false return end
 
         local MyPos = MyRoot.Position
         local TargetPos = TargetCF.Position
-        local HorizDist = (Vector3.new(MyPos.X, 0, MyPos.Z) - Vector3.new(TargetPos.X, 0, TargetPos.Z)).Magnitude
+        local Dist = (MyPos - TargetPos).Magnitude
 
-        if HorizDist > 0.3 then
-            local Duration = math.max(HorizDist / TweenSpeed, 0.15)
-            local HorizCF = CFrame.new(Vector3.new(TargetPos.X, MyPos.Y, TargetPos.Z))
-                * CFrame.Angles(math.rad(-ProneAngle), 0, 0)
-            CancelCurrentTween()
-            CurrentTween = TweenService:Create(MyRoot, TweenInfo.new(Duration, Enum.EasingStyle.Linear), { CFrame = HorizCF })
-            local Done = false
-            local Conn = CurrentTween.Completed:Connect(function() Done = true end)
-            CurrentTween:Play()
-            local Elapsed = 0
-            while not Done and Elapsed < Duration + 0.3 do
-                task.wait(0.03)
-                Elapsed = Elapsed + 0.03
-                if not AutoFarmEnabled then
-                    CancelCurrentTween()
-                    if Conn then Conn:Disconnect() end
-                    IsApproaching = false
-                    return
-                end
-            end
-            if Conn then Conn:Disconnect() end
-        end
-
-        MyRoot = GetRoot()
-        if not MyRoot then IsApproaching = false return end
-
-        local VertDist = TargetPos.Y - MyRoot.Position.Y
-        if math.abs(VertDist) > 0.3 then
-            local Duration = math.max(math.abs(VertDist) / TweenSpeed, 0.1)
+        if Dist > 0.3 then
+            local Duration = math.max(Dist / TweenSpeed, 0.15)
             CancelCurrentTween()
             CurrentTween = TweenService:Create(MyRoot, TweenInfo.new(Duration, Enum.EasingStyle.Linear), { CFrame = TargetCF })
             local Done = false
@@ -953,47 +1108,60 @@ local function StartAutoFarm()
             UpdateLevel()
         end
 
-        if PlayerLevel >= KAIDEN_MIN_LEVEL and PlayerLevel < KAIDEN_BOSS_LEVEL then
-            if CachedHasQuest and CurrentQuestType ~= "kaiden" then
-                if tick() - LastQuestTime > QuestCheckInterval and not QuestInProgress then
-                    print("[Auto Farm] 🛡️ Lv " .. PlayerLevel .. " → فرض Kaiden Subordinate")
-                    CurrentTarget = nil
-                    IsLocked = false
-                    IsApproaching = false
-                    CancelCurrentTween()
-                    PendingBossQuest = nil
-                    TakeQuest("kaiden")
-                    LastQuestTime = tick()
+        if PlayerLevel >= HOYUZO_MIN_LEVEL then
+            if CachedHasQuest then
+                if PlayerLevel >= HOYUZO_BOSS_LEVEL then
+                    if CurrentQuestType ~= "hoyuzo" and CurrentQuestType ~= "hoyuzoboss" then
+                        if tick() - LastQuestTime > QuestCheckInterval and not QuestInProgress then
+                            CurrentTarget = nil IsLocked = false IsApproaching = false
+                            CancelCurrentTween() PendingBossQuest = nil
+                            TakeQuest() LastQuestTime = tick()
+                        end
+                        return
+                    end
+                else
+                    if CurrentQuestType ~= "hoyuzo" then
+                        if tick() - LastQuestTime > QuestCheckInterval and not QuestInProgress then
+                            CurrentTarget = nil IsLocked = false IsApproaching = false
+                            CancelCurrentTween() PendingBossQuest = nil
+                            TakeQuest("hoyuzo") LastQuestTime = tick()
+                        end
+                        return
+                    end
                 end
-                return
+            end
+        elseif PlayerLevel >= KAIDEN_MIN_LEVEL then
+            if PlayerLevel < KAIDEN_BOSS_LEVEL then
+                if CachedHasQuest and CurrentQuestType ~= "kaiden" then
+                    if tick() - LastQuestTime > QuestCheckInterval and not QuestInProgress then
+                        CurrentTarget = nil IsLocked = false IsApproaching = false
+                        CancelCurrentTween() PendingBossQuest = nil
+                        TakeQuest("kaiden") LastQuestTime = tick()
+                    end
+                    return
+                end
             end
         end
 
-        if CachedHasQuest
-            and not QuestInProgress
+        if CachedHasQuest and not QuestInProgress
             and tick() - LastBossSwitchAttempt > BossSwitchDelay then
 
             if CurrentQuestType == "bearcub"
                 and PlayerLevel >= BEAR_BOSS_LEVEL
                 and PlayerLevel < KAIDEN_MIN_LEVEL then
                 RefreshEnemyCache()
-                if IsMotherBearAlive() then
-                    if not PendingBossQuest then
-                        print("[Auto Farm] 🎯 Mother Bear ظهر! → نكمل الـCubs ثم نأخذ البوس")
-                        PendingBossQuest = "bearboss"
-                    end
+                if IsMotherBearAlive() and not PendingBossQuest then
+                    PendingBossQuest = "bearboss"
                     LastBossSwitchAttempt = tick()
                 end
             end
 
             if CurrentQuestType == "kaiden"
-                and PlayerLevel >= KAIDEN_BOSS_LEVEL then
+                and PlayerLevel >= KAIDEN_BOSS_LEVEL
+                and PlayerLevel < HOYUZO_MIN_LEVEL then
                 RefreshEnemyCache()
-                if IsKaidenAlive() then
-                    if not PendingBossQuest then
-                        print("[Auto Farm] ⚔️ Kaiden ظهر! → نكمل الـSubordinate ثم نأخذ البوس")
-                        PendingBossQuest = "kaidenboss"
-                    end
+                if IsKaidenAlive() and not PendingBossQuest then
+                    PendingBossQuest = "kaidenboss"
                     LastBossSwitchAttempt = tick()
                 end
             end
@@ -1012,39 +1180,27 @@ local function StartAutoFarm()
                 CurrentQuestType = questType
             end
 
-            if PendingBossQuest == "bearboss" and not IsMotherBearAlive() then
-                print("[Auto Farm] 🧹 Mother Bear مات → إلغاء Pending")
-                PendingBossQuest = nil
-            end
-            if PendingBossQuest == "kaidenboss" and not IsKaidenAlive() then
-                print("[Auto Farm] 🧹 Kaiden مات → إلغاء Pending")
-                PendingBossQuest = nil
-            end
+            if PendingBossQuest == "bearboss" and not IsMotherBearAlive() then PendingBossQuest = nil end
+            if PendingBossQuest == "kaidenboss" and not IsKaidenAlive() then PendingBossQuest = nil end
 
             if not hasQuest then
                 if tick() - LastQuestTime > QuestCheckInterval and not QuestInProgress then
                     if PendingBossQuest then
-                        print("[Auto Farm] 🎯 ما فيه مهمة → نأخذ البوس: " .. PendingBossQuest)
                         local pending = PendingBossQuest
                         PendingBossQuest = nil
                         TakeQuest(pending)
                     else
-                        print("[Auto Farm] ⏱ ما فيه مهمة → ياخذ جديدة")
                         TakeQuest()
                     end
                     LastQuestTime = tick()
                 end
-
             elseif max > 0 and progress >= max then
                 if tick() - LastQuestTime > QuestCheckInterval and not QuestInProgress then
-                    print("[Auto Farm] ✅ Quest Complete! (" .. (questType or "?") .. ")")
-                    CurrentTarget = nil
-                    IsLocked = false
-                    IsApproaching = false
+                    print("[Auto Farm] Quest Complete! (" .. (questType or "?") .. ")")
+                    CurrentTarget = nil IsLocked = false IsApproaching = false
                     CancelCurrentTween()
 
                     if PendingBossQuest then
-                        print("[Auto Farm] 🎯 نأخذ مهمة البوس المعلّقة: " .. PendingBossQuest)
                         local pending = PendingBossQuest
                         PendingBossQuest = nil
                         TakeQuest(pending)
@@ -1061,9 +1217,7 @@ local function StartAutoFarm()
 
         local Target = FindTargetEnemy()
         if not Target then
-            CurrentTarget = nil
-            IsLocked = false
-            IsApproaching = false
+            CurrentTarget = nil IsLocked = false IsApproaching = false
             return
         end
 
@@ -1074,9 +1228,9 @@ local function StartAutoFarm()
         end
 
         if IsLocked and CurrentTarget and CurrentTarget.Parent then
-            local ProneCF = GetProneCFrame(CurrentTarget)
-            if ProneCF then
-                MyRoot.CFrame = ProneCF
+            local AttackCF = GetAttackCFrame(CurrentTarget)
+            if AttackCF then
+                MyRoot.CFrame = AttackCF
                 if not AttackSequenceRunning then
                     if tick() - LastAttackTime > 0.5 then
                         RunAttackSequence()
@@ -1091,12 +1245,8 @@ end
 local function StopAutoFarm()
     AutoFarmEnabled = false
     AttackSequenceRunning = false
-    CurrentTarget = nil
-    IsApproaching = false
-    IsLocked = false
-    QuestInProgress = false
-    CurrentQuestType = nil
-    CurrentRegion = nil
+    CurrentTarget = nil IsApproaching = false IsLocked = false
+    QuestInProgress = false CurrentQuestType = nil CurrentRegion = nil
     PendingBossQuest = nil
     CancelCurrentTween()
     if AutoFarmConnection then
@@ -1106,7 +1256,7 @@ local function StopAutoFarm()
 end
 
 --========================================================--
--- FLUENT GUI (بعد كل الدوال)
+-- FLUENT GUI
 --========================================================--
 local Fluent = loadstring(game:HttpGet(
     "https://github.com/StyearX/Fluent-Modded/releases/download/Fluent/FluentPro"
@@ -1133,16 +1283,23 @@ local Window = Fluent:CreateWindow({
 
 pcall(function() Fluent:SetTheme(CurrentThemeName) end)
 
+--========================================================--
+-- 1. MAIN TAB
+--========================================================--
 local MainTab = Window:AddTab({ Title = "Main", Icon = "solar/user-bold" })
 
-LevelParagraph = MainTab:AddParagraph({ Title = "Level", Content = "جاري القراءة..." })
-RegionParagraph = MainTab:AddParagraph({ Title = "Region", Content = "تلقائي" })
-QuestStatusParagraph = MainTab:AddParagraph({ Title = "Quest", Content = "ما فيه مهمة" })
-StateParagraph = MainTab:AddParagraph({ Title = "State", Content = "متوقف" })
+LevelParagraph = MainTab:AddParagraph({ Title = "Level", Content = "Reading..." })
+RegionParagraph = MainTab:AddParagraph({ Title = "Region", Content = "Auto" })
+AttackModeParagraph = MainTab:AddParagraph({ Title = "Attack Mode", Content = "Above Head" })
+QuestStatusParagraph = MainTab:AddParagraph({ Title = "Quest", Content = "No Quest" })
+StateParagraph = MainTab:AddParagraph({ Title = "State", Content = "Stopped" })
 FpsParagraph = MainTab:AddParagraph({ Title = "FPS", Content = "..." })
 HeavyCheckParagraph = MainTab:AddParagraph({ Title = "Heavy Check", Content = "1.5s" })
 
-local AutoTab = Window:AddTab({ Title = "Auto", Icon = "solar/sword-bold" })
+--========================================================--
+-- 2. AUTO FARM TAB
+--========================================================--
+local AutoTab = Window:AddTab({ Title = "Auto Farm", Icon = "solar/sword-bold" })
 
 AutoTab:AddSection("Auto Farm")
 AutoTab:AddToggle("AutoFarmToggle", {
@@ -1153,24 +1310,36 @@ AutoTab:AddToggle("AutoFarmToggle", {
     end,
 })
 
-AutoTab:AddParagraph({
-    Title = "🧠 المنطق التلقائي",
-    Content = "• Lv 1-6 → 3 Bandits\n• Lv 7-10 → Zuko Boss\n• Lv 11-17 → Bear Cubs\n• Lv 18-25 → Mother Bear\n• Lv 26-33 → Kaiden Subordinate\n• Lv 34+ → Kaiden BOSS\n\n🎯 إذا ظهر البوس في نص مهمة → يكمل الحالية ثم يأخذ البوس",
+AutoTab:AddSection("Attack Position")
+AutoTab:AddDropdown("AttackPosDropdown", {
+    Title = "Attack From",
+    Values = { "Above Head", "Behind Enemy", "Below Ground" },
+    Default = "Above Head",
+    Multi = false,
+    Callback = function(Value)
+        if Value == "Above Head" then AttackPosition = "above"
+        elseif Value == "Behind Enemy" then AttackPosition = "behind"
+        elseif Value == "Below Ground" then AttackPosition = "below"
+        end
+    end,
 })
 
-AutoTab:AddSection("⚔️ Weapon")
+AutoTab:AddSlider("AttackDistanceSlider", {
+    Title = "Attack Distance (Behind/Below)",
+    Default = AttackDistance,
+    Min = 2, Max = 15, Rounding = 1,
+    Callback = function(Value) AttackDistance = Value end,
+})
+
+AutoTab:AddSection("Weapon")
 AutoTab:AddDropdown("WeaponDropdown", {
     Title = "Choose Weapon",
     Values = { "Fist (Combat)", "Sword (Regular Katana)" },
     Default = "Sword (Regular Katana)",
     Multi = false,
     Callback = function(Value)
-        if Value == "Fist (Combat)" then
-            SelectedWeapon = "Combat"
-            print("[Weapon] → يد")
-        elseif Value == "Sword (Regular Katana)" then
-            SelectedWeapon = "Regular Katana"
-            print("[Weapon] → سيف")
+        if Value == "Fist (Combat)" then SelectedWeapon = "Combat"
+        elseif Value == "Sword (Regular Katana)" then SelectedWeapon = "Regular Katana"
         end
     end,
 })
@@ -1187,10 +1356,7 @@ AutoTab:AddSlider("HeavyCheckSlider", {
     Title = "Heavy Check (sec)",
     Default = HeavyCheckInterval,
     Min = 0.5, Max = 5, Rounding = 0.5,
-    Callback = function(Value)
-        HeavyCheckInterval = Value
-        print("[Heavy Check] → " .. Value .. "s")
-    end,
+    Callback = function(Value) HeavyCheckInterval = Value end,
 })
 
 AutoTab:AddSection("Position")
@@ -1223,22 +1389,31 @@ AutoTab:AddButton({
 })
 
 AutoTab:AddButton({
-    Title = "Take Kaiden Subordinate",
+    Title = "Take Hoyuzo Guards",
     Icon = "solar/document-add-bold",
     Callback = function()
-        CurrentRegion = "kaiden"
-        CurrentQuestCoords = KaidenCoords
-        TakeQuest("kaiden")
+        CurrentRegion = "hoyuzo"
+        CurrentQuestCoords = HoyuzoCoords
+        TakeQuest("hoyuzo")
     end,
 })
 
 AutoTab:AddButton({
-    Title = "⚔️ Take Kaiden BOSS",
+    Title = "Take Hoyuzo Boss",
     Icon = "solar/document-add-bold",
     Callback = function()
-        CurrentRegion = "kaiden"
-        CurrentQuestCoords = KaidenCoords
-        TakeQuest("kaidenboss")
+        CurrentRegion = "hoyuzo"
+        CurrentQuestCoords = HoyuzoCoords
+        TakeQuest("hoyuzoboss")
+    end,
+})
+
+AutoTab:AddButton({
+    Title = "Check Hoyuzo Boss",
+    Icon = "solar/magnifer-bold",
+    Callback = function()
+        local alive = CheckHoyuzoBossAlive()
+        print("[Check] Hoyuzo -> " .. (alive and "Found" or "Not Found"))
     end,
 })
 
@@ -1250,26 +1425,68 @@ AutoTab:AddButton({
 
 AutoTab:AddSection("Debug")
 AutoTab:AddButton({
-    Title = "🐛 DEBUG (الحالة العامة)",
+    Title = "DEBUG",
     Icon = "solar/bug-bold",
     Callback = function()
         RefreshEnemyCache()
         UpdateLevel()
-        print("═══ DEBUG ═══")
-        print("PlayerLevel =", PlayerLevel, "XP:", PlayerExp, "/", PlayerMaxExp)
-        print("HeavyCheck =", HeavyCheckInterval, "sec")
+        print("=== DEBUG ===")
+        print("PlayerLevel =", PlayerLevel)
+        print("AttackPosition =", AttackPosition)
         print("CurrentQuestType =", CurrentQuestType)
-        print("CachedHasQuest =", CachedHasQuest)
-        print("CachedQuestType =", CachedQuestType)
-        print("PendingBossQuest =", PendingBossQuest)
         print("CurrentRegion =", CurrentRegion)
-        print("عدد الأعداء =", #CachedEnemies)
-        print("Zuko؟", IsZukoAlive(), "MotherBear؟", IsMotherBearAlive(), "Kaiden؟", IsKaidenAlive())
-        print("المهمة القادمة =", DecideRegionAndQuest())
-        print("═══════════════")
+        print("CurrentQuestCoords =", tostring(CurrentQuestCoords))
+        print("PendingBossQuest =", PendingBossQuest)
+        print("Enemies Count =", #CachedEnemies)
+        print("Zuko?", IsZukoAlive(), "MotherBear?", IsMotherBearAlive(),
+              "Kaiden?", IsKaidenAlive(), "Hoyuzo?", IsHoyuzoAlive())
+        print("===============")
     end,
 })
 
+--========================================================--
+-- 3. MISC TAB (NEW)
+--========================================================--
+local MiscTab = Window:AddTab({ Title = "Misc", Icon = "solar/settings-bold" })
+
+MiscTab:AddSection("Movement")
+MiscTab:AddToggle("NoclipToggle", {
+    Title = "Noclip",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            EnableNoclip()
+        else
+            DisableNoclip()
+        end
+    end,
+})
+
+MiscTab:AddButton({
+    Title = "Toggle Noclip (Hot)",
+    Icon = "solar/bolt-bold",
+    Callback = function()
+        if NoclipEnabled then
+            DisableNoclip()
+        else
+            EnableNoclip()
+        end
+        if Fluent and Fluent.Toggles and Fluent.Toggles.NoclipToggle then
+            pcall(function()
+                Fluent.Toggles.NoclipToggle:SetValue(NoclipEnabled)
+            end)
+        end
+    end,
+})
+
+MiscTab:AddParagraph({
+    Title = "Noclip Info",
+    Content = "Noclip allows you to walk through walls.\nUseful to reach enemies that are blocked.",
+})
+
+--========================================================--
+-- 4. BOOST TAB
+--========================================================--
 local PerfTab = Window:AddTab({ Title = "Boost", Icon = "solar/bolt-bold" })
 
 PerfTab:AddSection("Anti-Lag")
@@ -1281,27 +1498,19 @@ PerfTab:AddToggle("AntiLagToggle", {
     end,
 })
 
-PerfTab:AddParagraph({
-    Title = "شنو يسوي Anti-Lag؟",
-    Content = "• يشيل الجراس والديكورات\n• يطفي الإضاءة والشادو\n• يحذف الجزيئات\n• يخفض جودة الرندر\n• يشيل البلوم والبلور",
-})
-
 PerfTab:AddButton({
-    Title = "🔄 Clean Now",
+    Title = "Clean Now",
     Icon = "solar/broom-bold",
     Callback = function()
         if AntiLagEnabled then
             AntiLagCache = {}
             RunAntiLagPass()
-            print("[Anti-Lag] ✅ تنظيف فوري")
-        else
-            print("[Anti-Lag] ⚠ فعّل Anti-Lag أول")
         end
     end,
 })
 
 PerfTab:AddButton({
-    Title = "⬇️ Set Low Graphics",
+    Title = "Set Low Graphics",
     Icon = "solar/monitor-bold",
     Callback = function()
         pcall(function()
@@ -1311,7 +1520,7 @@ PerfTab:AddButton({
 })
 
 PerfTab:AddButton({
-    Title = "⬆️ Set High Graphics",
+    Title = "Set High Graphics",
     Icon = "solar/monitor-bold",
     Callback = function()
         pcall(function()
@@ -1320,6 +1529,9 @@ PerfTab:AddButton({
     end,
 })
 
+--========================================================--
+-- 5. SETTINGS TAB
+--========================================================--
 local SettingsTab = Window:AddTab({ Title = "Settings", Icon = "solar/palette-bold" })
 
 SettingsTab:AddButton({
@@ -1339,6 +1551,7 @@ SettingsTab:AddButton({
     Callback = function()
         StopAutoFarm()
         DisableAntiLag()
+        DisableNoclip()
         if FloatingGui then FloatingGui:Destroy() end
         Fluent:Destroy()
     end,
@@ -1441,6 +1654,14 @@ task.spawn(function()
                 HeavyCheckParagraph:SetDesc("Heavy Check: " .. HeavyCheckInterval .. "s")
             end)
         end
+        if AttackModeParagraph then
+            local mode = "Above Head"
+            if AttackPosition == "behind" then mode = "Behind Enemy"
+            elseif AttackPosition == "below" then mode = "Below Ground" end
+            pcall(function()
+                AttackModeParagraph:SetDesc(mode .. " | Distance: " .. AttackDistance)
+            end)
+        end
     end
 end)
 
@@ -1458,7 +1679,7 @@ task.spawn(function()
         lastTime = now
         if FpsParagraph then
             pcall(function()
-                FpsParagraph:SetDesc("FPS: " .. fps .. " | Anti-Lag: " .. (AntiLagEnabled and "ON ✅" or "OFF") .. " | Weapon: " .. SelectedWeapon)
+                FpsParagraph:SetDesc("FPS: " .. fps .. " | Anti-Lag: " .. (AntiLagEnabled and "ON" or "OFF") .. " | Weapon: " .. SelectedWeapon)
             end)
         end
     end
@@ -1469,13 +1690,14 @@ task.spawn(function()
         task.wait(1)
 
         if RegionParagraph then
-            local regionName = "غير محدد"
-            if CurrentRegion == "bandit" then regionName = "Bandits 🔴"
-            elseif CurrentRegion == "bear" then regionName = "Bears 🐻"
-            elseif CurrentRegion == "kaiden" then regionName = "Kaiden 🗡️"
+            local regionName = "None"
+            if CurrentRegion == "bandit" then regionName = "Bandits"
+            elseif CurrentRegion == "bear" then regionName = "Bears"
+            elseif CurrentRegion == "kaiden" then regionName = "Kaiden"
+            elseif CurrentRegion == "hoyuzo" then regionName = "Hoyuzo"
             end
             pcall(function()
-                RegionParagraph:SetDesc(regionName .. " | Coords: " .. tostring(CurrentQuestCoords))
+                RegionParagraph:SetDesc(regionName)
             end)
         end
 
@@ -1486,29 +1708,23 @@ task.spawn(function()
                 end)
             else
                 pcall(function()
-                    QuestStatusParagraph:SetDesc("ما فيه مهمة (Abandoned)")
+                    QuestStatusParagraph:SetDesc("No Quest")
                 end)
             end
         end
 
         if StateParagraph then
-            local state = "متوقف"
+            local state = "Stopped"
             if AutoFarmEnabled then
-                if QuestInProgress then
-                    state = "يرسل المهمة"
-                elseif not CachedHasQuest then
-                    state = "ينتظر مهمة"
-                elseif CachedMax > 0 and CachedProgress >= CachedMax then
-                    state = "المهمة خلصت"
-                elseif not CurrentTarget then
-                    state = "يبحث عن عدو"
-                elseif IsApproaching then
-                    state = "يتوجه للهدف"
-                elseif IsLocked then
-                    state = "يقاتل"
+                if QuestInProgress then state = "Sending Quest"
+                elseif not CachedHasQuest then state = "Waiting for Quest"
+                elseif CachedMax > 0 and CachedProgress >= CachedMax then state = "Quest Done"
+                elseif not CurrentTarget then state = "Searching Enemy"
+                elseif IsApproaching then state = "Approaching"
+                elseif IsLocked then state = "Fighting"
                 end
                 if PendingBossQuest then
-                    state = state .. " | ⏳ Boss Pending"
+                    state = state .. " | Boss Pending"
                 end
             end
             pcall(function() StateParagraph:SetDesc(state) end)
@@ -1521,4 +1737,4 @@ if LevelParagraph and PlayerLevel > 0 then
     LevelParagraph:SetDesc("Level: " .. PlayerLevel .. " | XP: " .. PlayerExp .. "/" .. PlayerMaxExp)
 end
 
-print("NAZK HUB - Full Smart Auto Farm Loaded")
+print("NAZK HUB - Full Auto Farm Loaded")
