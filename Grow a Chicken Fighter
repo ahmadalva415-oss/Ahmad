@@ -1,664 +1,686 @@
 --========================================================--
--- NAZK HUB
--- PITSCRAP + PLAYERS + SERVER HOP + FLING + MISC + AUTO
--- PITSCRAP: RESTART TWEEN EVERY 15 STUDS
--- AUTO: UPGRADE GENERATOR
+-- NAZK HUB RED | FULL EDITION + PITSCRAP
+-- WindUI Red • ESP • Dash • Players • Server • Misc
+-- Visuals • PitScrap • Auto • Arena • Status • Settings • About
 --========================================================--
-
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
-local TeleportService = game:GetService("TeleportService")
-local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
-local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
-
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
 --========================================================--
--- SETTINGS
+-- ANTI-DUPLICATE GUARD
 --========================================================--
+if _G.NAZK_HUB_RUNNING then
+    pcall(function() if _G.NAZK_HUB_CLEANUP then _G.NAZK_HUB_CLEANUP() end end)
+    task.wait(0.3)
+end
+_G.NAZK_HUB_RUNNING = true
 
-local TweenEnabled = false
-local TweenRunning = false
+local function GetParent()
+    local ok, res = pcall(function() return gethui() end)
+    if ok and res then return res end
+    return CoreGui
+end
 
-local FarSpeed = 20
-local MaxSpeed = 35
+--========================================================--
+-- GLOBAL STATE
+--========================================================--
+local DrawingSupported = pcall(function() return Drawing.new("Line") end)
+local WindowRef, WindUIRef
+local NButton, DashOuter
+local FloatingGui
+local mainLoaded = false
 
-local CurrentTween = nil
-local CurrentTarget = nil
-local Visited = {}
+-- ESP
+local ESPFillEnabled, ESPBoxEnabled, ESPLineEnabled = false, false, false
+local ESPRenderConnection, ESPFillTask
+local ESPHighlights, ESPBoxes, ESPLines, ESPNameTexts, ESPDistanceTexts = {}, {}, {}, {}, {}
 
-local PlayerTweenEnabled = false
-local PlayerCurrentTween = nil
-local SelectedPlayer = nil
+-- Dash
+local DashEnabled, DashPower, DashVertical = true, 45, 0
+local DashKey, DashCooldown = Enum.KeyCode.Q, 0.25
+local dashLast = 0
 
-local FollowEnabled = false
-local FollowConnection = nil
+-- Player Actions
+local SelectedPlayer, PlayerTweenEnabled, PlayerCurrentTween
+local FollowEnabled, FollowConnection, FlingEnabled, FlingConnection
 
-local FlingEnabled = false
-local FlingConnection = nil
-
-local AntiAFKEnabled = false
-local AntiAFKConnection = nil
-
-local AntiFlingEnabled = false
-local AntiFlingConnection = nil
-
-local NoClipEnabled = false
-local NoClipConnection = nil
-
+-- Misc
+local AntiAFKEnabled, AntiAFKConnection
+local NoClipEnabled, NoClipConnection
+local AntiFlingEnabled, AntiFlingConnection, LastGoodCFrame
+local AutoRejoinEnabled, AutoRejoinConnection
+local InfiniteJumpEnabled, InfiniteJumpConnection
+local SpeedEnabled, SpeedValue = false, 30
 local AntiLagEnabled = false
 
+-- Visuals
+local FullbrightEnabled = false
+local FOVValue = 70
+
+-- Gravity
 local DefaultGravity = Workspace.Gravity
 local CurrentGravity = DefaultGravity
 
-local CurrentThemeName = "AMOLED"
-local ApplyFloatingTheme
-local ThemeNames = {
-    "AMOLED",
-    "Dark",
-    "Ash Gray",
-    "Royal Blue",
-    "Deep Ocean",
-    "Neon Cyber",
-    "Neon Purple",
-    "Orange",
-    "Charcoal",
-    "Pearl White",
-    "Midnight Blue",
-    "Galaxy Purple",
-    "Cosmic Violet",
-    "Cotton Candy",
-}
+-- PitScrap
+local TweenEnabled, TweenRunning = false, false
+local FarSpeed, MaxSpeed = 20, 35
+local CurrentTween, CurrentTarget, Visited = nil, nil, {}
 
-local ThemeColors = {
-    ["AMOLED"] = Color3.fromRGB(0, 0, 0),
-    ["Dark"] = Color3.fromRGB(35, 35, 35),
-    ["Ash Gray"] = Color3.fromRGB(95, 100, 105),
-    ["Royal Blue"] = Color3.fromRGB(40, 75, 170),
-    ["Deep Ocean"] = Color3.fromRGB(15, 70, 105),
-    ["Neon Cyber"] = Color3.fromRGB(0, 175, 125),
-    ["Neon Purple"] = Color3.fromRGB(125, 35, 190),
-    ["Orange"] = Color3.fromRGB(190, 85, 15),
-    ["Charcoal"] = Color3.fromRGB(55, 55, 55),
-    ["Pearl White"] = Color3.fromRGB(210, 210, 210),
-    ["Midnight Blue"] = Color3.fromRGB(25, 45, 100),
-    ["Galaxy Purple"] = Color3.fromRGB(75, 35, 125),
-    ["Cosmic Violet"] = Color3.fromRGB(105, 25, 155),
-    ["Cotton Candy"] = Color3.fromRGB(220, 105, 175),
-}
+-- Auto
+local AutoIncubatorEnabled, AutoIncubatorConnection = false, nil
+local AutoRebirthEnabled, AutoRebirthConnection = false, nil
+local AutoTowerEnabled, AutoTowerConnection = false, nil
+local TowerDelay, LastTowerStartTime = 1.0, 0
+local AutoRecyclerEnabled, AutoRecyclerConnection = false, nil
+local AutoUpgradeGeneratorEnabled, AutoUpgradeGeneratorConnection = false, nil
+local AutoBuyGeneratorFoodChickenEnabled, AutoBuyGeneratorFoodChickenConnection = false, nil
+local LastBuyGeneratorFoodChickenTime = 0
+local AutoUpgradeCoopEnabled, AutoUpgradeCoopConnection = false, nil
+local LastUpgradeCoopTime = 0
 
-local AutoIncubatorEnabled = false
-local AutoIncubatorConnection = nil
+-- Arena
+local AutoArenaFightEnabled, AutoArenaFightConnection = false, nil
+local LastArenaFightTime = 0
 
-local AutoRebirthEnabled = false
-local AutoRebirthConnection = nil
-
-local AutoTowerEnabled = false
-local AutoTowerConnection = nil
-local TowerDelay = 1.0
-local LastTowerStartTime = 0
-
+-- Auto Execute
 local AutoExecuteEnabled = false
 local AutoExecuteScriptURL = ""
 
-local AutoRecyclerEnabled = false
-local AutoRecyclerConnection = nil
-
-local AutoUpgradeGeneratorEnabled = false
-local AutoUpgradeGeneratorConnection = nil
-
-local AutoBuyGeneratorFoodChickenEnabled = false
-local AutoBuyGeneratorFoodChickenConnection = nil
-local LastBuyGeneratorFoodChickenTime = 0
-
-local AutoUpgradeCoopEnabled = false
-local AutoUpgradeCoopConnection = nil
-local LastUpgradeCoopTime = 0
+-- Sound
+local SoundEnabled = true
+local SoundIds = {
+    Toggle = "rbxassetid://4590662766",
+    Off    = "rbxassetid://4590667848",
+    Hop    = "rbxassetid://6042053626",
+}
+local function PlaySound(name, vol)
+    if not SoundEnabled then return end
+    local id = SoundIds[name]; if not id then return end
+    local s = Instance.new("Sound")
+    s.SoundId = id; s.Volume = vol or 0.5; s.Parent = CoreGui; s:Play()
+    Debris:AddItem(s, 5)
+end
 
 --========================================================--
--- CHARACTER
+-- CHARACTER HELPERS
 --========================================================--
-
 local function GetCharacter()
     return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 end
-
 local function GetRoot()
-    local Character = GetCharacter()
-    return Character and Character:FindFirstChild("HumanoidRootPart")
+    local c = GetCharacter()
+    return c and c:FindFirstChild("HumanoidRootPart")
 end
 
 --========================================================--
--- PITSCRAP
+-- SETTINGS SAVE / LOAD
 --========================================================--
+local SettingsFile = "NAZK_HUB_Settings.json"
+local function SaveSettings()
+    if type(writefile) ~= "function" then return false end
+    local Data = {
+        FarSpeed = FarSpeed, MaxSpeed = MaxSpeed,
+        DashPower = DashPower, DashVertical = DashVertical,
+        DashCooldown = DashCooldown, Gravity = CurrentGravity,
+        TowerDelay = TowerDelay,
+        AutoExecuteEnabled = AutoExecuteEnabled,
+        AutoExecuteScriptURL = AutoExecuteScriptURL,
+    }
+    return pcall(function() writefile(SettingsFile, HttpService:JSONEncode(Data)) end)
+end
+local function LoadSettings()
+    if type(isfile) ~= "function" or type(readfile) ~= "function" then return end
+    if not isfile(SettingsFile) then return end
+    pcall(function()
+        local Data = HttpService:JSONDecode(readfile(SettingsFile))
+        if type(Data) ~= "table" then return end
+        if type(Data.FarSpeed) == "number" then FarSpeed = Data.FarSpeed end
+        if type(Data.MaxSpeed) == "number" then MaxSpeed = Data.MaxSpeed end
+        if type(Data.DashPower) == "number" then DashPower = Data.DashPower end
+        if type(Data.DashVertical) == "number" then DashVertical = Data.DashVertical end
+        if type(Data.DashCooldown) == "number" then DashCooldown = Data.DashCooldown end
+        if type(Data.Gravity) == "number" then
+            CurrentGravity = Data.Gravity; Workspace.Gravity = CurrentGravity
+        end
+        if type(Data.TowerDelay) == "number" then
+            TowerDelay = math.clamp(Data.TowerDelay, 0.1, 30)
+        end
+        if type(Data.AutoExecuteEnabled) == "boolean" then AutoExecuteEnabled = Data.AutoExecuteEnabled end
+        if type(Data.AutoExecuteScriptURL) == "string" then AutoExecuteScriptURL = Data.AutoExecuteScriptURL end
+    end)
+end
+LoadSettings()
 
-local function GetPitScrap()
-    return Workspace:FindFirstChild("PitScrap")
+--========================================================--
+-- AUTO EXECUTE
+--========================================================--
+local QueueAutoExecute = function()
+    if not AutoExecuteEnabled or AutoExecuteScriptURL == "" then return false end
+    local Queue = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
+    if type(Queue) ~= "function" then return false end
+    local URL = string.format('%q', AutoExecuteScriptURL)
+    local Payload = "task.wait(2)\nloadstring(game:HttpGet(" .. URL .. "))()"
+    return pcall(Queue, Payload)
 end
 
+--========================================================--
+-- DASH
+--========================================================--
+local function DoDash()
+    if tick() - dashLast < DashCooldown then return end
+    dashLast = tick()
+    local root = GetRoot(); if not root then return end
+    local cam = Workspace.CurrentCamera; if not cam then return end
+    local dir = cam.CFrame.LookVector
+    dir = Vector3.new(dir.X, 0, dir.Z)
+    if dir.Magnitude < 0.01 then return end
+    dir = dir.Unit
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e6, 0, 1e6)
+    bv.Velocity = dir * DashPower + Vector3.new(0, DashVertical, 0)
+    bv.P = 50000
+    bv.Parent = root
+    Debris:AddItem(bv, 0.15)
+    PlaySound("Toggle", 0.3)
+end
+
+local dashConn = UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if DashEnabled and input.KeyCode == DashKey then DoDash() end
+end)
+
+--========================================================--
+-- SPEED / INFINITE JUMP
+--========================================================--
+local function ApplySpeed()
+    if LocalPlayer.Character then
+        local h = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if h then h.WalkSpeed = SpeedValue end
+    end
+end
+local function StopSpeed()
+    if LocalPlayer.Character then
+        local h = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if h then h.WalkSpeed = 16 end
+    end
+end
+local function StartInfiniteJump()
+    if InfiniteJumpConnection then InfiniteJumpConnection:Disconnect() end
+    InfiniteJumpEnabled = true
+    InfiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
+        if not InfiniteJumpEnabled then return end
+        local c = LocalPlayer.Character; if not c then return end
+        local h = c:FindFirstChildOfClass("Humanoid"); if not h then return end
+        h:ChangeState(Enum.HumanoidStateType.Jumping)
+    end)
+end
+local function StopInfiniteJump()
+    InfiniteJumpEnabled = false
+    if InfiniteJumpConnection then InfiniteJumpConnection:Disconnect(); InfiniteJumpConnection = nil end
+end
+
+--========================================================--
+-- VISUALS
+--========================================================--
+local OriginalLighting = {
+    ClockTime = Lighting.ClockTime, Brightness = Lighting.Brightness,
+    Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient,
+    GlobalShadows = Lighting.GlobalShadows, FogEnd = Lighting.FogEnd,
+    FogStart = Lighting.FogStart, ExposureCompensation = Lighting.ExposureCompensation,
+}
+local function ApplyFullbright()
+    if FullbrightEnabled then
+        Lighting.ClockTime = 12; Lighting.Brightness = 3
+        Lighting.Ambient = Color3.fromRGB(255,255,255)
+        Lighting.OutdoorAmbient = Color3.fromRGB(255,255,255)
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 100000; Lighting.FogStart = 0
+        Lighting.ExposureCompensation = 0.5
+    else
+        for k, v in pairs(OriginalLighting) do Lighting[k] = v end
+    end
+end
+local function ApplyFOV(v)
+    local cam = Workspace.CurrentCamera; if cam then cam.FieldOfView = v end
+end
+Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+    task.wait(0.1); if FOVValue then ApplyFOV(FOVValue) end
+end)
+
+--========================================================--
+-- ESP
+--========================================================--
+local function HasKnife(p)
+    if not p then return false end
+    local bp = p:FindFirstChild("Backpack")
+    if bp and bp:FindFirstChild("Knife") then return true end
+    if p.Character and p.Character:FindFirstChild("Knife") then return true end
+    return false
+end
+local function HasGun(p)
+    if not p then return false end
+    local bp = p:FindFirstChild("Backpack")
+    if bp and bp:FindFirstChild("Gun") then return true end
+    if p.Character and p.Character:FindFirstChild("Gun") then return true end
+    return false
+end
+local function GetESPColor(p)
+    if HasKnife(p) then return Color3.fromRGB(255,0,0)
+    elseif HasGun(p) then return Color3.fromRGB(0,100,255)
+    else return Color3.fromRGB(0,255,0) end
+end
+local function ClearESPForPlayer(p)
+    if ESPHighlights[p] then pcall(function() ESPHighlights[p]:Destroy() end); ESPHighlights[p] = nil end
+    if ESPBoxes[p] then pcall(function() ESPBoxes[p]:Remove() end); ESPBoxes[p] = nil end
+    if ESPLines[p] then pcall(function() ESPLines[p]:Remove() end); ESPLines[p] = nil end
+    if ESPNameTexts[p] then pcall(function() ESPNameTexts[p]:Remove() end); ESPNameTexts[p] = nil end
+    if ESPDistanceTexts[p] then pcall(function() ESPDistanceTexts[p]:Remove() end); ESPDistanceTexts[p] = nil end
+end
+local function UpdateFill(p, col)
+    if not p or p == LocalPlayer then return end
+    local c = p.Character; if not c then return end
+    if ESPHighlights[p] then pcall(function() ESPHighlights[p]:Destroy() end); ESPHighlights[p] = nil end
+    local h = Instance.new("Highlight")
+    h.Name = "NAZK_ESP_Fill"; h.Adornee = c
+    h.FillColor = col; h.FillTransparency = 0.55
+    h.OutlineColor = col; h.OutlineTransparency = 0
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.Parent = c
+    ESPHighlights[p] = h
+end
+local function UpdateBox(p, col, cam)
+    if not DrawingSupported then return end
+    if not p or p == LocalPlayer then return end
+    local c = p.Character; if not c then return end
+    local hrp = c:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+    local box = ESPBoxes[p]
+    if not box then
+        box = Drawing.new("Square"); box.Thickness = 1; box.Filled = false; box.Transparency = 1; box.Visible = false
+        ESPBoxes[p] = box
+    end
+    local nameT = ESPNameTexts[p]
+    if not nameT then
+        nameT = Drawing.new("Text"); nameT.Size = 16; nameT.Center = true; nameT.Outline = true
+        nameT.OutlineColor = Color3.fromRGB(0,0,0); nameT.Visible = false
+        ESPNameTexts[p] = nameT
+    end
+    local distT = ESPDistanceTexts[p]
+    if not distT then
+        distT = Drawing.new("Text"); distT.Size = 14; distT.Center = true; distT.Outline = true
+        distT.OutlineColor = Color3.fromRGB(0,0,0); distT.Visible = false
+        ESPDistanceTexts[p] = distT
+    end
+    local vec, on = cam:WorldToViewportPoint(hrp.Position)
+    if on then
+        local dist = (cam.CFrame.Position - hrp.Position).Magnitude
+        local size = 500 / vec.Z
+        local w = size * 0.6; local h = size * 0.9
+        box.Size = Vector2.new(w, h)
+        box.Position = Vector2.new(vec.X - w/2, vec.Y - h/2)
+        box.Color = col; box.Visible = true
+        nameT.Text = p.Name; nameT.Position = Vector2.new(vec.X, vec.Y - h/2 - 20); nameT.Color = col; nameT.Visible = true
+        distT.Text = "["..math.floor(dist).."m]"; distT.Position = Vector2.new(vec.X, vec.Y + h/2 + 2); distT.Color = col; distT.Visible = true
+    else
+        box.Visible = false; nameT.Visible = false; distT.Visible = false
+    end
+end
+local function UpdateLine(p, col, cam)
+    if not DrawingSupported then return end
+    if not p or p == LocalPlayer then return end
+    local c = p.Character; if not c then return end
+    local hrp = c:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+    local line = ESPLines[p]
+    if not line then
+        line = Drawing.new("Line"); line.Thickness = 2; line.Transparency = 1; line.Visible = false
+        ESPLines[p] = line
+    end
+    local vec, on = cam:WorldToViewportPoint(hrp.Position)
+    if on then
+        local vp = cam.ViewportSize
+        line.From = Vector2.new(vp.X/2, vp.Y)
+        line.To = Vector2.new(vec.X, vec.Y)
+        line.Color = col; line.Visible = true
+    else line.Visible = false end
+end
+local function StartESP()
+    if not ESPRenderConnection then
+        ESPRenderConnection = RunService.RenderStepped:Connect(function()
+            local cam = Workspace.CurrentCamera; if not cam then return end
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer then
+                    local col = GetESPColor(p)
+                    if ESPBoxEnabled then UpdateBox(p, col, cam)
+                    else
+                        if ESPBoxes[p] then ESPBoxes[p].Visible = false end
+                        if ESPNameTexts[p] then ESPNameTexts[p].Visible = false end
+                        if ESPDistanceTexts[p] then ESPDistanceTexts[p].Visible = false end
+                    end
+                    if ESPLineEnabled then UpdateLine(p, col, cam)
+                    elseif ESPLines[p] then ESPLines[p].Visible = false end
+                end
+            end
+        end)
+    end
+    if not ESPFillTask and ESPFillEnabled then
+        ESPFillTask = task.spawn(function()
+            while ESPFillEnabled do
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer then UpdateFill(p, GetESPColor(p)) end
+                end
+                task.wait(1)
+            end
+            for p in pairs(ESPHighlights) do pcall(function() ESPHighlights[p]:Destroy() end) end
+            ESPHighlights = {}
+            ESPFillTask = nil
+        end)
+    end
+end
+local function StopESP()
+    if ESPRenderConnection then ESPRenderConnection:Disconnect(); ESPRenderConnection = nil end
+    if ESPFillTask then pcall(function() task.cancel(ESPFillTask) end); ESPFillTask = nil end
+    for _, p in ipairs(Players:GetPlayers()) do ClearESPForPlayer(p) end
+    ESPHighlights, ESPBoxes, ESPLines, ESPNameTexts, ESPDistanceTexts = {}, {}, {}, {}, {}
+end
+Players.PlayerRemoving:Connect(ClearESPForPlayer)
+
+--========================================================--
+-- TWEEN / FOLLOW / FLING
+--========================================================--
+local function CancelPlayerTween()
+    if PlayerCurrentTween then pcall(function() PlayerCurrentTween:Cancel() end); PlayerCurrentTween = nil end
+end
+local function TweenToPlayer(t)
+    local root = GetRoot(); if not root or not t then return false end
+    local tC = t.Character; if not tC then return false end
+    local tRoot = tC:FindFirstChild("HumanoidRootPart"); if not tRoot then return false end
+    local pos = tRoot.Position + Vector3.new(0, 3, 0)
+    local dist = (root.Position - pos).Magnitude
+    if dist <= 3 then return true end
+    local dur = math.max(dist / 35, 0.12)
+    CancelPlayerTween()
+    PlayerCurrentTween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { CFrame = CFrame.new(pos) })
+    PlayerCurrentTween:Play()
+    local fin = false
+    local c = PlayerCurrentTween.Completed:Connect(function() fin = true end)
+    while PlayerTweenEnabled and PlayerCurrentTween and not fin do task.wait(0.02) end
+    if c then c:Disconnect() end
+    if not PlayerTweenEnabled then CancelPlayerTween(); return false end
+    PlayerCurrentTween = nil
+    return true
+end
+local function StartFollow()
+    if FollowConnection then FollowConnection:Disconnect() end
+    FollowEnabled = true
+    FollowConnection = RunService.Heartbeat:Connect(function()
+        if not FollowEnabled or not SelectedPlayer then return end
+        local root = GetRoot()
+        local tC = SelectedPlayer.Character
+        if not root or not tC then return end
+        local tRoot = tC:FindFirstChild("HumanoidRootPart"); if not tRoot then return end
+        if (root.Position - tRoot.Position).Magnitude > 5 then
+            root.CFrame = CFrame.new(tRoot.Position + Vector3.new(0, 3, 0))
+        end
+    end)
+end
+local function StopFollow()
+    FollowEnabled = false
+    if FollowConnection then FollowConnection:Disconnect(); FollowConnection = nil end
+end
+local function DoFling(t)
+    if not t or not t.Character then return end
+    local root = t.Character:FindFirstChild("HumanoidRootPart"); if not root then return end
+    local bav = Instance.new("BodyAngularVelocity")
+    bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
+    bav.P = 999999; bav.Parent = root
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bv.Velocity = Vector3.new(math.random(-500,500), math.random(800,1200), math.random(-500,500))
+    bv.P = 999999; bv.Parent = root
+    Debris:AddItem(bav, 2); Debris:AddItem(bv, 2)
+end
+local function StartFling()
+    if FlingConnection then FlingConnection:Disconnect() end
+    FlingEnabled = true
+    FlingConnection = RunService.Heartbeat:Connect(function()
+        if FlingEnabled and SelectedPlayer then DoFling(SelectedPlayer) end
+    end)
+end
+local function StopFling()
+    FlingEnabled = false
+    if FlingConnection then FlingConnection:Disconnect(); FlingConnection = nil end
+end
+
+--========================================================--
+-- MISC
+--========================================================--
+local function StartAntiAFK()
+    if AntiAFKConnection then AntiAFKConnection:Disconnect() end
+    AntiAFKEnabled = true
+    AntiAFKConnection = LocalPlayer.Idled:Connect(function()
+        if AntiAFKEnabled then
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end
+    end)
+end
+local function StopAntiAFK()
+    AntiAFKEnabled = false
+    if AntiAFKConnection then AntiAFKConnection:Disconnect(); AntiAFKConnection = nil end
+end
+local function StartNoClip()
+    if NoClipConnection then NoClipConnection:Disconnect() end
+    NoClipEnabled = true
+    NoClipConnection = RunService.Stepped:Connect(function()
+        if not NoClipEnabled then return end
+        local c = LocalPlayer.Character; if not c then return end
+        for _, p in ipairs(c:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
+        end
+    end)
+end
+local function StopNoClip()
+    NoClipEnabled = false
+    if NoClipConnection then NoClipConnection:Disconnect(); NoClipConnection = nil end
+    local c = LocalPlayer.Character
+    if c then
+        for _, p in ipairs(c:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = true end
+        end
+    end
+end
+local function StartAntiFling()
+    if AntiFlingConnection then AntiFlingConnection:Disconnect() end
+    AntiFlingEnabled = true
+    AntiFlingConnection = RunService.Heartbeat:Connect(function()
+        if not AntiFlingEnabled then return end
+        local c = LocalPlayer.Character; if not c then return end
+        local hrp = c:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+        if hrp.Position.Y < -50 then
+            if LastGoodCFrame then hrp.CFrame = LastGoodCFrame + Vector3.new(0, 10, 0)
+            else hrp.CFrame = CFrame.new(0, 50, 0) end
+            return
+        end
+        if hrp.Position.Y > 0 then LastGoodCFrame = hrp.CFrame end
+        if hrp.AssemblyLinearVelocity.Magnitude > 200 then
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            if LastGoodCFrame then hrp.CFrame = LastGoodCFrame end
+        end
+        if hrp.AssemblyAngularVelocity.Magnitude > 100 then
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
+    LocalPlayer.CharacterAdded:Connect(function(c)
+        task.wait(1)
+        local hrp = c:FindFirstChild("HumanoidRootPart")
+        if hrp then LastGoodCFrame = hrp.CFrame end
+    end)
+end
+local function StopAntiFling()
+    AntiFlingEnabled = false
+    if AntiFlingConnection then AntiFlingConnection:Disconnect(); AntiFlingConnection = nil end
+end
+local function StartAutoRejoin()
+    if AutoRejoinConnection then AutoRejoinConnection:Disconnect() end
+    AutoRejoinEnabled = true
+    AutoRejoinConnection = LocalPlayer.OnTeleport:Connect(function(state)
+        if not AutoRejoinEnabled then return end
+        if state == Enum.TeleportState.Failed then
+            task.wait(3)
+            pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end)
+        end
+    end)
+end
+local function StopAutoRejoin()
+    AutoRejoinEnabled = false
+    if AutoRejoinConnection then AutoRejoinConnection:Disconnect(); AutoRejoinConnection = nil end
+end
+local function StartAntiLag()
+    AntiLagEnabled = true
+    for _, o in ipairs(Workspace:GetDescendants()) do
+        if o:IsA("ParticleEmitter") or o:IsA("Trail") then o.Enabled = false end
+        if o:IsA("Decal") or o:IsA("Texture") then o.Transparency = 1 end
+        if o:IsA("Sound") then o.Volume = 0 end
+    end
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 100000
+    for _, e in ipairs(Lighting:GetChildren()) do
+        if e:IsA("BlurEffect") or e:IsA("BloomEffect") or e:IsA("SunRaysEffect") or e:IsA("ColorCorrectionEffect") then
+            e.Enabled = false
+        end
+    end
+    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+end
+local function StopAntiLag()
+    AntiLagEnabled = false
+    for _, o in ipairs(Workspace:GetDescendants()) do
+        if o:IsA("ParticleEmitter") or o:IsA("Trail") then o.Enabled = true end
+        if o:IsA("Decal") or o:IsA("Texture") then o.Transparency = 0 end
+        if o:IsA("Sound") then o.Volume = 0.5 end
+    end
+    Lighting.GlobalShadows = true
+    Lighting.FogEnd = 10000
+    for _, e in ipairs(Lighting:GetChildren()) do
+        if e:IsA("BlurEffect") or e:IsA("BloomEffect") or e:IsA("SunRaysEffect") or e:IsA("ColorCorrectionEffect") then
+            e.Enabled = true
+        end
+    end
+    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level10 end)
+end
+
+--========================================================--
+-- PITSCRAP SYSTEM
+--========================================================--
+local function GetPitScrap() return Workspace:FindFirstChild("PitScrap") end
 local function GetTargetPart(Object)
-    if not Object then
-        return nil
-    end
-
-    if Object:IsA("BasePart") then
-        return Object
-    end
-
+    if not Object then return nil end
+    if Object:IsA("BasePart") then return Object end
     if Object:IsA("Model") then
-        return Object.PrimaryPart
-            or Object:FindFirstChild("HumanoidRootPart")
-            or Object:FindFirstChildWhichIsA("BasePart")
+        return Object.PrimaryPart or Object:FindFirstChild("HumanoidRootPart") or Object:FindFirstChildWhichIsA("BasePart")
     end
-
     return nil
 end
-
 local function GetTargets()
-    local Targets = {}
-    local PitScrap = GetPitScrap()
-
-    if not PitScrap then
-        return Targets
-    end
-
-    for _, Object in ipairs(PitScrap:GetDescendants()) do
-        if Object.Name == "Loose" or Object.Name == "Part" then
-            local Target = GetTargetPart(Object)
-
-            if Target
-                and Target.Parent
-                and Target:IsDescendantOf(PitScrap) then
-
-                table.insert(Targets, Target)
-            end
+    local t = {}
+    local Pit = GetPitScrap(); if not Pit then return t end
+    for _, o in ipairs(Pit:GetDescendants()) do
+        if o.Name == "Loose" or o.Name == "Part" then
+            local part = GetTargetPart(o)
+            if part and part.Parent and part:IsDescendantOf(Pit) then table.insert(t, part) end
         end
     end
-
-    return Targets
+    return t
 end
-
 local function GetNearestTarget()
-    local Root = GetRoot()
-    local PitScrap = GetPitScrap()
-
-    if not Root or not PitScrap then
-        return nil
-    end
-
-    local Nearest = nil
-    local ShortestDistance = math.huge
-
-    for _, Target in ipairs(GetTargets()) do
-        if Target
-            and Target.Parent
-            and Target:IsDescendantOf(PitScrap)
-            and not Visited[Target] then
-
-            local Distance =
-                (Root.Position - Target.Position).Magnitude
-
-            if Distance < ShortestDistance then
-                ShortestDistance = Distance
-                Nearest = Target
-            end
+    local Root = GetRoot(); local Pit = GetPitScrap()
+    if not Root or not Pit then return nil end
+    local Nearest, Shortest = nil, math.huge
+    for _, T in ipairs(GetTargets()) do
+        if T and T.Parent and T:IsDescendantOf(Pit) and not Visited[T] then
+            local d = (Root.Position - T.Position).Magnitude
+            if d < Shortest then Shortest = d; Nearest = T end
         end
     end
-
     return Nearest
 end
-
-local function ResetVisited()
-    Visited = {}
-end
-
+local function ResetVisited() Visited = {} end
 local function CancelTween()
-    if CurrentTween then
-        pcall(function()
-            CurrentTween:Cancel()
-        end)
-
-        CurrentTween = nil
-    end
+    if CurrentTween then pcall(function() CurrentTween:Cancel() end); CurrentTween = nil end
 end
-
-local function CancelPlayerTween()
-    if PlayerCurrentTween then
-        pcall(function()
-            PlayerCurrentTween:Cancel()
-        end)
-
-        PlayerCurrentTween = nil
-    end
-end
-
-local function CalculateSpeed(Distance)
-    if Distance > 40 then
-        return FarSpeed
-    end
-
-    return MaxSpeed
-end
-
---========================================================--
--- PITSCRAP TWEEN
--- RESTART EVERY 15 STUDS
---========================================================--
-
+local function CalculateSpeed(d) return d > 40 and FarSpeed or MaxSpeed end
 local function TweenToTarget(Target)
-
-    local Root = GetRoot()
-    local PitScrap = GetPitScrap()
-
-    if not Root or not Target or not PitScrap then
-        return false
-    end
-
-    if not Target:IsDescendantOf(PitScrap) then
-        return false
-    end
-
-    if not Target.Parent then
-        return false
-    end
-
-    while TweenEnabled
-        and Target
-        and Target.Parent
-        and Target:IsDescendantOf(PitScrap) do
-
+    local Root = GetRoot(); local Pit = GetPitScrap()
+    if not Root or not Target or not Pit then return false end
+    if not Target:IsDescendantOf(Pit) then return false end
+    if not Target.Parent then return false end
+    while TweenEnabled and Target and Target.Parent and Target:IsDescendantOf(Pit) do
         Root = GetRoot()
-
-        if not Root then
-            task.wait(0.1)
-            continue
-        end
-
-        local TargetPosition =
-            Target.Position + Vector3.new(0, 3, 0)
-
-        local Distance =
-            (Root.Position - TargetPosition).Magnitude
-
-        if Distance <= 2 then
-            CancelTween()
-            return true
-        end
-
-        local SegmentDistance =
-            math.min(15, Distance)
-
-        local Direction =
-            (TargetPosition - Root.Position).Unit
-
-        local NextPosition =
-            Root.Position + Direction * SegmentDistance
-
-        local Speed =
-            CalculateSpeed(Distance)
-
-        local Duration =
-            math.max(SegmentDistance / Speed, 0.12)
-
-        -- إيقاف التوين السابق نهائياً قبل إنشاء Tween جديد
+        if not Root then task.wait(0.1) continue end
+        local TargetPos = Target.Position + Vector3.new(0, 3, 0)
+        local Distance = (Root.Position - TargetPos).Magnitude
+        if Distance <= 2 then CancelTween() return true end
+        local Seg = math.min(15, Distance)
+        local Dir = (TargetPos - Root.Position).Unit
+        local NextPos = Root.Position + Dir * Seg
+        local Speed = CalculateSpeed(Distance)
+        local Duration = math.max(Seg / Speed, 0.12)
         CancelTween()
-
         CurrentTween = TweenService:Create(
             Root,
-            TweenInfo.new(
-                Duration,
-                Enum.EasingStyle.Sine,
-                Enum.EasingDirection.InOut
-            ),
-            {
-                CFrame = CFrame.new(NextPosition)
-            }
+            TweenInfo.new(Duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+            { CFrame = CFrame.new(NextPos) }
         )
-
         local Finished = false
-
-        local Connection =
-            CurrentTween.Completed:Connect(function()
-                Finished = true
-            end)
-
+        local Conn = CurrentTween.Completed:Connect(function() Finished = true end)
         CurrentTween:Play()
-
-        while TweenEnabled
-            and CurrentTween
-            and not Finished do
-
-            task.wait(0.02)
-        end
-
-        if Connection then
-            Connection:Disconnect()
-        end
-
-        if not TweenEnabled then
-            CancelTween()
-            return false
-        end
-
-        -- وصلنا نهاية الـ15 Stud:
-        -- إلغاء التوين بالكامل ثم انتظار 0.4 ثانية قبل تشغيل Tween جديد
+        while TweenEnabled and CurrentTween and not Finished do task.wait(0.02) end
+        if Conn then Conn:Disconnect() end
+        if not TweenEnabled then CancelTween() return false end
         CancelTween()
         task.wait(0.4)
     end
-
     CancelTween()
     return false
 end
-
---========================================================--
--- TWEEN TO PLAYER
---========================================================--
-
-local function TweenToPlayer(TargetPlayer)
-
-    local Root = GetRoot()
-
-    if not Root or not TargetPlayer then
-        return false
-    end
-
-    local TargetCharacter = TargetPlayer.Character
-
-    if not TargetCharacter then
-        return false
-    end
-
-    local TargetRoot =
-        TargetCharacter:FindFirstChild("HumanoidRootPart")
-
-    if not TargetRoot then
-        return false
-    end
-
-    local TargetPosition =
-        TargetRoot.Position + Vector3.new(0, 3, 0)
-
-    local Distance =
-        (Root.Position - TargetPosition).Magnitude
-
-    if Distance <= 3 then
-        return true
-    end
-
-    local Duration =
-        math.max(Distance / 35, 0.12)
-
-    CancelPlayerTween()
-
-    PlayerCurrentTween = TweenService:Create(
-        Root,
-        TweenInfo.new(
-            Duration,
-            Enum.EasingStyle.Sine,
-            Enum.EasingDirection.InOut
-        ),
-        {
-            CFrame = CFrame.new(TargetPosition)
-        }
-    )
-
-    PlayerCurrentTween:Play()
-
-    local Finished = false
-
-    local Connection =
-        PlayerCurrentTween.Completed:Connect(function()
-            Finished = true
-        end)
-
-    while PlayerTweenEnabled
-        and PlayerCurrentTween
-        and not Finished do
-
-        task.wait(0.02)
-    end
-
-    if Connection then
-        Connection:Disconnect()
-    end
-
-    if not PlayerTweenEnabled then
-        CancelPlayerTween()
-        return false
-    end
-
-    PlayerCurrentTween = nil
-
-    return true
-end
-
---========================================================--
--- FOLLOW
---========================================================--
-
-local function StartFollow()
-
-    if FollowConnection then
-        FollowConnection:Disconnect()
-        FollowConnection = nil
-    end
-
-    FollowEnabled = true
-
-    FollowConnection =
-        RunService.Heartbeat:Connect(function()
-
-            if not FollowEnabled or not SelectedPlayer then
-                return
-            end
-
-            local Root = GetRoot()
-            local TargetCharacter = SelectedPlayer.Character
-
-            if not Root or not TargetCharacter then
-                return
-            end
-
-            local TargetRoot =
-                TargetCharacter:FindFirstChild("HumanoidRootPart")
-
-            if not TargetRoot then
-                return
-            end
-
-            local Distance =
-                (Root.Position - TargetRoot.Position).Magnitude
-
-            if Distance > 5 then
-                Root.CFrame =
-                    CFrame.new(
-                        TargetRoot.Position
-                            + Vector3.new(0, 3, 0)
-                    )
-            end
-        end)
-end
-
-local function StopFollow()
-
-    FollowEnabled = false
-
-    if FollowConnection then
-        FollowConnection:Disconnect()
-        FollowConnection = nil
-    end
-end
-
---========================================================--
--- FLING
---========================================================--
-
-local function DoFling(Target)
-
-    if not Target then
-        return
-    end
-
-    local TargetChar = Target.Character
-
-    if not TargetChar then
-        return
-    end
-
-    local TargetRoot =
-        TargetChar:FindFirstChild("HumanoidRootPart")
-
-    if not TargetRoot then
-        return
-    end
-
-    local BAV = Instance.new("BodyAngularVelocity")
-
-    BAV.MaxTorque =
-        Vector3.new(
-            math.huge,
-            math.huge,
-            math.huge
-        )
-
-    BAV.AngularVelocity =
-        Vector3.new(
-            99999,
-            99999,
-            99999
-        )
-
-    BAV.P = 999999
-    BAV.Parent = TargetRoot
-
-    local BV = Instance.new("BodyVelocity")
-
-    BV.MaxForce =
-        Vector3.new(
-            math.huge,
-            math.huge,
-            math.huge
-        )
-
-    BV.Velocity =
-        Vector3.new(
-            math.random(-500, 500),
-            math.random(800, 1200),
-            math.random(-500, 500)
-        )
-
-    BV.P = 999999
-    BV.Parent = TargetRoot
-
-    Debris:AddItem(BAV, 2)
-    Debris:AddItem(BV, 2)
-end
-
-local function StartFling()
-
-    if FlingConnection then
-        FlingConnection:Disconnect()
-        FlingConnection = nil
-    end
-
-    FlingEnabled = true
-
-    FlingConnection =
-        RunService.Heartbeat:Connect(function()
-
-            if not FlingEnabled or not SelectedPlayer then
-                return
-            end
-
-            DoFling(SelectedPlayer)
-        end)
-end
-
-local function StopFling()
-
-    FlingEnabled = false
-
-    if FlingConnection then
-        FlingConnection:Disconnect()
-        FlingConnection = nil
-    end
-end
-
---========================================================--
--- MAIN PITSCRAP LOOP
---========================================================--
-
 local function StartTween()
-
-    if TweenRunning then
-        return
-    end
-
+    if TweenRunning then return end
     TweenRunning = true
-
     task.spawn(function()
-
         while TweenEnabled do
-
             local Root = GetRoot()
-
-            if not Root then
-                task.wait(0.2)
-                continue
-            end
-
+            if not Root then task.wait(0.2) continue end
             local Target = GetNearestTarget()
-
             if not Target then
-
                 ResetVisited()
-
                 task.wait(0.1)
-
                 Target = GetNearestTarget()
-
-                if not Target then
-                    task.wait(0.3)
-                    continue
-                end
+                if not Target then task.wait(0.3) continue end
             end
-
             CurrentTarget = Target
-
-            local Success =
-                TweenToTarget(Target)
-
-            if not TweenEnabled then
-                break
-            end
-
-            if Success
-                and Target
-                and Target.Parent then
-
-                Visited[Target] = true
-            end
-
+            local Success = TweenToTarget(Target)
+            if not TweenEnabled then break end
+            if Success and Target and Target.Parent then Visited[Target] = true end
             CurrentTarget = nil
-
             task.wait(0.05)
         end
-
         CancelTween()
-
         CurrentTarget = nil
         TweenRunning = false
     end)
 end
-
 local function StopTween()
-
     TweenEnabled = false
     CancelTween()
     CurrentTarget = nil
@@ -667,1681 +689,844 @@ end
 --========================================================--
 -- SERVER HOP
 --========================================================--
-
-local function HopLowPlayersServer()
-
-    local PlaceId = game.PlaceId
-
-    pcall(function()
-
-        local Servers = {}
-        local Cursor = ""
-
+local function HopToLowestServer(maxP)
+    maxP = tonumber(maxP) or 1
+    local servers = {}
+    local ok = pcall(function()
+        local cursor = ""
         repeat
-
-            local URL =
-                "https://games.roblox.com/v1/games/"
-                .. PlaceId
-                .. "/servers/Public?sortOrder=Asc&limit=100"
-
-            if Cursor ~= "" then
-                URL = URL .. "&cursor=" .. Cursor
-            end
-
-            local Response =
-                game:HttpGet(URL)
-
-            local Data =
-                HttpService:JSONDecode(Response)
-
-            for _, Server in ipairs(Data.data) do
-
-                if Server.playing <= 1
-                    and Server.id ~= game.JobId then
-
-                    table.insert(
-                        Servers,
-                        Server
-                    )
+            local url = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
+            if cursor ~= "" then url = url.."&cursor="..cursor end
+            local data = HttpService:JSONDecode(game:HttpGet(url))
+            for _, s in ipairs(data.data) do
+                if s.id ~= game.JobId and s.playing < s.maxPlayers and s.playing <= maxP then
+                    table.insert(servers, s)
                 end
             end
-
-            Cursor =
-                Data.nextPageCursor or ""
-
-        until Cursor == "" or #Servers > 0
-
-        if #Servers > 0 then
-
-            table.sort(
-                Servers,
-                function(A, B)
-                    return A.playing < B.playing
-                end
-            )
-
-            QueueAutoExecute()
-            TeleportService:TeleportToPlaceInstance(
-                PlaceId,
-                Servers[1].id,
-                LocalPlayer
-            )
-
-        else
-
-            Cursor = ""
-
-            local AllServers = {}
-
-            repeat
-
-                local URL =
-                    "https://games.roblox.com/v1/games/"
-                    .. PlaceId
-                    .. "/servers/Public?sortOrder=Asc&limit=100"
-
-                if Cursor ~= "" then
-                    URL = URL .. "&cursor=" .. Cursor
-                end
-
-                local Response =
-                    game:HttpGet(URL)
-
-                local Data =
-                    HttpService:JSONDecode(Response)
-
-                for _, Server in ipairs(Data.data) do
-
-                    if Server.id ~= game.JobId then
-                        table.insert(
-                            AllServers,
-                            Server
-                        )
-                    end
-                end
-
-                Cursor =
-                    Data.nextPageCursor or ""
-
-            until Cursor == ""
-
-            if #AllServers > 0 then
-
-                table.sort(
-                    AllServers,
-                    function(A, B)
-                        return A.playing < B.playing
-                    end
-                )
-
-                QueueAutoExecute()
-            TeleportService:TeleportToPlaceInstance(
-                    PlaceId,
-                    AllServers[1].id,
-                    LocalPlayer
-                )
-            end
-        end
+            cursor = data.nextPageCursor or ""
+        until cursor == "" or #servers >= 20
     end)
+    if not ok or #servers == 0 then return end
+    table.sort(servers, function(a, b) return a.playing < b.playing end)
+    PlaySound("Hop", 0.5)
+    QueueAutoExecute()
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[1].id, LocalPlayer)
 end
 
 --========================================================--
--- MISC
+-- AUTO SYSTEMS
 --========================================================--
-
-local function StartAntiAFK()
-
-    if AntiAFKConnection then
-        AntiAFKConnection:Disconnect()
-    end
-
-    AntiAFKEnabled = true
-
-    AntiAFKConnection =
-        LocalPlayer.Idled:Connect(function()
-
-            if AntiAFKEnabled then
-
-                local VirtualUser =
-                    game:GetService("VirtualUser")
-
-                VirtualUser:CaptureController()
-
-                VirtualUser:ClickButton2(
-                    Vector2.new()
-                )
-            end
-        end)
-end
-
-local function StopAntiAFK()
-
-    AntiAFKEnabled = false
-
-    if AntiAFKConnection then
-        AntiAFKConnection:Disconnect()
-        AntiAFKConnection = nil
-    end
-end
-
-local function StartAntiFling()
-
-    if AntiFlingConnection then
-        AntiFlingConnection:Disconnect()
-    end
-
-    AntiFlingEnabled = true
-
-    AntiFlingConnection =
-        RunService.Heartbeat:Connect(function()
-
-            if not AntiFlingEnabled then
-                return
-            end
-
-            local Character =
-                LocalPlayer.Character
-
-            if not Character then
-                return
-            end
-
-            local Root =
-                Character:FindFirstChild(
-                    "HumanoidRootPart"
-                )
-
-            if not Root then
-                return
-            end
-
-            for _, Obj in ipairs(Root:GetChildren()) do
-
-                if Obj:IsA("BodyVelocity")
-                    or Obj:IsA("BodyAngularVelocity")
-                    or Obj:IsA("BodyGyro")
-                    or Obj:IsA("BodyForce")
-                    or Obj:IsA("BodyThrust") then
-
-                    Obj:Destroy()
-                end
-            end
-
-            if Root.AssemblyAngularVelocity.Magnitude > 50
-                or Root.AssemblyLinearVelocity.Magnitude > 100 then
-
-                Root.AssemblyAngularVelocity =
-                    Vector3.zero
-
-                Root.AssemblyLinearVelocity =
-                    Vector3.zero
-            end
-        end)
-end
-
-local function StopAntiFling()
-
-    AntiFlingEnabled = false
-
-    if AntiFlingConnection then
-        AntiFlingConnection:Disconnect()
-        AntiFlingConnection = nil
-    end
-end
-
-local function StartNoClip()
-
-    if NoClipConnection then
-        NoClipConnection:Disconnect()
-    end
-
-    NoClipEnabled = true
-
-    NoClipConnection =
-        RunService.Stepped:Connect(function()
-
-            if not NoClipEnabled then
-                return
-            end
-
-            local Character =
-                LocalPlayer.Character
-
-            if not Character then
-                return
-            end
-
-            for _, Part in ipairs(Character:GetDescendants()) do
-
-                if Part:IsA("BasePart") then
-                    Part.CanCollide = false
-                end
-            end
-        end)
-end
-
-local function StopNoClip()
-
-    NoClipEnabled = false
-
-    if NoClipConnection then
-        NoClipConnection:Disconnect()
-        NoClipConnection = nil
-    end
-
-    local Character =
-        LocalPlayer.Character
-
-    if Character then
-
-        for _, Part in ipairs(Character:GetDescendants()) do
-
-            if Part:IsA("BasePart") then
-                Part.CanCollide = true
-            end
-        end
-    end
-end
-
-local function StartAntiLag()
-
-    AntiLagEnabled = true
-
-    for _, Obj in ipairs(Workspace:GetDescendants()) do
-
-        if Obj:IsA("ParticleEmitter")
-            or Obj:IsA("Trail") then
-
-            Obj.Enabled = false
-        end
-
-        if Obj:IsA("BasePart")
-            and Obj.Material == Enum.Material.Water then
-
-            Obj.Transparency = 1
-        end
-
-        if Obj:IsA("Decal")
-            or Obj:IsA("Texture") then
-
-            Obj.Transparency = 1
-        end
-
-        if Obj:IsA("Sound") then
-            Obj.Volume = 0
-        end
-    end
-
-    Lighting.GlobalShadows = false
-    Lighting.FogEnd = 100000
-    Lighting.Brightness = 2
-
-    for _, Effect in ipairs(Lighting:GetChildren()) do
-
-        if Effect:IsA("BlurEffect")
-            or Effect:IsA("BloomEffect")
-            or Effect:IsA("SunRaysEffect")
-            or Effect:IsA("ColorCorrectionEffect") then
-
-            Effect.Enabled = false
-        end
-    end
-
-    settings().Rendering.QualityLevel =
-        Enum.QualityLevel.Level01
-end
-
-local function StopAntiLag()
-
-    AntiLagEnabled = false
-
-    for _, Obj in ipairs(Workspace:GetDescendants()) do
-
-        if Obj:IsA("ParticleEmitter")
-            or Obj:IsA("Trail") then
-
-            Obj.Enabled = true
-        end
-
-        if Obj:IsA("BasePart")
-            and Obj.Material == Enum.Material.Water then
-
-            Obj.Transparency = 0
-        end
-
-        if Obj:IsA("Decal")
-            or Obj:IsA("Texture") then
-
-            Obj.Transparency = 0
-        end
-
-        if Obj:IsA("Sound") then
-            Obj.Volume = 0.5
-        end
-    end
-
-    Lighting.GlobalShadows = true
-    Lighting.FogEnd = 10000
-    Lighting.Brightness = 1
-
-    for _, Effect in ipairs(Lighting:GetChildren()) do
-
-        if Effect:IsA("BlurEffect")
-            or Effect:IsA("BloomEffect")
-            or Effect:IsA("SunRaysEffect")
-            or Effect:IsA("ColorCorrectionEffect") then
-
-            Effect.Enabled = true
-        end
-    end
-
-    settings().Rendering.QualityLevel =
-        Enum.QualityLevel.Level10
-end
-
-local function SetGravity(Value)
-
-    CurrentGravity = Value
-    Workspace.Gravity = Value
-end
-
---========================================================--
--- AUTO
---========================================================--
-
 local function StartAutoIncubator()
-
-    if AutoIncubatorConnection then
-        AutoIncubatorConnection:Disconnect()
-    end
-
+    if AutoIncubatorConnection then AutoIncubatorConnection:Disconnect() end
     AutoIncubatorEnabled = true
-
-    AutoIncubatorConnection =
-        RunService.Heartbeat:Connect(function()
-
-            if not AutoIncubatorEnabled then
-                return
-            end
-
-            pcall(function()
-
-                ReplicatedStorage.Remotes
-                    .IncubatorClaim
-                    :InvokeServer()
-            end)
-        end)
+    AutoIncubatorConnection = RunService.Heartbeat:Connect(function()
+        if not AutoIncubatorEnabled then return end
+        pcall(function() ReplicatedStorage.Remotes.IncubatorClaim:InvokeServer() end)
+    end)
 end
-
 local function StopAutoIncubator()
-
     AutoIncubatorEnabled = false
-
-    if AutoIncubatorConnection then
-        AutoIncubatorConnection:Disconnect()
-        AutoIncubatorConnection = nil
-    end
+    if AutoIncubatorConnection then AutoIncubatorConnection:Disconnect(); AutoIncubatorConnection = nil end
 end
-
 local function StartAutoRebirth()
-
-    if AutoRebirthConnection then
-        AutoRebirthConnection:Disconnect()
-    end
-
+    if AutoRebirthConnection then AutoRebirthConnection:Disconnect() end
     AutoRebirthEnabled = true
-
-    AutoRebirthConnection =
-        RunService.Heartbeat:Connect(function()
-
-            if not AutoRebirthEnabled then
-                return
-            end
-
-            pcall(function()
-
-                ReplicatedStorage.Remotes
-                    .Rebirth
-                    :InvokeServer()
-            end)
-        end)
+    AutoRebirthConnection = RunService.Heartbeat:Connect(function()
+        if not AutoRebirthEnabled then return end
+        pcall(function() ReplicatedStorage.Remotes.Rebirth:InvokeServer() end)
+    end)
 end
-
 local function StopAutoRebirth()
-
     AutoRebirthEnabled = false
-
-    if AutoRebirthConnection then
-        AutoRebirthConnection:Disconnect()
-        AutoRebirthConnection = nil
-    end
+    if AutoRebirthConnection then AutoRebirthConnection:Disconnect(); AutoRebirthConnection = nil end
 end
-
 local function StartAutoTower()
-
-    if AutoTowerConnection then
-        AutoTowerConnection:Disconnect()
-        AutoTowerConnection = nil
-    end
-
-    AutoTowerEnabled = true
-    LastTowerStartTime = 0
-
-    AutoTowerConnection =
-        RunService.Heartbeat:Connect(function()
-
-            if not AutoTowerEnabled then
-                return
-            end
-
-            local Now = tick()
-            if Now - LastTowerStartTime < TowerDelay then
-                return
-            end
-
-            LastTowerStartTime = Now
-            pcall(function()
-                ReplicatedStorage.Remotes
-                    .TowerStart
-                    :InvokeServer()
-            end)
-        end)
+    if AutoTowerConnection then AutoTowerConnection:Disconnect(); AutoTowerConnection = nil end
+    AutoTowerEnabled = true; LastTowerStartTime = 0
+    AutoTowerConnection = RunService.Heartbeat:Connect(function()
+        if not AutoTowerEnabled then return end
+        local now = tick()
+        if now - LastTowerStartTime < TowerDelay then return end
+        LastTowerStartTime = now
+        pcall(function() ReplicatedStorage.Remotes.TowerStart:InvokeServer() end)
+    end)
 end
-
 local function StopAutoTower()
-
     AutoTowerEnabled = false
-
-    if AutoTowerConnection then
-        AutoTowerConnection:Disconnect()
-        AutoTowerConnection = nil
-    end
+    if AutoTowerConnection then AutoTowerConnection:Disconnect(); AutoTowerConnection = nil end
 end
-
 local function StartAutoRecycler()
-
-    if AutoRecyclerConnection then
-        AutoRecyclerConnection:Disconnect()
-    end
-
+    if AutoRecyclerConnection then AutoRecyclerConnection:Disconnect() end
     AutoRecyclerEnabled = true
-
-    AutoRecyclerConnection =
-        RunService.Heartbeat:Connect(function()
-
-            if not AutoRecyclerEnabled then
-                return
-            end
-
-            pcall(function()
-
-                ReplicatedStorage.Remotes
-                    .UpgradeRecycler
-                    :InvokeServer()
-            end)
-        end)
+    AutoRecyclerConnection = RunService.Heartbeat:Connect(function()
+        if not AutoRecyclerEnabled then return end
+        pcall(function() ReplicatedStorage.Remotes.UpgradeRecycler:InvokeServer() end)
+    end)
 end
-
 local function StopAutoRecycler()
-
     AutoRecyclerEnabled = false
-
-    if AutoRecyclerConnection then
-        AutoRecyclerConnection:Disconnect()
-        AutoRecyclerConnection = nil
-    end
+    if AutoRecyclerConnection then AutoRecyclerConnection:Disconnect(); AutoRecyclerConnection = nil end
 end
-
---========================================================--
--- AUTO UPGRADE GENERATOR
---========================================================--
-
 local function StartAutoUpgradeGenerator()
-
-    if AutoUpgradeGeneratorConnection then
-        AutoUpgradeGeneratorConnection:Disconnect()
-        AutoUpgradeGeneratorConnection = nil
-    end
-
+    if AutoUpgradeGeneratorConnection then AutoUpgradeGeneratorConnection:Disconnect(); AutoUpgradeGeneratorConnection = nil end
     AutoUpgradeGeneratorEnabled = true
-
-    AutoUpgradeGeneratorConnection =
-        RunService.Heartbeat:Connect(function()
-
-            if not AutoUpgradeGeneratorEnabled then
-                return
-            end
-
-            pcall(function()
-
-                local Remotes =
-                    ReplicatedStorage:WaitForChild("Remotes")
-
-                Remotes.UpgradeGenerator:InvokeServer(1)
-                Remotes.UpgradeGenerator:InvokeServer(2)
-                Remotes.UpgradeGenerator:InvokeServer(3)
-                Remotes.UpgradeGenerator:InvokeServer(4)
-                Remotes.UpgradeGenerator:InvokeServer(5)
-
-            end)
-        end)
-end
-
-local function StopAutoUpgradeGenerator()
-
-    AutoUpgradeGeneratorEnabled = false
-
-    if AutoUpgradeGeneratorConnection then
-        AutoUpgradeGeneratorConnection:Disconnect()
-        AutoUpgradeGeneratorConnection = nil
-    end
-end
-
---========================================================--
--- AUTO BUY GENERATOR FOOD CHICKEN
---========================================================--
-
-local function StartAutoBuyGeneratorFoodChicken()
-
-    if AutoBuyGeneratorFoodChickenConnection then
-        AutoBuyGeneratorFoodChickenConnection:Disconnect()
-        AutoBuyGeneratorFoodChickenConnection = nil
-    end
-
-    AutoBuyGeneratorFoodChickenEnabled = true
-    LastBuyGeneratorFoodChickenTime = 0
-
-    AutoBuyGeneratorFoodChickenConnection =
-        RunService.Heartbeat:Connect(function()
-
-            if not AutoBuyGeneratorFoodChickenEnabled then
-                return
-            end
-
-            local Now = tick()
-            if Now - LastBuyGeneratorFoodChickenTime < 1 then
-                return
-            end
-
-            LastBuyGeneratorFoodChickenTime = Now
-
-            task.spawn(function()
-                pcall(function()
-                    local BuyGenerator =
-                        ReplicatedStorage:WaitForChild("Remotes")
-                            :WaitForChild("BuyGenerator")
-
-                    for GeneratorId = 1, 6 do
-                        BuyGenerator:InvokeServer(GeneratorId)
-                        task.wait(0.1)
-                    end
-                end)
-            end)
-        end)
-end
-
-local function StopAutoBuyGeneratorFoodChicken()
-
-    AutoBuyGeneratorFoodChickenEnabled = false
-
-    if AutoBuyGeneratorFoodChickenConnection then
-        AutoBuyGeneratorFoodChickenConnection:Disconnect()
-        AutoBuyGeneratorFoodChickenConnection = nil
-    end
-end
-
---========================================================--
--- AUTO UPGRADE COOP
---========================================================--
-
-local function StartAutoUpgradeCoop()
-
-    if AutoUpgradeCoopConnection then
-        AutoUpgradeCoopConnection:Disconnect()
-        AutoUpgradeCoopConnection = nil
-    end
-
-    AutoUpgradeCoopEnabled = true
-    LastUpgradeCoopTime = 0
-
-    AutoUpgradeCoopConnection =
-        RunService.Heartbeat:Connect(function()
-
-            if not AutoUpgradeCoopEnabled then
-                return
-            end
-
-            local Now = tick()
-            if Now - LastUpgradeCoopTime < 1 then
-                return
-            end
-
-            LastUpgradeCoopTime = Now
-
-            task.spawn(function()
-                pcall(function()
-                    ReplicatedStorage:WaitForChild("Remotes")
-                        :WaitForChild("ExpandCoop")
-                        :InvokeServer()
-                end)
-            end)
-        end)
-end
-
-local function StopAutoUpgradeCoop()
-
-    AutoUpgradeCoopEnabled = false
-
-    if AutoUpgradeCoopConnection then
-        AutoUpgradeCoopConnection:Disconnect()
-        AutoUpgradeCoopConnection = nil
-    end
-end
-
---========================================================--
---========================================================--
--- DASH SYSTEM
---========================================================--
-
-local DashPower = 110
-local DashDuration = 0.12
-local DashCooldown = 0.8
-local DashOnCooldown = false
-
-local function DoDash()
-    if DashOnCooldown then
-        return
-    end
-
-    local Root = GetRoot()
-    if not Root then
-        return
-    end
-
-    DashOnCooldown = true
-    local Camera = Workspace.CurrentCamera
-    local Direction = Camera and Camera.CFrame.LookVector or Root.CFrame.LookVector
-    Direction = Vector3.new(Direction.X, 0, Direction.Z)
-
-    if Direction.Magnitude < 0.01 then
-        Direction = Vector3.new(Root.CFrame.LookVector.X, 0, Root.CFrame.LookVector.Z)
-    end
-
-    Direction = Direction.Unit
-    local Velocity = Instance.new("BodyVelocity")
-    Velocity.Name = "NAZK_DashVelocity"
-    Velocity.MaxForce = Vector3.new(1000000, 0, 1000000)
-    Velocity.P = 50000
-    Velocity.Velocity = Direction * DashPower
-    Velocity.Parent = Root
-
-    task.delay(DashDuration, function()
-        if Velocity and Velocity.Parent then
-            Velocity:Destroy()
-        end
-    end)
-
-    task.delay(DashCooldown, function()
-        DashOnCooldown = false
-    end)
-end
-
---========================================================--
--- SETTINGS SAVE / LOAD
---========================================================--
-
-local SettingsFile = "NAZK_HUB_Settings.json"
-
-local function SaveSettings()
-    if type(writefile) ~= "function" then
-        return false
-    end
-
-    local Data = {
-        FarSpeed = FarSpeed,
-        MaxSpeed = MaxSpeed,
-        DashPower = DashPower,
-        DashDuration = DashDuration,
-        DashCooldown = DashCooldown,
-        Gravity = CurrentGravity,
-        ThemeName = CurrentThemeName,
-        TowerDelay = TowerDelay,
-        AutoExecuteEnabled = AutoExecuteEnabled,
-        AutoExecuteScriptURL = AutoExecuteScriptURL,
-    }
-
-    local Success = pcall(function()
-        writefile(SettingsFile, HttpService:JSONEncode(Data))
-    end)
-    return Success
-end
-
-local function LoadSettings()
-    if type(isfile) ~= "function" or type(readfile) ~= "function" then
-        return
-    end
-    if not isfile(SettingsFile) then
-        return
-    end
-
-    pcall(function()
-        local Data = HttpService:JSONDecode(readfile(SettingsFile))
-        if type(Data) ~= "table" then return end
-        if type(Data.FarSpeed) == "number" then FarSpeed = Data.FarSpeed end
-        if type(Data.MaxSpeed) == "number" then MaxSpeed = Data.MaxSpeed end
-        if type(Data.DashPower) == "number" then DashPower = Data.DashPower end
-        if type(Data.DashDuration) == "number" then DashDuration = Data.DashDuration end
-        if type(Data.DashCooldown) == "number" then DashCooldown = Data.DashCooldown end
-        if type(Data.Gravity) == "number" then
-            CurrentGravity = Data.Gravity
-            Workspace.Gravity = CurrentGravity
-        end
-        if type(Data.ThemeName) == "string" and ThemeColors[Data.ThemeName] then
-            CurrentThemeName = Data.ThemeName
-        end
-        if type(Data.TowerDelay) == "number" then
-            TowerDelay = math.clamp(Data.TowerDelay, 0.1, 30)
-        end
-        if type(Data.AutoExecuteEnabled) == "boolean" then
-            AutoExecuteEnabled = Data.AutoExecuteEnabled
-        end
-        if type(Data.AutoExecuteScriptURL) == "string" then
-            AutoExecuteScriptURL = Data.AutoExecuteScriptURL
-        end
-    end)
-end
-
-LoadSettings()
-
-
-local function QueueAutoExecute()
-    if not AutoExecuteEnabled or AutoExecuteScriptURL == "" then
-        return false
-    end
-
-    local Queue = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
-    if type(Queue) ~= "function" then
-        return false
-    end
-
-    local URL = string.format('%q', AutoExecuteScriptURL)
-    local Payload = "task.wait(2)\nloadstring(game:HttpGet(" .. URL .. "))()"
-    return pcall(Queue, Payload)
-end
-
---========================================================--
--- FLUENTPRO GUI
---========================================================--
-
-local Fluent = loadstring(game:HttpGet(
-    "https://github.com/StyearX/Fluent-Modded/releases/download/Fluent/FluentPro"
-))()
-
-
--- Device Detection & Sizing
-local Camera = workspace.CurrentCamera
-local Viewport = Camera and Camera.ViewportSize or Vector2.new(1920, 1080)
-local IsTouchDevice = UserInputService.TouchEnabled
-local IsMobile = IsTouchDevice and Viewport.X < 700
-local IsTablet = IsTouchDevice and Viewport.X >= 700
-local DeviceName = IsMobile and "Mobile" or IsTablet and "iPad / Tablet" or "Computer"
-local BaseWindowWidth = IsMobile and 360 or IsTablet and 500 or 580
-local BaseWindowHeight = IsMobile and 430 or IsTablet and 460 or 480
-local WindowWidth = math.min(BaseWindowWidth, math.max(300, Viewport.X - 20))
-local WindowHeight = math.min(BaseWindowHeight, math.max(360, Viewport.Y - 40))
-local WindowSize = UDim2.fromOffset(WindowWidth, WindowHeight)
-local TabWidth = IsMobile and 112 or IsTablet and 140 or 160
-local NSize = IsMobile and 40 or IsTablet and 46 or 50
-local DashWidth = IsMobile and 68 or 78
-local ScreenSidePadding = IsMobile and 10 or 18
-
-local Window = Fluent:CreateWindow({
-    Title = "NAZK HUB",
-    SubTitle = "PitScrap • Players • Server • Misc • Auto | " .. DeviceName,
-    TabWidth = TabWidth,
-    Size = WindowSize,
-    Acrylic = true,
-    Theme = CurrentThemeName,
-    MinimizeKey = Enum.KeyCode.Insert,
-    Search = true,
-})
-pcall(function() Fluent:SetTheme(CurrentThemeName) end)
-
-local function Notify(Title, Content)
-    Fluent:Notify({ Title = Title, Content = Content, Duration = 3 })
-end
-
-local function PlayerValues()
-    local Values = {}
-    for _, P in ipairs(Players:GetPlayers()) do
-        if P ~= LocalPlayer then
-            table.insert(Values, P.DisplayName .. " (@" .. P.Name .. ")")
-        end
-    end
-    if #Values == 0 then
-        table.insert(Values, "No players")
-    end
-    return Values
-end
-
-local function FindPlayerByValue(Value)
-    if not Value then return nil end
-    local Name = Value:match("@([^%)]+)")
-    if not Name then return nil end
-    return Players:FindFirstChild(Name)
-end
-
---========================================================--
--- DISCORD TAB (First Tab)
---========================================================--
-
-local DiscordTab = Window:AddTab({ Title = "Discord", Icon = "solar/chat-round-bold" })
-DiscordTab:AddParagraph({
-    Title = "Join Our Discord",
-    Content = "Click the button below to copy the invite link!"
-})
-
-local DiscordLink = "https://discord.gg/ne5vgR9q8"
-
-DiscordTab:AddButton({
-    Title = "Copy Discord Link",
-    Icon = "solar/copy-bold",
-    Callback = function()
-        if type(setclipboard) == "function" then
-            setclipboard(DiscordLink)
-            Notify("Discord", "Link copied to clipboard!")
-        else
-            Notify("Discord", "Clipboard not supported. Link: " .. DiscordLink)
-        end
-    end
-})
-
-DiscordTab:AddParagraph({
-    Title = "Link",
-    Content = DiscordLink
-})
-
-local PitTab = Window:AddTab({ Title = "PitScrap", Icon = "solar/route-bold" })
-PitTab:AddParagraph({
-    Title = "PitScrap Farm",
-    Content = "Moves between scrap targets and restarts the tween every 15 studs. Pause: 0.4 seconds."
-})
-PitTab:AddToggle("PitScrapTween", {
-    Title = "Enable PitScrap Tween",
-    Default = TweenEnabled,
-    Callback = function(Value)
-        TweenEnabled = Value
-        if Value then
-            ResetVisited()
-            StartTween()
-            Notify("PitScrap", "Tween enabled")
-        else
-            StopTween()
-            Notify("PitScrap", "Tween stopped")
-        end
-    end
-})
-PitTab:AddSlider("NearSpeed", {
-    Title = "Near Speed",
-    Default = MaxSpeed,
-    Min = 20,
-    Max = 100,
-    Rounding = 0,
-    Callback = function(Value)
-        MaxSpeed = Value
-        SaveSettings()
-    end
-})
-PitTab:AddSlider("FarSpeed", {
-    Title = "Far Speed",
-    Default = FarSpeed,
-    Min = 5,
-    Max = 60,
-    Rounding = 0,
-    Callback = function(Value)
-        FarSpeed = Value
-        SaveSettings()
-    end
-})
-PitTab:AddButton({
-    Title = "Refresh PitScrap Targets",
-    Icon = "solar/restart-bold",
-    Callback = function()
-        ResetVisited()
-        CancelTween()
-        if TweenEnabled and not TweenRunning then
-            StartTween()
-        end
-        Notify("PitScrap", "Targets refreshed")
-    end
-})
-
-local StatusTab = Window:AddTab({ Title = "Status", Icon = "solar/chart-bold" })
-StatusTab:AddParagraph({
-    Title = "Live Status",
-    Content = "Preparing status..."
-})
-local StatusParagraph = StatusTab:AddParagraph({
-    Title = "NAZK HUB Monitor",
-    Content = "Loading..."
-})
-
-local DashTab = Window:AddTab({ Title = "Dash", Icon = "solar/bolt-bold" })
-DashTab:AddParagraph({
-    Title = "Dash System",
-    Content = "اندفع في اتجاه الكاميرا مع فترة تبريد قصيرة."
-})
-DashTab:AddSlider("DashPower", {
-    Title = "Dash Power",
-    Default = DashPower,
-    Min = 40,
-    Max = 300,
-    Rounding = 0,
-    Callback = function(Value)
-        DashPower = Value
-        SaveSettings()
-    end
-})
-DashTab:AddSlider("DashDuration", {
-    Title = "Dash Duration",
-    Default = DashDuration * 100,
-    Min = 5,
-    Max = 50,
-    Rounding = 0,
-    Callback = function(Value)
-        DashDuration = Value / 100
-        SaveSettings()
-    end
-})
-DashTab:AddSlider("DashCooldown", {
-    Title = "Dash Cooldown",
-    Default = DashCooldown * 10,
-    Min = 1,
-    Max = 30,
-    Rounding = 0,
-    Callback = function(Value)
-        DashCooldown = Value / 10
-        SaveSettings()
-    end
-})
-DashTab:AddButton({
-    Title = "Dash Now",
-    Icon = "solar/bolt-bold",
-    Callback = DoDash
-})
-
-local PlayersTab = Window:AddTab({ Title = "Players", Icon = "solar/users-group-rounded-bold" })
-PlayersTab:AddParagraph({
-    Title = "Player Controls",
-    Content = "Select a player, then use tween, follow, or fling controls."
-})
-local SelectedPlayerValue = nil
-local PlayerDropdown = PlayersTab:AddDropdown("SelectedPlayer", {
-    Title = "Select Player",
-    Values = PlayerValues(),
-    Default = PlayerValues()[1],
-    Callback = function(Value)
-        SelectedPlayerValue = Value
-        SelectedPlayer = FindPlayerByValue(Value)
-        if SelectedPlayer then
-            Notify("Players", "Selected " .. SelectedPlayer.DisplayName)
-        end
-    end
-})
-
-local function RefreshPlayerDropdown()
-    local Values = PlayerValues()
-    pcall(function()
-        if PlayerDropdown.SetValues then
-            PlayerDropdown:SetValues(Values)
-        elseif PlayerDropdown.SetOptions then
-            PlayerDropdown:SetOptions(Values)
-        end
-    end)
-
-    if SelectedPlayer and not SelectedPlayer.Parent then
-        SelectedPlayer = nil
-        SelectedPlayerValue = nil
-        Notify("Players", "Selected player left the server")
-    end
-end
-
-PlayersTab:AddButton({
-    Title = "Refresh Player List",
-    Icon = "solar/refresh-bold",
-    Callback = function()
-        RefreshPlayerDropdown()
-        Notify("Players", "Player list updated")
-    end
-})
-
-Players.PlayerAdded:Connect(function()
-    task.defer(RefreshPlayerDropdown)
-end)
-
-Players.PlayerRemoving:Connect(function(Player)
-    if Player == SelectedPlayer then
-        SelectedPlayer = nil
-        SelectedPlayerValue = nil
-    end
-    task.defer(RefreshPlayerDropdown)
-end)
-PlayersTab:AddToggle("TweenToPlayer", {
-    Title = "Tween to Selected Player",
-    Default = false,
-    Callback = function(Value)
-        PlayerTweenEnabled = Value
-        if not SelectedPlayer then
-            PlayerTweenEnabled = false
-            Notify("Players", "Select a player first")
-            return
-        end
-        if Value then
-            task.spawn(function()
-                while PlayerTweenEnabled and SelectedPlayer and SelectedPlayer.Parent do
-                    local Success = TweenToPlayer(SelectedPlayer)
-                    if not Success then task.wait(0.5) else task.wait(0.1) end
-                end
-                CancelPlayerTween()
-            end)
-        else
-            CancelPlayerTween()
-        end
-    end
-})
-PlayersTab:AddToggle("FollowPlayer", {
-    Title = "Follow Selected Player",
-    Default = FollowEnabled,
-    Callback = function(Value)
-        if not SelectedPlayer then
-            Notify("Players", "Select a player first")
-            return
-        end
-        FollowEnabled = Value
-        if Value then StartFollow() else StopFollow() end
-    end
-})
-PlayersTab:AddToggle("FlingPlayer", {
-    Title = "Fling Selected Player",
-    Default = FlingEnabled,
-    Callback = function(Value)
-        if not SelectedPlayer then
-            Notify("Players", "Select a player first")
-            return
-        end
-        FlingEnabled = Value
-        if Value then StartFling() else StopFling() end
-    end
-})
-PlayersTab:AddToggle("AntiFling", {
-    Title = "Anti Fling",
-    Default = AntiFlingEnabled,
-    Callback = function(Value)
-        AntiFlingEnabled = Value
-        if Value then StartAntiFling() else StopAntiFling() end
-    end
-})
-
-local ServerTab = Window:AddTab({ Title = "Server", Icon = "solar/server-square-bold" })
-ServerTab:AddParagraph({
-    Title = "Server Hopper",
-    Content = "Find and join a server with fewer players."
-})
-ServerTab:AddButton({
-    Title = "Hop to Low Players Server",
-    Icon = "solar/transfer-horizontal-bold",
-    Callback = function()
-        Notify("Server", "Searching for a low-player server...")
-        task.spawn(HopLowPlayersServer)
-    end
-})
-ServerTab:AddButton({
-    Title = "Rejoin Current Server",
-    Icon = "solar/restart-bold",
-    Callback = function()
-        TeleportService:Teleport(game.PlaceId, LocalPlayer)
-    end
-})
-
-local MiscTab = Window:AddTab({ Title = "Misc", Icon = "solar/settings-bold" })
-MiscTab:AddToggle("AntiAFK", {
-    Title = "Anti AFK",
-    Default = AntiAFKEnabled,
-    Callback = function(Value)
-        AntiAFKEnabled = Value
-        if Value then StartAntiAFK() else StopAntiAFK() end
-    end
-})
-MiscTab:AddToggle("NoClip", {
-    Title = "No Clip",
-    Default = NoClipEnabled,
-    Callback = function(Value)
-        NoClipEnabled = Value
-        if Value then StartNoClip() else StopNoClip() end
-    end
-})
-MiscTab:AddToggle("AntiLag", {
-    Title = "Anti Lag",
-    Default = AntiLagEnabled,
-    Callback = function(Value)
-        AntiLagEnabled = Value
-        if Value then StartAntiLag() else StopAntiLag() end
-    end
-})
-MiscTab:AddSlider("Gravity", {
-    Title = "Gravity",
-    Default = CurrentGravity,
-    Min = 0,
-    Max = 500,
-    Rounding = 0,
-    Callback = function(Value)
-        CurrentGravity = Value
-        Workspace.Gravity = Value
-        SaveSettings()
-    end
-})
-MiscTab:AddButton({
-    Title = "Reset Gravity",
-    Icon = "solar/restart-bold",
-    Callback = function()
-        CurrentGravity = DefaultGravity
-        Workspace.Gravity = DefaultGravity
-    end
-})
-
-local AutoTab = Window:AddTab({ Title = "Auto", Icon = "solar/bolt-bold" })
-AutoTab:AddToggle("AutoIncubator", {
-    Title = "Auto Incubator",
-    Default = AutoIncubatorEnabled,
-    Callback = function(Value)
-        AutoIncubatorEnabled = Value
-        if Value then StartAutoIncubator() else StopAutoIncubator() end
-    end
-})
-AutoTab:AddToggle("AutoRebirth", {
-    Title = "Auto Rebirth",
-    Default = AutoRebirthEnabled,
-    Callback = function(Value)
-        AutoRebirthEnabled = Value
-        if Value then StartAutoRebirth() else StopAutoRebirth() end
-    end
-})
-AutoTab:AddToggle("AutoTower", {
-    Title = "Auto Tower",
-    Default = AutoTowerEnabled,
-    Callback = function(Value)
-        AutoTowerEnabled = Value
-        if Value then StartAutoTower() else StopAutoTower() end
-    end
-})
-AutoTab:AddSlider("TowerDelay", {
-    Title = "Tower Delay (seconds)",
-    Description = "Time between TowerStart requests.",
-    Default = TowerDelay,
-    Min = 0.1,
-    Max = 30,
-    Rounding = 1,
-    Callback = function(Value)
-        TowerDelay = math.clamp(tonumber(Value) or 1, 0.1, 30)
-        SaveSettings()
-    end
-})
-AutoTab:AddToggle("AutoRecycler", {
-    Title = "Auto Recycler",
-    Default = AutoRecyclerEnabled,
-    Callback = function(Value)
-        AutoRecyclerEnabled = Value
-        if Value then StartAutoRecycler() else StopAutoRecycler() end
-    end
-})
-AutoTab:AddToggle("AutoUpgradeGenerator", {
-    Title = "Auto Upgrade Generator",
-    Default = AutoUpgradeGeneratorEnabled,
-    Callback = function(Value)
-        AutoUpgradeGeneratorEnabled = Value
-        if Value then StartAutoUpgradeGenerator() else StopAutoUpgradeGenerator() end
-    end
-})
-AutoTab:AddToggle("AutoBuyGeneratorFoodChicken", {
-    Title = "Auto Buy Generator Food Chicken",
-    Default = AutoBuyGeneratorFoodChickenEnabled,
-    Callback = function(Value)
-        AutoBuyGeneratorFoodChickenEnabled = Value
-        if Value then
-            StartAutoBuyGeneratorFoodChicken()
-        else
-            StopAutoBuyGeneratorFoodChicken()
-        end
-    end
-})
-AutoTab:AddToggle("AutoUpgradeCoop", {
-    Title = "Auto Upgrade Coop",
-    Default = AutoUpgradeCoopEnabled,
-    Callback = function(Value)
-        AutoUpgradeCoopEnabled = Value
-        if Value then
-            StartAutoUpgradeCoop()
-        else
-            StopAutoUpgradeCoop()
-        end
-    end
-})
-
-local ArenaTab = Window:AddTab({ Title = "Arena", Icon = "solar/shield-star-bold" })
-ArenaTab:AddParagraph({
-    Title = "Arena Controls",
-    Content = "Enable auto ability and start arena fights automatically."
-})
-ArenaTab:AddToggle("AutoArenaAbility", {
-    Title = "Auto Turn Auto Skill",
-    Default = false,
-    Callback = function(Value)
+    AutoUpgradeGeneratorConnection = RunService.Heartbeat:Connect(function()
+        if not AutoUpgradeGeneratorEnabled then return end
         pcall(function()
-            game:GetService("ReplicatedStorage").Remotes.SetArenaAutoAbility:FireServer(Value)
+            local R = ReplicatedStorage:WaitForChild("Remotes")
+            for id = 1, 5 do R.UpgradeGenerator:InvokeServer(id) end
         end)
-        Notify("Arena", "Auto Skill " .. (Value and "enabled" or "disabled"))
-    end
-})
-local AutoArenaFightEnabled = false
-local AutoArenaFightConnection = nil
+    end)
+end
+local function StopAutoUpgradeGenerator()
+    AutoUpgradeGeneratorEnabled = false
+    if AutoUpgradeGeneratorConnection then AutoUpgradeGeneratorConnection:Disconnect(); AutoUpgradeGeneratorConnection = nil end
+end
+local function StartAutoBuyGeneratorFoodChicken()
+    if AutoBuyGeneratorFoodChickenConnection then AutoBuyGeneratorFoodChickenConnection:Disconnect(); AutoBuyGeneratorFoodChickenConnection = nil end
+    AutoBuyGeneratorFoodChickenEnabled = true; LastBuyGeneratorFoodChickenTime = 0
+    AutoBuyGeneratorFoodChickenConnection = RunService.Heartbeat:Connect(function()
+        if not AutoBuyGeneratorFoodChickenEnabled then return end
+        local now = tick()
+        if now - LastBuyGeneratorFoodChickenTime < 1 then return end
+        LastBuyGeneratorFoodChickenTime = now
+        task.spawn(function()
+            pcall(function()
+                local Buy = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("BuyGenerator")
+                for id = 1, 6 do Buy:InvokeServer(id) task.wait(0.1) end
+            end)
+        end)
+    end)
+end
+local function StopAutoBuyGeneratorFoodChicken()
+    AutoBuyGeneratorFoodChickenEnabled = false
+    if AutoBuyGeneratorFoodChickenConnection then AutoBuyGeneratorFoodChickenConnection:Disconnect(); AutoBuyGeneratorFoodChickenConnection = nil end
+end
+local function StartAutoUpgradeCoop()
+    if AutoUpgradeCoopConnection then AutoUpgradeCoopConnection:Disconnect(); AutoUpgradeCoopConnection = nil end
+    AutoUpgradeCoopEnabled = true; LastUpgradeCoopTime = 0
+    AutoUpgradeCoopConnection = RunService.Heartbeat:Connect(function()
+        if not AutoUpgradeCoopEnabled then return end
+        local now = tick()
+        if now - LastUpgradeCoopTime < 1 then return end
+        LastUpgradeCoopTime = now
+        task.spawn(function()
+            pcall(function()
+                ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ExpandCoop"):InvokeServer()
+            end)
+        end)
+    end)
+end
+local function StopAutoUpgradeCoop()
+    AutoUpgradeCoopEnabled = false
+    if AutoUpgradeCoopConnection then AutoUpgradeCoopConnection:Disconnect(); AutoUpgradeCoopConnection = nil end
+end
 
+--========================================================--
+-- ARENA
+--========================================================--
 local function StartAutoArenaFight()
-    if AutoArenaFightConnection then
-        AutoArenaFightConnection:Disconnect()
-        AutoArenaFightConnection = nil
-    end
-    AutoArenaFightEnabled = true
+    if AutoArenaFightConnection then AutoArenaFightConnection:Disconnect(); AutoArenaFightConnection = nil end
+    AutoArenaFightEnabled = true; LastArenaFightTime = 0
     AutoArenaFightConnection = RunService.Heartbeat:Connect(function()
         if not AutoArenaFightEnabled then return end
-        -- Only send once per second using a timer check
-        local CurrentTime = tick()
-        if not _G.LastArenaFightTime or (CurrentTime - _G.LastArenaFightTime) >= 1 then
-            _G.LastArenaFightTime = CurrentTime
-            pcall(function()
-                game:GetService("ReplicatedStorage").Remotes.ArenaFight:InvokeServer()
-            end)
+        local now = tick()
+        if now - LastArenaFightTime >= 1 then
+            LastArenaFightTime = now
+            pcall(function() ReplicatedStorage.Remotes.ArenaFight:InvokeServer() end)
         end
     end)
 end
-
 local function StopAutoArenaFight()
     AutoArenaFightEnabled = false
-    if AutoArenaFightConnection then
-        AutoArenaFightConnection:Disconnect()
-        AutoArenaFightConnection = nil
-    end
+    if AutoArenaFightConnection then AutoArenaFightConnection:Disconnect(); AutoArenaFightConnection = nil end
 end
 
-ArenaTab:AddToggle("AutoFightArena", {
-    Title = "Auto Fight Arena",
-    Default = false,
-    Callback = function(Value)
-        if Value then
-            StartAutoArenaFight()
-            Notify("Arena", "Auto Fight Arena enabled")
-        else
-            StopAutoArenaFight()
-            Notify("Arena", "Auto Fight Arena disabled")
-        end
-    end
-})
+--========================================================--
+-- LOADING UI
+--========================================================--
+local LoadingGui = Instance.new("ScreenGui")
+LoadingGui.Name = "NAZK_Loading"
+LoadingGui.ResetOnSpawn = false
+LoadingGui.IgnoreGuiInset = true
+LoadingGui.Parent = GetParent()
 
-local SettingsTab = Window:AddTab({ Title = "Settings", Icon = "solar/palette-bold" })
-SettingsTab:AddSection("Interface")
+local BlurBg = Instance.new("Frame")
+BlurBg.Size = UDim2.new(1,0,1,0); BlurBg.BackgroundColor3 = Color3.fromRGB(0,0,0)
+BlurBg.BackgroundTransparency = 0.2; BlurBg.BorderSizePixel = 0; BlurBg.Parent = LoadingGui
 
-SettingsTab:AddDropdown("PresetSelector", {
-    Title = "Choose Preset",
-    Values = { "Balanced", "Performance", "Movement" },
-    Default = "Balanced",
-    Callback = function(Value)
-        if Value == "Performance" then
-            FarSpeed = 30
-            MaxSpeed = 45
-            DashPower = 90
-            DashDuration = 0.10
-            DashCooldown = 1.0
-        elseif Value == "Movement" then
-            FarSpeed = 45
-            MaxSpeed = 70
-            DashPower = 180
-            DashDuration = 0.16
-            DashCooldown = 0.6
-        else
-            FarSpeed = 20
-            MaxSpeed = 35
-            DashPower = 110
-            DashDuration = 0.12
-            DashCooldown = 0.8
-        end
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.fromOffset(340, 400)
+MainFrame.Position = UDim2.new(0.5,-170,0.5,-200)
+MainFrame.BackgroundColor3 = Color3.fromRGB(10,10,10)
+MainFrame.BorderSizePixel = 0; MainFrame.Parent = LoadingGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 6)
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(255,0,0); MainStroke.Thickness = 2; MainStroke.Parent = MainFrame
 
-        SaveSettings()
-        Notify("Preset", Value .. " applied")
-    end
-})
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.fromOffset(140,140); Logo.Position = UDim2.new(0.5,-70,0,35)
+Logo.BackgroundTransparency = 1; Logo.Image = "rbxassetid://139759348685642"; Logo.Parent = MainFrame
 
-SettingsTab:AddSection("Auto Execute")
-SettingsTab:AddInput("AutoExecuteScriptURL", {
-    Title = "Script URL",
-    Description = "Raw URL used after teleport; required by the executor.",
-    Default = AutoExecuteScriptURL,
-    Placeholder = "https://raw.githubusercontent.com/.../NAZK_HUB.lua",
-    Callback = function(Value)
-        AutoExecuteScriptURL = tostring(Value or "")
-        SaveSettings()
-    end
-})
-SettingsTab:AddToggle("AutoExecuteScript", {
-    Title = "Auto EXECUTE script",
-    Description = "Queue this script to run automatically after teleport.",
-    Default = AutoExecuteEnabled,
-    Callback = function(Value)
-        AutoExecuteEnabled = Value
-        SaveSettings()
-        if Value and AutoExecuteScriptURL == "" then
-            Notify("Auto EXECUTE", "Add a raw script URL first")
-        else
-            Notify("Auto EXECUTE", Value and "enabled" or "disabled")
-        end
-    end
-})
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1,0,0,40); Title.Position = UDim2.new(0,0,0,190)
+Title.BackgroundTransparency = 1; Title.Text = "NAZK HUB"; Title.TextColor3 = Color3.new(1,1,1)
+Title.Font = Enum.Font.GothamBold; Title.TextSize = 36; Title.Parent = MainFrame
 
-SettingsTab:AddDropdown("ThemeSelector", {
-    Title = "Choose Theme",
-    Values = ThemeNames,
-    Multi = false,
-    Default = CurrentThemeName,
-    Callback = function(Value)
-        if not ThemeColors[Value] then return end
-        CurrentThemeName = Value
-        pcall(function()
-            Fluent:SetTheme(Value)
-        end)
-        if ApplyFloatingTheme then
-            ApplyFloatingTheme(Value)
-        end
-        SaveSettings()
-        Notify("Theme", Value .. " applied")
-    end
-})
-SettingsTab:AddButton({
-    Title = "Save Settings",
-    Icon = "solar/diskette-bold",
-    Callback = function()
-        if SaveSettings() then
-            Notify("Settings", "Settings saved")
-        else
-            Notify("Settings", "File saving is not supported")
-        end
-    end
-})
-SettingsTab:AddButton({
-    Title = "Load Settings",
-    Icon = "solar/download-bold",
-    Callback = function()
-        LoadSettings()
-        Notify("Settings", "Settings loaded; restart UI to refresh sliders")
-    end
-})
-SettingsTab:AddButton({
-    Title = "Destroy UI",
-    Icon = "solar/trash-bin-trash-bold",
-    Callback = function()
-        StopTween()
-        PlayerTweenEnabled = false
-        CancelPlayerTween()
-        StopFollow()
-        StopFling()
-        StopAntiAFK()
-        StopAntiFling()
-        StopNoClip()
-        StopAutoIncubator()
-        StopAutoRebirth()
-        StopAutoTower()
-        StopAutoRecycler()
-        StopAutoUpgradeGenerator()
-        if FloatingGui then FloatingGui:Destroy() end
-        Fluent:Destroy()
-    end
-})
-SettingsTab:AddParagraph({
-    Title = "NAZK HUB",
-    Content = "FluentPro interface • PitScrap pause: 0.4 seconds"
-})
+local Sub = Instance.new("TextLabel")
+Sub.Size = UDim2.new(1,0,0,20); Sub.Position = UDim2.new(0,0,0,230)
+Sub.BackgroundTransparency = 1; Sub.Text = "R E D E D I T I O N"
+Sub.TextColor3 = Color3.fromRGB(255,0,0); Sub.Font = Enum.Font.GothamBold
+Sub.TextSize = 12; Sub.Parent = MainFrame
 
-local AboutTab = Window:AddTab({ Title = "About", Icon = "solar/info-circle-bold" })
-AboutTab:AddParagraph({
-    Title = "NAZK HUB",
-    Content = "A modular FluentPro interface for PitScrap, player controls, server tools, movement, automation, and customization."
-})
-AboutTab:AddParagraph({
-    Title = "Version",
-    Content = "NAZK HUB v2.1\nTheme Dropdown • Presets • Live Player List • About/Credits"
-})
-AboutTab:AddParagraph({
-    Title = "Credits",
-    Content = "Interface: FluentPro\nProject: NAZK HUB\nThank you for using the hub."
-})
+local BarBG = Instance.new("Frame")
+BarBG.Size = UDim2.new(0.75,0,0,8); BarBG.Position = UDim2.new(0.125,0,0,285)
+BarBG.BackgroundColor3 = Color3.fromRGB(20,20,20); BarBG.BorderSizePixel = 0; BarBG.Parent = MainFrame
+Instance.new("UICorner", BarBG).CornerRadius = UDim.new(1,0)
+
+local BarFill = Instance.new("Frame")
+BarFill.Size = UDim2.new(0,0,1,0); BarFill.BackgroundColor3 = Color3.fromRGB(255,0,0)
+BarFill.BorderSizePixel = 0; BarFill.Parent = BarBG
+Instance.new("UICorner", BarFill).CornerRadius = UDim.new(1,0)
+
+local Percent = Instance.new("TextLabel")
+Percent.Size = UDim2.new(1,0,0,20); Percent.Position = UDim2.new(0,0,0,305)
+Percent.BackgroundTransparency = 1; Percent.Text = "0%"; Percent.TextColor3 = Color3.new(1,1,1)
+Percent.Font = Enum.Font.GothamBold; Percent.TextSize = 18; Percent.Parent = MainFrame
+
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.new(1,0,0,15); Status.Position = UDim2.new(0,0,0,260)
+Status.BackgroundTransparency = 1; Status.Text = "Loading..."
+Status.TextColor3 = Color3.fromRGB(150,150,150); Status.Font = Enum.Font.Gotham
+Status.TextSize = 12; Status.Parent = MainFrame
 
 --========================================================--
--- LIVE STATUS MONITOR
+-- BUILD HUB
 --========================================================--
-
-local function UpdateStatusText(Text)
-    pcall(function()
-        if StatusParagraph.SetDesc then
-            StatusParagraph:SetDesc(Text)
-        elseif StatusParagraph.SetContent then
-            StatusParagraph:SetContent(Text)
-        end
+local function BuildHub()
+    local ok, WindUI = pcall(function()
+        return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua"))()
     end)
-end
-
-task.spawn(function()
-    while task.wait(0.25) do
-        local TargetName = "None"
-        if CurrentTarget and CurrentTarget.Parent then
-            TargetName = CurrentTarget.Name
-        end
-
-        local PitState = TweenEnabled and (TweenRunning and "Running" or "Waiting") or "OFF"
-        local DashState = DashOnCooldown and "Cooldown" or "Ready"
-        local Text = string.format(
-            "PitScrap: %s\nTarget: %s\nPause per 15 studs: 0.4s\nNear speed: %.1f | Far speed: %.1f\nDash: %s\nDash power: %.1f\nGravity: %.1f",
-            PitState,
-            TargetName,
-            MaxSpeed,
-            FarSpeed,
-            DashState,
-            DashPower,
-            CurrentGravity
-        )
-        UpdateStatusText(Text)
-    end
-end)
-
---========================================================--
--- FLOATING N / DASH BUTTONS
---========================================================--
-
-local FloatingGui = Instance.new("ScreenGui")
-FloatingGui.Name = "NAZK_FloatingControls"
-FloatingGui.ResetOnSpawn = false
-FloatingGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-FloatingGui.Parent = CoreGui
-
-local MenuVisible = true
-local FluentRoot = Window.Root or Window.Main or Window.Window
-
-local NButton = Instance.new("TextButton")
-NButton.Name = "NButton"
-NButton.Size = UDim2.fromOffset(NSize, NSize)
-NButton.Position = UDim2.new(0, ScreenSidePadding, 0.5, -(NSize / 2))
-NButton.BackgroundColor3 = Color3.fromRGB(5, 5, 7)
-NButton.BorderSizePixel = 0
-NButton.Text = "N"
-NButton.TextColor3 = Color3.fromRGB(0, 0, 0)
-NButton.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
-NButton.TextStrokeTransparency = 0
-NButton.TextSize = IsMobile and 20 or IsTablet and 23 or 25
-NButton.Font = Enum.Font.GothamBold
-NButton.AutoButtonColor = false
-NButton.ZIndex = 100
-NButton.Parent = FloatingGui
-
-local NCorner = Instance.new("UICorner")
-NCorner.CornerRadius = UDim.new(1, 0)
-NCorner.Parent = NButton
-local NStroke = Instance.new("UIStroke")
-NStroke.Color = Color3.fromRGB(255, 255, 255)
-NStroke.Thickness = 2
-NStroke.Parent = NButton
-
-local function SetMenuVisible(Visible)
-    MenuVisible = Visible
-    if FluentRoot and FluentRoot:IsA("GuiObject") then
-        FluentRoot.Visible = Visible
-    elseif Window.Minimize then
-        pcall(function()
-            Window:Minimize()
+    if not ok or not WindUI then
+        ok, WindUI = pcall(function()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
         end)
     end
-end
+    if not ok or not WindUI then return nil end
+    WindUIRef = WindUI
 
--- سيتم ربط النقر والسحب معًا بعد إنشاء زر Dash
+    WindUI:AddTheme({
+        Name = "NAZK Red",
+        Accent = Color3.fromRGB(255,0,0),
+        Background = Color3.fromRGB(12,12,12),
+        Outline = Color3.fromRGB(255,0,0),
+        Text = Color3.new(1,1,1),
+        Button = Color3.fromRGB(25,25,25),
+        Icon = Color3.fromRGB(255,0,0),
+    })
 
-local FloatingDash = Instance.new("TextButton")
-FloatingDash.Name = "FloatingDash"
-FloatingDash.Size = UDim2.fromOffset(DashWidth, NSize)
-FloatingDash.Position = UDim2.new(1, -(DashWidth + ScreenSidePadding), 0.5, -(NSize / 2))
-FloatingDash.BackgroundColor3 = Color3.fromRGB(5, 5, 7)
-FloatingDash.BorderSizePixel = 0
-FloatingDash.Text = "Dash"
-FloatingDash.TextColor3 = Color3.fromRGB(0, 0, 0)
-FloatingDash.TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
-FloatingDash.TextStrokeTransparency = 0
-FloatingDash.TextSize = IsMobile and 14 or IsTablet and 16 or 17
-FloatingDash.Font = Enum.Font.GothamBold
-FloatingDash.AutoButtonColor = false
-FloatingDash.ZIndex = 100
-FloatingDash.Parent = FloatingGui
+    local Window = WindUI:CreateWindow({
+        Title = "NAZK HUB", Icon = "flame",
+        Author = "NAZK | RED EDITION",
+        Folder = "NAZK_RED_FULL",
+        Size = UDim2.fromOffset(580, 460),
+        Theme = "NAZK Red",
+        Transparent = true, HasOutline = true,
+    })
+    pcall(function() Window:EditOpenButton({ Enabled = false }) end)
 
-local DashCorner = Instance.new("UICorner")
-DashCorner.CornerRadius = UDim.new(0, 18)
-DashCorner.Parent = FloatingDash
-local DashStroke = Instance.new("UIStroke")
-DashStroke.Color = Color3.fromRGB(255, 255, 255)
-DashStroke.Thickness = 2
-DashStroke.Parent = FloatingDash
+    -- ===== MAIN =====
+    local MainTab = Window:Tab({ Title = "Main", Icon = "crown" })
+    MainTab:Section({ Title = "Discord" })
+    MainTab:Button({
+        Title = "Copy Discord Link", Icon = "link",
+        Callback = function()
+            if setclipboard then setclipboard("https://discord.gg/ne5vgR9q8") end
+            WindUI:Notify({ Title = "NAZK", Content = "Discord link copied!", Duration = 2 })
+        end
+    })
 
-ApplyFloatingTheme = function(ThemeName)
-    local Color = ThemeColors[ThemeName] or ThemeColors["AMOLED"]
-    if NButton then
-        NButton.BackgroundColor3 = Color
+    -- ===== PITSCRAP =====
+    local PitTab = Window:Tab({ Title = "PitScrap", Icon = "route" })
+    PitTab:Section({ Title = "PitScrap Farm" })
+    PitTab:Toggle({
+        Title = "Enable PitScrap Tween", Default = false,
+        Desc = "Restart tween every 15 studs (pause 0.4s)",
+        Callback = function(v)
+            TweenEnabled = v
+            if v then ResetVisited(); StartTween() else StopTween() end
+        end
+    })
+    PitTab:Slider({
+        Title = "Near Speed",
+        Value = { Min = 20, Max = 100, Default = MaxSpeed },
+        Callback = function(v) MaxSpeed = v; SaveSettings() end
+    })
+    PitTab:Slider({
+        Title = "Far Speed",
+        Value = { Min = 5, Max = 60, Default = FarSpeed },
+        Callback = function(v) FarSpeed = v; SaveSettings() end
+    })
+    PitTab:Button({
+        Title = "Refresh Targets", Icon = "rotate-ccw",
+        Callback = function()
+            ResetVisited(); CancelTween()
+            if TweenEnabled and not TweenRunning then StartTween() end
+        end
+    })
+
+    -- ===== ESP =====
+    local ESPTab = Window:Tab({ Title = "ESP Players", Icon = "eye" })
+    ESPTab:Section({ Title = "Player ESP" })
+    ESPTab:Toggle({
+        Title = "Fill", Default = false,
+        Desc = "Red=Knife | Blue=Gun | Green=Default",
+        Callback = function(v) ESPFillEnabled = v if v then StartESP() end end
+    })
+    ESPTab:Toggle({
+        Title = "Box + Name + Distance", Default = false,
+        Callback = function(v) ESPBoxEnabled = v if v then StartESP() end end
+    })
+    ESPTab:Toggle({
+        Title = "Line", Default = false,
+        Callback = function(v) ESPLineEnabled = v if v then StartESP() end end
+    })
+
+    -- ===== DASH SYSTEM =====
+    local DashTab = Window:Tab({ Title = "Dash system", Icon = "zap" })
+    DashTab:Section({ Title = "Dash Settings" })
+    DashTab:Toggle({
+        Title = "Dash Enabled (Key Bind)", Default = true,
+        Desc = "Works even when UI is closed",
+        Callback = function(v) DashEnabled = v end
+    })
+    DashTab:Slider({
+        Title = "Dash Power",
+        Value = { Min = 10, Max = 200, Default = 45 },
+        Callback = function(v) DashPower = v; SaveSettings() end
+    })
+    DashTab:Slider({
+        Title = "Dash Height (Vertical)",
+        Value = { Min = 0, Max = 100, Default = 0 },
+        Callback = function(v) DashVertical = v; SaveSettings() end
+    })
+    DashTab:Slider({
+        Title = "Dash Cooldown",
+        Value = { Min = 0, Max = 2, Default = 0.25 },
+        Callback = function(v) DashCooldown = v; SaveSettings() end
+    })
+    DashTab:Dropdown({
+        Title = "Dash Key",
+        Values = { "Q","E","F","LeftShift","C","V","X" },
+        Default = "Q",
+        Callback = function(v)
+            local map = { Q=Enum.KeyCode.Q, E=Enum.KeyCode.E, F=Enum.KeyCode.F,
+                LeftShift=Enum.KeyCode.LeftShift, C=Enum.KeyCode.C, V=Enum.KeyCode.V, X=Enum.KeyCode.X }
+            DashKey = map[v] or Enum.KeyCode.Q
+        end
+    })
+    DashTab:Section({ Title = "Floating Button" })
+    DashTab:Button({
+        Title = "Hide Dash Button", Icon = "eye-off",
+        Callback = function() if DashOuter then DashOuter.Visible = false end end
+    })
+    DashTab:Button({
+        Title = "Show Dash Button", Icon = "eye",
+        Callback = function() if DashOuter then DashOuter.Visible = true end end
+    })
+
+    -- ===== AUTO =====
+    local AutoTab = Window:Tab({ Title = "Auto", Icon = "cpu" })
+    AutoTab:Section({ Title = "Auto Systems" })
+    AutoTab:Toggle({
+        Title = "Auto Incubator", Default = false,
+        Callback = function(v) if v then StartAutoIncubator() else StopAutoIncubator() end end
+    })
+    AutoTab:Toggle({
+        Title = "Auto Rebirth", Default = false,
+        Callback = function(v) if v then StartAutoRebirth() else StopAutoRebirth() end end
+    })
+    AutoTab:Toggle({
+        Title = "Auto Tower", Default = false,
+        Callback = function(v) if v then StartAutoTower() else StopAutoTower() end end
+    })
+    AutoTab:Slider({
+        Title = "Tower Delay (s)",
+        Value = { Min = 0.1, Max = 30, Default = TowerDelay },
+        Callback = function(v) TowerDelay = math.clamp(v, 0.1, 30); SaveSettings() end
+    })
+    AutoTab:Toggle({
+        Title = "Auto Recycler", Default = false,
+        Callback = function(v) if v then StartAutoRecycler() else StopAutoRecycler() end end
+    })
+    AutoTab:Toggle({
+        Title = "Auto Upgrade Generator", Default = false,
+        Callback = function(v) if v then StartAutoUpgradeGenerator() else StopAutoUpgradeGenerator() end end
+    })
+    AutoTab:Toggle({
+        Title = "Auto Buy Generator Food Chicken", Default = false,
+        Callback = function(v) if v then StartAutoBuyGeneratorFoodChicken() else StopAutoBuyGeneratorFoodChicken() end end
+    })
+    AutoTab:Toggle({
+        Title = "Auto Upgrade Coop", Default = false,
+        Callback = function(v) if v then StartAutoUpgradeCoop() else StopAutoUpgradeCoop() end end
+    })
+
+    -- ===== ARENA =====
+    local ArenaTab = Window:Tab({ Title = "Arena", Icon = "swords" })
+    ArenaTab:Section({ Title = "Arena Controls" })
+    ArenaTab:Toggle({
+        Title = "Auto Turn Auto Skill", Default = false,
+        Callback = function(v)
+            pcall(function()
+                ReplicatedStorage.Remotes.SetArenaAutoAbility:FireServer(v)
+            end)
+        end
+    })
+    ArenaTab:Toggle({
+        Title = "Auto Fight Arena", Default = false,
+        Callback = function(v)
+            if v then StartAutoArenaFight() else StopAutoArenaFight() end
+        end
+    })
+
+    -- ===== PLAYERS =====
+    local PlayersTab = Window:Tab({ Title = "Players", Icon = "users" })
+    local function PlayerList()
+        local t = {}
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer then table.insert(t, p.Name) end
+        end
+        if #t == 0 then t = { "None" } end
+        return t
     end
-    if FloatingDash then
-        FloatingDash.BackgroundColor3 = Color
-    end
-end
-
-ApplyFloatingTheme(CurrentThemeName)
-
--- دعم السحب بالماوس واللمس للأزرار العائمة
-local function MakeDraggable(Button, ClickCallback)
-    local Dragging = false
-    local DragInput = nil
-    local DragStart = nil
-    local StartPosition = nil
-    local Moved = false
-
-    Button.InputBegan:Connect(function(Input)
-        if Input.UserInputType == Enum.UserInputType.MouseButton1
-            or Input.UserInputType == Enum.UserInputType.Touch then
-            Dragging = true
-            Moved = false
-            DragStart = Input.Position
-            StartPosition = Button.Position
-
-            Input.Changed:Connect(function()
-                if Input.UserInputState == Enum.UserInputState.End then
-                    Dragging = false
-                    if not Moved then
-                        ClickCallback()
+    local plrDropdown
+    plrDropdown = PlayersTab:Dropdown({
+        Title = "Select Player", Values = PlayerList(), Default = PlayerList()[1],
+        Callback = function(v) SelectedPlayer = Players:FindFirstChild(v) end
+    })
+    PlayersTab:Button({
+        Title = "Refresh List", Icon = "refresh-cw",
+        Callback = function() pcall(function() plrDropdown:Refresh(PlayerList()) end) end
+    })
+    PlayersTab:Toggle({
+        Title = "Tween to Player", Default = false,
+        Callback = function(v)
+            PlayerTweenEnabled = v
+            if not SelectedPlayer then PlayerTweenEnabled = false return end
+            if v then
+                task.spawn(function()
+                    while PlayerTweenEnabled and SelectedPlayer and SelectedPlayer.Parent do
+                        local ok = TweenToPlayer(SelectedPlayer)
+                        task.wait(ok and 0.1 or 0.5)
                     end
-                end
+                    CancelPlayerTween()
+                end)
+            else CancelPlayerTween() end
+        end
+    })
+    PlayersTab:Toggle({
+        Title = "Follow Player", Default = false,
+        Callback = function(v) if not SelectedPlayer then return end if v then StartFollow() else StopFollow() end end
+    })
+    PlayersTab:Toggle({
+        Title = "Fling Player", Default = false,
+        Callback = function(v) if not SelectedPlayer then return end if v then StartFling() else StopFling() end end
+    })
+
+    -- ===== SERVER =====
+    local ServerTab = Window:Tab({ Title = "Server", Icon = "server" })
+    ServerTab:Button({
+        Title = "Hop Low Server (1)", Icon = "shuffle",
+        Callback = function() task.spawn(function() HopToLowestServer(1) end) end
+    })
+    ServerTab:Button({
+        Title = "Rejoin", Icon = "refresh-cw",
+        Callback = function()
+            QueueAutoExecute()
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        end
+    })
+    local maxHop = 3
+    ServerTab:Slider({
+        Title = "Max Players in Server",
+        Value = { Min = 1, Max = 30, Default = 3 },
+        Callback = function(v) maxHop = v end
+    })
+    ServerTab:Button({
+        Title = "Hop to Lowest Server", Icon = "shuffle",
+        Callback = function() task.spawn(function() HopToLowestServer(maxHop) end) end
+    })
+
+    -- ===== MISC =====
+    local MiscTab = Window:Tab({ Title = "Misc", Icon = "settings" })
+    MiscTab:Section({ Title = "Speed" })
+    MiscTab:Toggle({
+        Title = "Speed", Default = false,
+        Callback = function(v) SpeedEnabled = v if v then ApplySpeed() else StopSpeed() end end
+    })
+    MiscTab:Slider({
+        Title = "WalkSpeed",
+        Value = { Min = 16, Max = 100, Default = 30 },
+        Callback = function(v) SpeedValue = v if SpeedEnabled then ApplySpeed() end end
+    })
+    MiscTab:Section({ Title = "Other" })
+    MiscTab:Toggle({
+        Title = "Anti AFK", Default = false,
+        Callback = function(v) if v then StartAntiAFK() else StopAntiAFK() end end
+    })
+    MiscTab:Toggle({
+        Title = "No Clip", Default = false,
+        Callback = function(v) if v then StartNoClip() else StopNoClip() end end
+    })
+    MiscTab:Toggle({
+        Title = "Infinite Jump", Default = false,
+        Callback = function(v) if v then StartInfiniteJump() else StopInfiniteJump() end PlaySound(v and "Toggle" or "Off", 0.3) end
+    })
+    MiscTab:Toggle({
+        Title = "Sound Effects", Default = true,
+        Callback = function(v) SoundEnabled = v if v then PlaySound("Toggle", 0.3) end end
+    })
+    MiscTab:Toggle({
+        Title = "Anti Lag", Default = false,
+        Callback = function(v) if v then StartAntiLag() else StopAntiLag() end end
+    })
+    MiscTab:Section({ Title = "Safety" })
+    MiscTab:Toggle({
+        Title = "Anti-Fling / Anti-Void", Default = false,
+        Callback = function(v) if v then StartAntiFling() else StopAntiFling() end end
+    })
+    MiscTab:Toggle({
+        Title = "Auto Rejoin on Kick", Default = false,
+        Callback = function(v) if v then StartAutoRejoin() else StopAutoRejoin() end end
+    })
+    MiscTab:Section({ Title = "Gravity" })
+    MiscTab:Slider({
+        Title = "Gravity",
+        Value = { Min = 0, Max = 500, Default = DefaultGravity },
+        Callback = function(v) CurrentGravity = v; Workspace.Gravity = v; SaveSettings() end
+    })
+    MiscTab:Button({
+        Title = "Reset Gravity", Icon = "rotate-ccw",
+        Callback = function() CurrentGravity = DefaultGravity; Workspace.Gravity = DefaultGravity end
+    })
+    LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(1)
+        if SpeedEnabled then ApplySpeed() end
+    end)
+
+    -- ===== VISUALS =====
+    local VisTab = Window:Tab({ Title = "Visuals", Icon = "sun" })
+    VisTab:Section({ Title = "Lighting" })
+    VisTab:Toggle({
+        Title = "Fullbright", Default = false,
+        Callback = function(v) FullbrightEnabled = v; ApplyFullbright(); PlaySound(v and "Toggle" or "Off", 0.3) end
+    })
+    VisTab:Section({ Title = "Camera" })
+    VisTab:Slider({
+        Title = "Field of View",
+        Value = { Min = 40, Max = 120, Default = 70 },
+        Callback = function(v) FOVValue = v; ApplyFOV(v) end
+    })
+    VisTab:Button({
+        Title = "Reset Visuals", Icon = "rotate-ccw",
+        Callback = function()
+            FullbrightEnabled = false; ApplyFullbright()
+            FOVValue = 70; ApplyFOV(70)
+        end
+    })
+
+    -- ===== STATUS =====
+    local StatusTab = Window:Tab({ Title = "Status", Icon = "activity" })
+    StatusTab:Section({ Title = "Live Status" })
+    local StatusPara = StatusTab:Paragraph({
+        Title = "NAZK HUB Monitor",
+        Desc = "Loading..."
+    })
+    task.spawn(function()
+        while true do
+            task.wait(0.5)
+            pcall(function()
+                local targetName = "None"
+                if CurrentTarget and CurrentTarget.Parent then targetName = CurrentTarget.Name end
+                local pitState = TweenEnabled and (TweenRunning and "Running" or "Waiting") or "OFF"
+                local dashState = (tick() - dashLast < DashCooldown) and "Cooldown" or "Ready"
+                local text = string.format(
+                    "PitScrap: %s | Target: %s\nNear: %.1f  Far: %.1f\nDash: %s (power %.1f)\nGravity: %.1f",
+                    pitState, targetName, MaxSpeed, FarSpeed, dashState, DashPower, CurrentGravity
+                )
+                if StatusPara.SetDesc then StatusPara:SetDesc(text)
+                elseif StatusPara.SetContent then StatusPara:SetContent(text) end
             end)
         end
     end)
 
-    Button.InputChanged:Connect(function(Input)
-        if Input.UserInputType == Enum.UserInputType.MouseMovement
-            or Input.UserInputType == Enum.UserInputType.Touch then
-            DragInput = Input
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(Input)
-        if Input == DragInput and Dragging then
-            local Delta = Input.Position - DragStart
-            if math.abs(Delta.X) > 4 or math.abs(Delta.Y) > 4 then
-                Moved = true
+    -- ===== SETTINGS =====
+    local SetTab = Window:Tab({ Title = "Settings", Icon = "sliders" })
+    SetTab:Section({ Title = "Presets" })
+    SetTab:Dropdown({
+        Title = "Choose Preset",
+        Values = { "Balanced", "Performance", "Movement" },
+        Default = "Balanced",
+        Callback = function(v)
+            if v == "Performance" then
+                FarSpeed, MaxSpeed = 30, 45
+                DashPower, DashCooldown = 90, 1.0
+            elseif v == "Movement" then
+                FarSpeed, MaxSpeed = 45, 70
+                DashPower, DashCooldown = 180, 0.6
+            else
+                FarSpeed, MaxSpeed = 20, 35
+                DashPower, DashCooldown = 110, 0.8
             end
-            Button.Position = UDim2.new(
-                StartPosition.X.Scale,
-                StartPosition.X.Offset + Delta.X,
-                StartPosition.Y.Scale,
-                StartPosition.Y.Offset + Delta.Y
-            )
+            SaveSettings()
         end
-    end)
+    })
+    SetTab:Section({ Title = "Auto Execute" })
+    SetTab:Input({
+        Title = "Script URL", Value = AutoExecuteScriptURL,
+        Placeholder = "https://raw.githubusercontent.com/.../script.lua",
+        Callback = function(v)
+            AutoExecuteScriptURL = tostring(v or "")
+            SaveSettings()
+        end
+    })
+    SetTab:Toggle({
+        Title = "Auto EXECUTE script", Default = false,
+        Desc = "Queue this script to run after teleport",
+        Callback = function(v)
+            AutoExecuteEnabled = v
+            SaveSettings()
+        end
+    })
+    SetTab:Section({ Title = "Window" })
+    SetTab:Button({
+        Title = "Hide / Show Menu", Icon = "eye",
+        Callback = function()
+            if WindowRef then
+                if WindowRef._Opened ~= false then pcall(function() WindowRef:Close() end) WindowRef._Opened = false
+                else pcall(function() WindowRef:Open() end) WindowRef._Opened = true end
+            end
+        end
+    })
+    SetTab:Button({
+        Title = "Save Settings", Icon = "save",
+        Callback = function()
+            if SaveSettings() then
+                WindUI:Notify({ Title = "Settings", Content = "Saved successfully", Duration = 2 })
+            else
+                WindUI:Notify({ Title = "Settings", Content = "File saving not supported", Duration = 2 })
+            end
+        end
+    })
+    SetTab:Button({
+        Title = "Load Settings", Icon = "download",
+        Callback = function()
+            LoadSettings()
+            WindUI:Notify({ Title = "Settings", Content = "Loaded (restart UI to refresh sliders)", Duration = 3 })
+        end
+    })
+    SetTab:Section({ Title = "Danger" })
+    SetTab:Button({
+        Title = "Destroy UI", Icon = "trash-2",
+        Callback = function()
+            StopTween(); PlayerTweenEnabled = false; CancelPlayerTween()
+            StopFollow(); StopFling(); StopAntiAFK(); StopNoClip(); StopSpeed()
+            StopESP(); StopAntiFling()
+            StopAutoRejoin(); StopInfiniteJump(); StopAntiLag()
+            StopAutoIncubator(); StopAutoRebirth(); StopAutoTower()
+            StopAutoRecycler(); StopAutoUpgradeGenerator()
+            StopAutoBuyGeneratorFoodChicken(); StopAutoUpgradeCoop()
+            StopAutoArenaFight()
+            FullbrightEnabled = false; ApplyFullbright()
+            Lighting.Ambient = OriginalLighting.Ambient
+            Lighting.OutdoorAmbient = OriginalLighting.OutdoorAmbient
+            local cam = Workspace.CurrentCamera; if cam then cam.FieldOfView = 70 end
+            if FloatingGui then FloatingGui:Destroy() end
+            pcall(function() Window:Destroy() end)
+            _G.NAZK_HUB_RUNNING = false
+        end
+    })
+
+    -- ===== ABOUT =====
+    local AboutTab = Window:Tab({ Title = "About", Icon = "info" })
+    AboutTab:Section({ Title = "NAZK HUB" })
+    AboutTab:Paragraph({ Title = "Version", Desc = "NAZK HUB v3.1 - Full Edition + PitScrap" })
+    AboutTab:Paragraph({ Title = "Credits", Desc = "Interface: WindUI\nProject: NAZK HUB" })
+
+    WindUI:Notify({ Title = "NAZK HUB RED", Content = "Full Edition + PitScrap Loaded!", Duration = 3, Icon = "flame" })
+    return Window, WindUI
 end
 
-MakeDraggable(NButton, function()
-    SetMenuVisible(not MenuVisible)
-end)
-MakeDraggable(FloatingDash, DoDash)
-
-SettingsTab:AddButton({
-    Title = "Hide / Show Menu",
-    Icon = "solar/menu-dots-bold",
-    Callback = function()
-        SetMenuVisible(not MenuVisible)
+--========================================================--
+-- KEYBIND HANDLERS (only Dash + Hide Menu)
+--========================================================--
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == DashKey then DoDash()
+    elseif input.KeyCode == Enum.KeyCode.H then
+        if WindowRef then
+            if WindowRef._Opened ~= false then pcall(function() WindowRef:Close() end) WindowRef._Opened = false
+            else pcall(function() WindowRef:Open() end) WindowRef._Opened = true end
+        end
     end
-})
-SettingsTab:AddButton({
-    Title = "Dash Now",
-    Icon = "solar/bolt-bold",
-    Callback = DoDash
-})
+end)
 
--- إصلاح مؤشر التبويب: تثبيت موضعه بعد تحديث التخطيط أو تمرير قائمة التبويبات
-local LastSelectedTab = nil
+--========================================================--
+-- BOOT
+--========================================================--
 task.spawn(function()
-    while task.wait(0.05) do
-        if not Window or not Window.Root or not Window.Root.Parent then
-            break
+    local hubWindow, WindUI
+    task.spawn(function()
+        local ok, win, ui = pcall(BuildHub)
+        if ok and win then
+            hubWindow, WindUI, WindowRef = win, ui, win
+            mainLoaded = true
         end
+    end)
 
-        local TabsAPI = Window.TabsAPI
-        local TabHolder = Window.TabHolder
-        local SelectorFrame = Window.SelectorFrame
+    for i = 1, 85 do
+        BarFill.Size = UDim2.new(i/100, 0, 1, 0)
+        Percent.Text = i.."%"
+        Status.Text = i < 30 and "Loading assets..." or i < 60 and "Loading WindUI..." or "Building UI..."
+        task.wait(0.02)
+    end
+    Status.Text = "Waiting for UI..."
+    local waited = 0
+    while not mainLoaded and waited < 12 do
+        BarFill.Size = UDim2.new(0.85 + math.sin(tick()*4)*0.03, 0, 1, 0)
+        task.wait(0.1); waited = waited + 0.1
+    end
+    for i = 85, 100 do
+        BarFill.Size = UDim2.new(i/100, 0, 1, 0)
+        Percent.Text = i.."%"; Status.Text = "Opening..."
+        task.wait(0.03)
+    end
+    task.wait(0.2)
 
-        if TabsAPI and TabHolder and SelectorFrame then
-            local SelectedIndex = TabsAPI.SelectedTab
-            if SelectedIndex ~= LastSelectedTab then
-                LastSelectedTab = SelectedIndex
-                task.wait()
+    TweenService:Create(MainFrame, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+    TweenService:Create(BlurBg, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+    for _, v in ipairs(MainFrame:GetDescendants()) do
+        if v:IsA("TextLabel") then TweenService:Create(v, TweenInfo.new(0.4), { TextTransparency = 1 }):Play()
+        elseif v:IsA("ImageLabel") then TweenService:Create(v, TweenInfo.new(0.4), { ImageTransparency = 1 }):Play()
+        elseif v:IsA("Frame") then TweenService:Create(v, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play() end
+    end
+    task.wait(0.45)
+    pcall(function() LoadingGui:Destroy() end)
+    if hubWindow then pcall(function() hubWindow:Open() end) end
+
+    --===== FLOATING UI (N + Dash only) =====
+    FloatingGui = Instance.new("ScreenGui")
+    FloatingGui.Name = "NAZK_Floating"
+    FloatingGui.ResetOnSpawn = false
+    FloatingGui.Parent = GetParent()
+    getgenv().NAZK_ToggleGui = FloatingGui
+
+    NButton = Instance.new("ImageButton")
+    NButton.Size = UDim2.fromOffset(60, 60)
+    NButton.Position = UDim2.new(0, 15, 0.5, -30)
+    NButton.BackgroundTransparency = 1
+    NButton.Image = "rbxassetid://139759348685642"
+    NButton.ZIndex = 100
+    NButton.Parent = FloatingGui
+
+    local function CreateRedBlackButton(name, text, pos)
+        local Outer = Instance.new("Frame")
+        Outer.Name = name.."_Outer"
+        Outer.Size = UDim2.fromOffset(79, 42); Outer.Position = pos
+        Outer.BackgroundColor3 = Color3.fromRGB(0,0,0); Outer.BorderSizePixel = 0
+        Outer.ZIndex = 99; Outer.Parent = FloatingGui
+        Instance.new("UICorner", Outer).CornerRadius = UDim.new(0, 14)
+        local s = Instance.new("UIStroke"); s.Color = Color3.fromRGB(255,0,0); s.Thickness = 2.5; s.Parent = Outer
+        local btn = Instance.new("TextButton")
+        btn.Name = name; btn.Size = UDim2.fromOffset(75, 38); btn.Position = UDim2.new(0,2,0,2)
+        btn.BackgroundColor3 = Color3.fromRGB(10,10,10); btn.Text = text
+        btn.TextColor3 = Color3.fromRGB(255,0,0); btn.TextSize = 16
+        btn.Font = Enum.Font.GothamBold; btn.ZIndex = 100; btn.Parent = Outer
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 12)
+        return Outer, btn
+    end
+
+    DashOuter = CreateRedBlackButton("Dash", "Dash", UDim2.new(1, -90, 0.5, -20))
+    local DashBtn = DashOuter:FindFirstChildOfClass("TextButton")
+
+    local function MakeDraggable(Button, Callback)
+        local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
+        Button.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = true; moved = false; dragStart = i.Position; startPos = Button.Position
             end
-
-            local Success, TabPosition = pcall(function()
-                return TabsAPI:GetCurrentTabPos()
-            end)
-
-            if Success and TabPosition then
-                local CanvasY = TabHolder.CanvasPosition.Y
-                SelectorFrame.Position = UDim2.fromOffset(0, TabPosition + 17 + CanvasY)
-                SelectorFrame.Size = UDim2.fromOffset(4, 34)
-                SelectorFrame.Visible = true
+        end)
+        Button.InputChanged:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then dragInput = i end
+        end)
+        Button.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+                if not moved then Callback() end
             end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if i == dragInput and dragging then
+                local d = i.Position - dragStart
+                if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then moved = true end
+                Button.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+            end
+        end)
+    end
+
+    local function MakeDraggableOuter(Outer, Inner, Callback)
+        local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
+        Inner.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = true; moved = false; dragStart = i.Position; startPos = Outer.Position
+            end
+        end)
+        Inner.InputChanged:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then dragInput = i end
+        end)
+        Inner.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+                if not moved then Callback() end
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if i == dragInput and dragging then
+                local d = i.Position - dragStart
+                if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then moved = true end
+                Outer.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+            end
+        end)
+    end
+
+    MakeDraggable(NButton, function()
+        if WindowRef then
+            if WindowRef._Opened ~= false then pcall(function() WindowRef:Close() end) WindowRef._Opened = false
+            else pcall(function() WindowRef:Open() end) WindowRef._Opened = true end
         end
+    end)
+    MakeDraggableOuter(DashOuter, DashBtn, function()
+        DashBtn.Text = "..."
+        DoDash()
+        task.wait(0.25); DashBtn.Text = "Dash"
+    end)
+
+    --===== CLEANUP =====
+    _G.NAZK_HUB_CLEANUP = function()
+        pcall(function() if FloatingGui then FloatingGui:Destroy() end end)
+        pcall(function() if WindowRef then WindowRef:Destroy() end end)
+        pcall(function() if dashConn then dashConn:Disconnect() end end)
+        pcall(function() if LoadingGui then LoadingGui:Destroy() end end)
+        StopESP(); StopFollow(); StopFling()
+        StopAntiAFK(); StopNoClip(); StopAntiFling(); StopAutoRejoin()
+        StopInfiniteJump(); StopSpeed(); StopAntiLag(); StopTween()
+        StopAutoIncubator(); StopAutoRebirth(); StopAutoTower()
+        StopAutoRecycler(); StopAutoUpgradeGenerator()
+        StopAutoBuyGeneratorFoodChicken(); StopAutoUpgradeCoop()
+        StopAutoArenaFight()
+        _G.NAZK_HUB_RUNNING = false
     end
 end)
+
+print("NAZK HUB RED - Full Edition + PitScrap Ready")
