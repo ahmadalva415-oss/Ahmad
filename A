@@ -1,40 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
-require('dotenv').config();
-
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
-
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ]
-});
-
-// Convert GitHub/Pastebin URL to raw
-function toRawUrl(url) {
-    if (url.includes('raw.githubusercontent.com')) return url;
-    if (url.includes('github.com')) {
-        return url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/');
-    }
-    if (url.includes('pastebin.com') && !url.includes('pastebin.com/raw/')) {
-        return url.replace('pastebin.com/', 'pastebin.com/raw/');
-    }
-    return url;
-}
-
-// Ask Groq AI to analyze the Lua script
-async function analyzeWithAI(code) {
-    const prompt = `You are an expert Roblox Lua script analyzer. Analyze the following script and extract its UI structure.
-
-Rules:
-1. Find all Tabs (look for ":Tab", ":CreateTab", "Title =", "Name =" patterns).
-2. For each tab, list all Buttons, Toggles, Sliders, Dropdowns, and Inputs inside it.
-3. Use this EXACT format (tree with emojis):
-📁 Tab Name
-   🔘 Button Name
-   🔀 Toggle Name [ON/OFF]
+o   🔀 Toggle Name [ON/OFF]
    🎚️ Slider Name
    📋 Dropdown Name
    📝 Input Name
