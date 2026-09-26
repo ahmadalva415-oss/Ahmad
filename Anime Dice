@@ -1,0 +1,1186 @@
+-- NAZK HUB RED | DASH + ROLL DICE + COLLECT MONEY + MISC - FULL COMPLETE FINAL
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Debris = game:GetService("Debris")
+local Workspace = game:GetService("Workspace")
+local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+
+if _G.NAZK_HUB_RUNNING then
+    pcall(function() if _G.NAZK_HUB_CLEANUP then _G.NAZK_HUB_CLEANUP() end end)
+    task.wait(0.3)
+end
+_G.NAZK_HUB_RUNNING = true
+
+local LOGO_ID    = "rbxassetid://139759348685642"
+local LOGO_SIZE  = 38
+local LOGO_POS   = UDim2.new(0, -6, 0.5, -19)
+local DISCORD_URL = "https://discord.gg/ne5vgR9q8"
+
+local function GetParent()
+    local ok, res = pcall(function() return gethui() end)
+    if ok and res then return res end
+    return CoreGui
+end
+
+-- ========== Dash System (Global) ==========
+getgenv().NAZK_DashEnabled = true
+getgenv().NAZK_DashPower = 45
+getgenv().NAZK_DashVertical = 0
+getgenv().NAZK_DashKey = Enum.KeyCode.Q
+getgenv().NAZK_DashCooldown = 0.25
+getgenv().NAZK_dashLast = 0
+
+getgenv().NAZK_DoDash = function()
+    if tick() - (getgenv().NAZK_dashLast or 0) < (getgenv().NAZK_DashCooldown or 0.25) then return end
+    getgenv().NAZK_dashLast = tick()
+
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+
+    local dir = cam.CFrame.LookVector
+    dir = Vector3.new(dir.X, 0, dir.Z)
+    if dir.Magnitude < 0.01 then return end
+    dir = dir.Unit
+
+    local power = getgenv().NAZK_DashPower or 45
+    local up = getgenv().NAZK_DashVertical or 0
+
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+    bv.Velocity = dir * power + Vector3.new(0, up, 0)
+    bv.P = 20000
+    bv.Parent = root
+    Debris:AddItem(bv, 0.15)
+end
+
+local dashConn = UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if not getgenv().NAZK_DashEnabled then return end
+    if input.KeyCode == getgenv().NAZK_DashKey then
+        getgenv().NAZK_DoDash()
+    end
+end)
+
+-- ========== Roll Dice System (Global) ==========
+getgenv().NAZK_RollSpeed = 0.001
+getgenv().NAZK_RollRunning = false
+getgenv().NAZK_RollThread = nil
+
+local function GetRollRemote()
+    local ok, remote = pcall(function()
+        return ReplicatedStorage.Network.RollService.RF.RollDice
+    end)
+    if ok and remote then return remote end
+    return nil
+end
+
+getgenv().NAZK_StopRolling = function()
+    getgenv().NAZK_RollRunning = false
+    if getgenv().NAZK_RollThread then
+        pcall(task.cancel, getgenv().NAZK_RollThread)
+        getgenv().NAZK_RollThread = nil
+    end
+end
+
+getgenv().NAZK_StartRolling = function(notifyFn)
+    if getgenv().NAZK_RollRunning then return end
+    getgenv().NAZK_RollRunning = true
+
+    getgenv().NAZK_RollThread = task.spawn(function()
+        while getgenv().NAZK_RollRunning do
+            local remote = GetRollRemote()
+            if not remote then
+                getgenv().NAZK_StopRolling()
+                if notifyFn then notifyFn("RollDice remote not found!", "alert-triangle") end
+                break
+            end
+            pcall(function() remote:InvokeServer() end)
+            task.wait(getgenv().NAZK_RollSpeed or 0.001)
+        end
+    end)
+end
+
+-- ========== Collect Money System (Global) ==========
+getgenv().NAZK_CollectInterval = 0.5
+getgenv().NAZK_CollectRunning = false
+getgenv().NAZK_CollectThread = nil
+
+local function GetCollectRemote()
+    local ok, remote = pcall(function()
+        return ReplicatedStorage.Network.PlotService.RE.CollectBalance
+    end)
+    if ok and remote then return remote end
+    return nil
+end
+
+getgenv().NAZK_CollectOnce = function()
+    local remote = GetCollectRemote()
+    if not remote then return false end
+    for i = 1, 15 do
+        pcall(function() remote:FireServer(i) end)
+    end
+    return true
+end
+
+getgenv().NAZK_StopCollecting = function()
+    getgenv().NAZK_CollectRunning = false
+    if getgenv().NAZK_CollectThread then
+        pcall(task.cancel, getgenv().NAZK_CollectThread)
+        getgenv().NAZK_CollectThread = nil
+    end
+end
+
+getgenv().NAZK_StartCollecting = function(notifyFn)
+    if getgenv().NAZK_CollectRunning then return end
+    getgenv().NAZK_CollectRunning = true
+
+    getgenv().NAZK_CollectThread = task.spawn(function()
+        while getgenv().NAZK_CollectRunning do
+            local ok = getgenv().NAZK_CollectOnce()
+            if not ok then
+                getgenv().NAZK_StopCollecting()
+                if notifyFn then notifyFn("CollectBalance remote not found!", "alert-triangle") end
+                break
+            end
+            task.wait(getgenv().NAZK_CollectInterval or 0.5)
+        end
+    end)
+end
+
+-- ========== Misc System (Global) ==========
+getgenv().NAZK_MiscSpeedEnabled = false
+getgenv().NAZK_MiscSpeed = 16
+getgenv().NAZK_MiscJumpEnabled = false
+getgenv().NAZK_MiscJump = 50
+getgenv().NAZK_MiscInfJump = false
+getgenv().NAZK_MiscNoclip = false
+getgenv().NAZK_MiscFullBright = false
+getgenv().NAZK_MiscAntiAFK = false
+getgenv().NAZK_MiscFastRespawn = false
+getgenv().NAZK_MiscRejoin = false
+getgenv().NAZK_MiscHideAcc = false
+getgenv().NAZK_MiscLowGFX = false
+getgenv().NAZK_MiscShowStats = false
+
+local miscSavedLighting = nil
+local miscAccConn = nil
+
+local miscCharConn = LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.6)
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    if getgenv().NAZK_MiscSpeedEnabled then
+        hum.WalkSpeed = getgenv().NAZK_MiscSpeed or 16
+    end
+    if getgenv().NAZK_MiscJumpEnabled then
+        hum.UseJumpPower = true
+        hum.JumpPower = getgenv().NAZK_MiscJump or 50
+    end
+end)
+
+-- Infinite Jump
+local miscJumpConn = UserInputService.JumpRequest:Connect(function()
+    if not getgenv().NAZK_MiscInfJump then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+-- Noclip
+local miscNoclipConn = RunService.Stepped:Connect(function()
+    if not getgenv().NAZK_MiscNoclip then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    for _, v in ipairs(char:GetDescendants()) do
+        if v:IsA("BasePart") and v.CanCollide then
+            v.CanCollide = false
+        end
+    end
+end)
+
+-- Full Bright
+getgenv().NAZK_SetFullBright = function(v)
+    if v then
+        miscSavedLighting = {
+            Ambient = Lighting.Ambient,
+            Brightness = Lighting.Brightness,
+            ClockTime = Lighting.ClockTime,
+            FogEnd = Lighting.FogEnd,
+            FogStart = Lighting.FogStart,
+            GlobalShadows = Lighting.GlobalShadows,
+            OutdoorAmbient = Lighting.OutdoorAmbient,
+        }
+        Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+        Lighting.Brightness = 3
+        Lighting.ClockTime = 14
+        Lighting.FogEnd = 100000
+        Lighting.FogStart = 0
+        Lighting.GlobalShadows = false
+        Lighting.OutdoorAmbient = Color3.fromRGB(178, 178, 178)
+    else
+        if miscSavedLighting then
+            Lighting.Ambient = miscSavedLighting.Ambient
+            Lighting.Brightness = miscSavedLighting.Brightness
+            Lighting.ClockTime = miscSavedLighting.ClockTime
+            Lighting.FogEnd = miscSavedLighting.FogEnd
+            Lighting.FogStart = miscSavedLighting.FogStart
+            Lighting.GlobalShadows = miscSavedLighting.GlobalShadows
+            Lighting.OutdoorAmbient = miscSavedLighting.OutdoorAmbient
+            miscSavedLighting = nil
+        end
+    end
+end
+
+-- Anti-AFK
+local miscAntiAFKConn = LocalPlayer.Idled:Connect(function()
+    if not getgenv().NAZK_MiscAntiAFK then return end
+    local vu = game:GetService("VirtualUser")
+    vu:CaptureController()
+    vu:ClickButton2(Vector2.new())
+end)
+
+-- Fast Respawn
+local function HookFastRespawn(char)
+    if not char then return end
+    local hum = char:WaitForChild("Humanoid", 5)
+    if not hum then return end
+    hum.Died:Connect(function()
+        if not getgenv().NAZK_MiscFastRespawn then return end
+        task.wait(0.1)
+        pcall(function() LocalPlayer:LoadCharacter() end)
+    end)
+end
+
+local miscRespawnConn = LocalPlayer.CharacterAdded:Connect(HookFastRespawn)
+if LocalPlayer.Character then HookFastRespawn(LocalPlayer.Character) end
+
+-- Rejoin on Disconnect
+local miscRejoinConn = Players.PlayerRemoving:Connect(function(plr)
+    if plr == LocalPlayer and getgenv().NAZK_MiscRejoin then
+        pcall(function()
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        end)
+    end
+end)
+
+-- Hide Accessories
+local function ApplyHideAccessories()
+    if not getgenv().NAZK_MiscHideAcc then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    for _, v in ipairs(char:GetChildren()) do
+        if v:IsA("Accessory") or v:IsA("Accoutrement") then
+            v:Destroy()
+        end
+    end
+end
+
+getgenv().NAZK_ApplyHideAcc = ApplyHideAccessories
+
+miscAccConn = LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    ApplyHideAccessories()
+end)
+
+-- Low Graphics
+getgenv().NAZK_SetLowGraphics = function(v)
+    if v then
+        pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+        for _, d in ipairs(game:GetDescendants()) do
+            if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Smoke") or d:IsA("Fire") or d:IsA("Sparkles") then
+                pcall(function() d.Enabled = false end)
+            end
+        end
+        for _, d in ipairs(Lighting:GetChildren()) do
+            if d:IsA("PostEffect") or d:IsA("Atmosphere") then
+                pcall(function() d.Enabled = false end)
+            end
+        end
+    else
+        pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic end)
+        for _, d in ipairs(game:GetDescendants()) do
+            if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Smoke") or d:IsA("Fire") or d:IsA("Sparkles") then
+                pcall(function() d.Enabled = true end)
+            end
+        end
+        for _, d in ipairs(Lighting:GetChildren()) do
+            if d:IsA("PostEffect") or d:IsA("Atmosphere") then
+                pcall(function() d.Enabled = true end)
+            end
+        end
+    end
+end
+
+-- Server Hop
+getgenv().NAZK_ServerHop = function()
+    local ok, res = pcall(function()
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
+    if not ok or not res or not res.data then return false end
+    local servers = {}
+    for _, s in ipairs(res.data) do
+        if s.playing < s.maxPlayers and s.id ~= game.JobId then
+            table.insert(servers, s.id)
+        end
+    end
+    if #servers == 0 then return false end
+    pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
+    end)
+    return true
+end
+
+-- ========== Stats Overlay (FPS + Ping) ==========
+local StatsGui = Instance.new("ScreenGui")
+StatsGui.Name = "NAZK_Stats"
+StatsGui.ResetOnSpawn = false
+StatsGui.IgnoreGuiInset = true
+StatsGui.DisplayOrder = 1
+StatsGui.Parent = GetParent()
+StatsGui.Enabled = false
+
+local StatsFrame = Instance.new("Frame")
+StatsFrame.Name = "StatsFrame"
+StatsFrame.Size = UDim2.fromOffset(170, 60)
+StatsFrame.Position = UDim2.new(0, 15, 0, 90)
+StatsFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+StatsFrame.BackgroundTransparency = 0.25
+StatsFrame.BorderSizePixel = 0
+StatsFrame.Parent = StatsGui
+Instance.new("UICorner", StatsFrame).CornerRadius = UDim.new(0, 8)
+local StatsStroke = Instance.new("UIStroke")
+StatsStroke.Color = Color3.fromRGB(255, 0, 0)
+StatsStroke.Thickness = 1.5
+StatsStroke.Parent = StatsFrame
+
+local FPSLabel = Instance.new("TextLabel")
+FPSLabel.Name = "FPS"
+FPSLabel.Size = UDim2.new(1, -20, 0, 20)
+FPSLabel.Position = UDim2.new(0, 10, 0, 8)
+FPSLabel.BackgroundTransparency = 1
+FPSLabel.Text = "FPS: --"
+FPSLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+FPSLabel.TextXAlignment = Enum.TextXAlignment.Left
+FPSLabel.Font = Enum.Font.GothamBold
+FPSLabel.TextSize = 14
+FPSLabel.Parent = StatsFrame
+
+local PingLabel = Instance.new("TextLabel")
+PingLabel.Name = "Ping"
+PingLabel.Size = UDim2.new(1, -20, 0, 20)
+PingLabel.Position = UDim2.new(0, 10, 0, 30)
+PingLabel.BackgroundTransparency = 1
+PingLabel.Text = "Ping: -- ms"
+PingLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+PingLabel.TextXAlignment = Enum.TextXAlignment.Left
+PingLabel.Font = Enum.Font.GothamBold
+PingLabel.TextSize = 14
+PingLabel.Parent = StatsFrame
+
+do
+    local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+    StatsFrame.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = i.Position
+            startPos = StatsFrame.Position
+        end
+    end)
+    StatsFrame.InputChanged:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+            dragInput = i
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if i == dragInput and dragging then
+            local d = i.Position - dragStart
+            StatsFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end)
+    StatsFrame.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+end
+
+local fpsFrames = 0
+local fpsLast = tick()
+local fpsConn = RunService.RenderStepped:Connect(function()
+    fpsFrames = fpsFrames + 1
+    local now = tick()
+    if now - fpsLast >= 1 then
+        local fps = math.floor(fpsFrames / (now - fpsLast) + 0.5)
+        FPSLabel.Text = "FPS: " .. fps
+        if fps >= 50 then
+            FPSLabel.TextColor3 = Color3.fromRGB(85, 255, 85)
+        elseif fps >= 30 then
+            FPSLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+        else
+            FPSLabel.TextColor3 = Color3.fromRGB(255, 60, 60)
+        end
+        fpsFrames = 0
+        fpsLast = now
+    end
+end)
+
+local pingAccum = 0
+local pingConn = RunService.Heartbeat:Connect(function(dt)
+    pingAccum = pingAccum + dt
+    if pingAccum >= 1 then
+        pingAccum = 0
+        local ok, ping = pcall(function() return LocalPlayer:GetNetworkPing() end)
+        if ok and ping then
+            local ms = math.floor(ping * 1000 + 0.5)
+            PingLabel.Text = "Ping: " .. ms .. " ms"
+            if ms <= 80 then
+                PingLabel.TextColor3 = Color3.fromRGB(85, 255, 85)
+            elseif ms <= 150 then
+                PingLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+            else
+                PingLabel.TextColor3 = Color3.fromRGB(255, 60, 60)
+            end
+        end
+    end
+end)
+
+getgenv().NAZK_SetStats = function(v)
+    StatsGui.Enabled = v
+end
+
+-- ========== Loading UI ==========
+local LoadingGui = Instance.new("ScreenGui")
+LoadingGui.Name = "NAZK_Loading"
+LoadingGui.ResetOnSpawn = false
+LoadingGui.IgnoreGuiInset = true
+LoadingGui.Parent = GetParent()
+
+local BlurBg = Instance.new("Frame")
+BlurBg.Size = UDim2.new(1, 0, 1, 0)
+BlurBg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+BlurBg.BackgroundTransparency = 0.2
+BlurBg.BorderSizePixel = 0
+BlurBg.Parent = LoadingGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.fromOffset(340, 400)
+MainFrame.Position = UDim2.new(0.5, -170, 0.5, -200)
+MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = LoadingGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 6)
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(255, 0, 0)
+MainStroke.Thickness = 2
+MainStroke.Parent = MainFrame
+
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.fromOffset(140, 140)
+Logo.Position = UDim2.new(0.5, -70, 0, 35)
+Logo.BackgroundTransparency = 1
+Logo.Image = LOGO_ID
+Logo.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Position = UDim2.new(0, 0, 0, 190)
+Title.BackgroundTransparency = 1
+Title.Text = "NAZK HUB"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 36
+Title.Parent = MainFrame
+
+local Sub = Instance.new("TextLabel")
+Sub.Size = UDim2.new(1, 0, 0, 20)
+Sub.Position = UDim2.new(0, 0, 0, 230)
+Sub.BackgroundTransparency = 1
+Sub.Text = "R E D   E D I T I O N"
+Sub.TextColor3 = Color3.fromRGB(255, 0, 0)
+Sub.Font = Enum.Font.GothamBold
+Sub.TextSize = 12
+Sub.Parent = MainFrame
+
+local BarBG = Instance.new("Frame")
+BarBG.Size = UDim2.new(0.75, 0, 0, 8)
+BarBG.Position = UDim2.new(0.125, 0, 0, 285)
+BarBG.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+BarBG.BorderSizePixel = 0
+BarBG.Parent = MainFrame
+Instance.new("UICorner", BarBG).CornerRadius = UDim.new(1, 0)
+
+local BarFill = Instance.new("Frame")
+BarFill.Size = UDim2.new(0, 0, 1, 0)
+BarFill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+BarFill.BorderSizePixel = 0
+BarFill.Parent = BarBG
+Instance.new("UICorner", BarFill).CornerRadius = UDim.new(1, 0)
+
+local Percent = Instance.new("TextLabel")
+Percent.Size = UDim2.new(1, 0, 0, 20)
+Percent.Position = UDim2.new(0, 0, 0, 305)
+Percent.BackgroundTransparency = 1
+Percent.Text = "0%"
+Percent.TextColor3 = Color3.new(1, 1, 1)
+Percent.Font = Enum.Font.GothamBold
+Percent.TextSize = 18
+Percent.Parent = MainFrame
+
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.new(1, 0, 0, 15)
+Status.Position = UDim2.new(0, 0, 0, 260)
+Status.BackgroundTransparency = 1
+Status.Text = "Loading..."
+Status.TextColor3 = Color3.fromRGB(150, 150, 150)
+Status.Font = Enum.Font.Gotham
+Status.TextSize = 12
+Status.Parent = MainFrame
+
+local mainLoaded = false
+local WindowRef = nil
+
+getgenv().NAZK_DashButton = nil
+getgenv().NAZK_HideDashButton = function()
+    local btn = getgenv().NAZK_DashButton
+    if btn then btn.Visible = false end
+end
+getgenv().NAZK_ShowDashButton = function()
+    local btn = getgenv().NAZK_DashButton
+    if btn then btn.Visible = true end
+end
+
+-- ========== Build Hub ==========
+local function BuildHub()
+    local ok, WindUI = pcall(function()
+        return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua"))()
+    end)
+    if not ok or not WindUI then
+        ok, WindUI = pcall(function()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+        end)
+    end
+    if not ok or not WindUI then return nil end
+
+    WindUI:AddTheme({
+        Name = "NAZK Red",
+        Accent = Color3.fromRGB(255, 0, 0),
+        Background = Color3.fromRGB(12, 12, 12),
+        Outline = Color3.fromRGB(255, 0, 0),
+        Text = Color3.new(1, 1, 1),
+        Button = Color3.fromRGB(25, 25, 25),
+        Icon = Color3.fromRGB(255, 0, 0),
+    })
+
+    local Window = WindUI:CreateWindow({
+        Title = "NAZK HUB",
+        Icon = LOGO_ID,
+        Author = "NAZK | RED EDITION",
+        Folder = "NAZK_RED_DASH",
+        Size = UDim2.fromOffset(580, 460),
+        Theme = "NAZK Red",
+        Transparent = true,
+        HasOutline = true,
+    })
+    pcall(function() Window:EditOpenButton({ Enabled = false }) end)
+
+    task.spawn(function()
+        task.wait(0.4)
+        pcall(function()
+            for _, g in ipairs(GetParent():GetChildren()) do
+                if g:IsA("ScreenGui") then
+                    for _, v in ipairs(g:GetDescendants()) do
+                        if v:IsA("ImageLabel") and tostring(v.Image):find("139759348685642") then
+                            v.AnchorPoint = Vector2.new(0, 0)
+                            v.Size = UDim2.fromOffset(LOGO_SIZE, LOGO_SIZE)
+                            v.Position = LOGO_POS
+                        end
+                    end
+                end
+            end
+        end)
+    end)
+
+    local function Notify(content, icon)
+        WindUI:Notify({ Title = "NAZK", Content = content, Duration = 3, Icon = icon or LOGO_ID })
+    end
+
+    -- ========== Discord Tab (First) ==========
+    local DiscordTab = Window:Tab({ Title = "Discord", Icon = "message-circle" })
+
+    DiscordTab:Section({ Title = "Community" })
+
+    DiscordTab:Paragraph({
+        Title = "Join Our Discord Server",
+        Desc = "If you encounter any issues, bugs, or need support, please contact us on our Discord server. Our team is active and ready to help.",
+    })
+
+    DiscordTab:Paragraph({
+        Title = "Invite Link",
+        Desc = DISCORD_URL,
+    })
+
+    DiscordTab:Button({
+        Title = "Copy Discord Invite",
+        Icon = "copy",
+        Callback = function()
+            local ok = pcall(function() setclipboard(DISCORD_URL) end)
+            if ok then
+                Notify("Discord invite copied to clipboard", "copy")
+            else
+                Notify("Failed to copy - use the link above", "alert-triangle")
+            end
+        end
+    })
+
+    DiscordTab:Button({
+        Title = "Join Discord Server",
+        Icon = "external-link",
+        Callback = function()
+            Notify("Copy the invite link and open it in your browser", "external-link")
+            pcall(function() setclipboard(DISCORD_URL) end)
+        end
+    })
+
+    -- ========== Dash system Tab ==========
+    local DashTab = Window:Tab({ Title = "Dash system", Icon = "zap" })
+
+    DashTab:Section({ Title = "Dash Settings" })
+
+    DashTab:Toggle({
+        Title = "Dash Enabled (Key Bind)",
+        Desc = "Works even when UI is closed",
+        Default = true,
+        Callback = function(v) getgenv().NAZK_DashEnabled = v end
+    })
+
+    DashTab:Slider({
+        Title = "Dash Power",
+        Value = { Min = 10, Max = 200, Default = 45 },
+        Callback = function(v) getgenv().NAZK_DashPower = v end
+    })
+
+    DashTab:Slider({
+        Title = "Dash Height (Vertical)",
+        Value = { Min = 0, Max = 100, Default = 0 },
+        Callback = function(v) getgenv().NAZK_DashVertical = v end
+    })
+
+    DashTab:Slider({
+        Title = "Dash Cooldown",
+        Value = { Min = 0, Max = 2, Default = 0.25 },
+        Callback = function(v) getgenv().NAZK_DashCooldown = v end
+    })
+
+    DashTab:Dropdown({
+        Title = "Dash Key",
+        Values = { "Q", "E", "F", "LeftShift", "C", "V", "X" },
+        Default = "Q",
+        Callback = function(v)
+            local map = {
+                Q = Enum.KeyCode.Q,
+                E = Enum.KeyCode.E,
+                F = Enum.KeyCode.F,
+                LeftShift = Enum.KeyCode.LeftShift,
+                C = Enum.KeyCode.C,
+                V = Enum.KeyCode.V,
+                X = Enum.KeyCode.X,
+            }
+            getgenv().NAZK_DashKey = map[v] or Enum.KeyCode.Q
+        end
+    })
+
+    DashTab:Section({ Title = "Floating Button" })
+
+    DashTab:Button({
+        Title = "Hide Dash Button",
+        Icon = "eye-off",
+        Callback = function()
+            if getgenv().NAZK_HideDashButton then
+                getgenv().NAZK_HideDashButton()
+                Notify("Dash button hidden", "eye-off")
+            end
+        end
+    })
+
+    DashTab:Button({
+        Title = "Show Dash Button",
+        Icon = "eye",
+        Callback = function()
+            if getgenv().NAZK_ShowDashButton then
+                getgenv().NAZK_ShowDashButton()
+                Notify("Dash button shown", "eye")
+            end
+        end
+    })
+
+    -- ========== Roll Dice Tab ==========
+    local RollTab = Window:Tab({ Title = "Roll Dice", Icon = "dice-6" })
+
+    RollTab:Section({ Title = "Roll Settings" })
+
+    RollTab:Slider({
+        Title = "Roll Speed (s)",
+        Desc = "Recommended: 0.001 (min)",
+        Value = { Min = 0.001, Max = 2, Default = 0.001 },
+        Callback = function(v) getgenv().NAZK_RollSpeed = v end
+    })
+
+    RollTab:Toggle({
+        Title = "Auto Roll Dice",
+        Desc = "Spam RollDice at selected speed",
+        Default = false,
+        Callback = function(v)
+            if v then
+                getgenv().NAZK_StartRolling(function(msg, icon) Notify(msg, icon) end)
+            else
+                getgenv().NAZK_StopRolling()
+            end
+        end
+    })
+
+    -- ========== Collect Money Tab ==========
+    local CollectTab = Window:Tab({ Title = "Collect Money", Icon = "coins" })
+
+    CollectTab:Section({ Title = "Collect Settings" })
+
+    CollectTab:Slider({
+        Title = "Collect Interval (s)",
+        Desc = "How often to fire slots 1-15",
+        Value = { Min = 0.05, Max = 10, Default = 0.5 },
+        Callback = function(v) getgenv().NAZK_CollectInterval = v end
+    })
+
+    CollectTab:Toggle({
+        Title = "Auto Collect Money",
+        Desc = "Fires CollectBalance(1..15) all at once, on interval",
+        Default = false,
+        Callback = function(v)
+            if v then
+                getgenv().NAZK_StartCollecting(function(msg, icon) Notify(msg, icon) end)
+            else
+                getgenv().NAZK_StopCollecting()
+            end
+        end
+    })
+
+    -- ========== Tower Tab (Coming Soon) ==========
+    local TowerTab = Window:Tab({ Title = "Tower", Icon = "lock" })
+
+    TowerTab:Section({ Title = "Locked" })
+
+    TowerTab:Paragraph({
+        Title = "Coming Soon",
+        Desc = "This tab is currently under development. Stay tuned for updates!",
+    })
+
+    -- ========== Misc Tab ==========
+    local MiscTab = Window:Tab({ Title = "Misc", Icon = "settings-2" })
+
+    MiscTab:Section({ Title = "Player" })
+
+    MiscTab:Toggle({
+        Title = "Speed",
+        Desc = "Enable custom walk speed",
+        Default = false,
+        Callback = function(v)
+            getgenv().NAZK_MiscSpeedEnabled = v
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.WalkSpeed = v and (getgenv().NAZK_MiscSpeed or 16) or 16
+            end
+        end
+    })
+
+    MiscTab:Slider({
+        Title = "Speed Value",
+        Value = { Min = 16, Max = 300, Default = 16 },
+        Callback = function(v)
+            getgenv().NAZK_MiscSpeed = v
+            if getgenv().NAZK_MiscSpeedEnabled then
+                local char = LocalPlayer.Character
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if hum then hum.WalkSpeed = v end
+            end
+        end
+    })
+
+    MiscTab:Toggle({
+        Title = "Jump Power",
+        Desc = "Enable custom jump power",
+        Default = false,
+        Callback = function(v)
+            getgenv().NAZK_MiscJumpEnabled = v
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.UseJumpPower = true
+                hum.JumpPower = v and (getgenv().NAZK_MiscJump or 50) or 50
+            end
+        end
+    })
+
+    MiscTab:Slider({
+        Title = "Jump Power Value",
+        Value = { Min = 50, Max = 500, Default = 50 },
+        Callback = function(v)
+            getgenv().NAZK_MiscJump = v
+            if getgenv().NAZK_MiscJumpEnabled then
+                local char = LocalPlayer.Character
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    hum.UseJumpPower = true
+                    hum.JumpPower = v
+                end
+            end
+        end
+    })
+
+    MiscTab:Toggle({
+        Title = "Infinite Jump",
+        Desc = "Jump even in mid-air",
+        Default = false,
+        Callback = function(v) getgenv().NAZK_MiscInfJump = v end
+    })
+
+    MiscTab:Toggle({
+        Title = "Noclip",
+        Desc = "Walk through walls",
+        Default = false,
+        Callback = function(v) getgenv().NAZK_MiscNoclip = v end
+    })
+
+    MiscTab:Section({ Title = "Visuals" })
+
+    MiscTab:Toggle({
+        Title = "Full Bright",
+        Desc = "Remove darkness and fog",
+        Default = false,
+        Callback = function(v)
+            getgenv().NAZK_MiscFullBright = v
+            getgenv().NAZK_SetFullBright(v)
+        end
+    })
+
+    MiscTab:Toggle({
+        Title = "Hide Accessories",
+        Desc = "Remove hats and accessories (FPS boost)",
+        Default = false,
+        Callback = function(v)
+            getgenv().NAZK_MiscHideAcc = v
+            if v then
+                getgenv().NAZK_ApplyHideAcc()
+            end
+        end
+    })
+
+    MiscTab:Toggle({
+        Title = "Low Graphics",
+        Desc = "Reduce particles & effects (FPS boost)",
+        Default = false,
+        Callback = function(v)
+            getgenv().NAZK_MiscLowGFX = v
+            getgenv().NAZK_SetLowGraphics(v)
+        end
+    })
+
+    MiscTab:Section({ Title = "Stats" })
+
+    MiscTab:Toggle({
+        Title = "Show FPS/Ping",
+        Desc = "Display FPS + Ping overlay (draggable)",
+        Default = false,
+        Callback = function(v)
+            getgenv().NAZK_MiscShowStats = v
+            getgenv().NAZK_SetStats(v)
+        end
+    })
+
+    MiscTab:Section({ Title = "Utility" })
+
+    MiscTab:Toggle({
+        Title = "Anti-AFK",
+        Desc = "Prevent idle kick",
+        Default = false,
+        Callback = function(v) getgenv().NAZK_MiscAntiAFK = v end
+    })
+
+    MiscTab:Toggle({
+        Title = "Fast Respawn",
+        Desc = "Respawn instantly on death",
+        Default = false,
+        Callback = function(v) getgenv().NAZK_MiscFastRespawn = v end
+    })
+
+    MiscTab:Toggle({
+        Title = "Rejoin on Disconnect",
+        Desc = "Auto-rejoin if kicked",
+        Default = false,
+        Callback = function(v) getgenv().NAZK_MiscRejoin = v end
+    })
+
+    MiscTab:Section({ Title = "Server" })
+
+    MiscTab:Button({
+        Title = "Reset Character",
+        Icon = "rotate-ccw",
+        Callback = function()
+            local char = LocalPlayer.Character
+            if char then
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if hum then hum.Health = 0 end
+            end
+            Notify("Character reset", "rotate-ccw")
+        end
+    })
+
+    MiscTab:Button({
+        Title = "Rejoin Server",
+        Icon = "log-in",
+        Callback = function()
+            Notify("Rejoining...", "log-in")
+            task.wait(0.5)
+            pcall(function()
+                TeleportService:Teleport(game.PlaceId, LocalPlayer)
+            end)
+        end
+    })
+
+    MiscTab:Button({
+        Title = "Server Hop",
+        Icon = "shuffle",
+        Callback = function()
+            local ok = getgenv().NAZK_ServerHop()
+            if not ok then
+                Notify("No servers found!", "alert-triangle")
+            end
+        end
+    })
+
+    WindUI:Notify({
+        Title = "NAZK HUB RED",
+        Content = "Loaded - All features ready!",
+        Duration = 3,
+        Icon = LOGO_ID
+    })
+
+    return Window, WindUI
+end
+
+-- ========== Boot ==========
+task.spawn(function()
+    local hubWindow, WindUI
+    task.spawn(function()
+        local ok, win, ui = pcall(BuildHub)
+        if ok and win then
+            hubWindow = win
+            WindUI = ui
+            WindowRef = win
+            mainLoaded = true
+        end
+    end)
+
+    for i = 1, 85 do
+        BarFill.Size = UDim2.new(i / 100, 0, 1, 0)
+        Percent.Text = i .. "%"
+        if i < 30 then Status.Text = "Loading assets..."
+        elseif i < 60 then Status.Text = "Loading WindUI..."
+        else Status.Text = "Building UI..." end
+        task.wait(0.02)
+    end
+
+    Status.Text = "Waiting for UI..."
+    local waited = 0
+    while not mainLoaded and waited < 12 do
+        BarFill.Size = UDim2.new(0.85 + math.sin(tick() * 4) * 0.03, 0, 1, 0)
+        task.wait(0.1)
+        waited = waited + 0.1
+    end
+
+    for i = 85, 100 do
+        BarFill.Size = UDim2.new(i / 100, 0, 1, 0)
+        Percent.Text = i .. "%"
+        Status.Text = "Opening..."
+        task.wait(0.03)
+    end
+    task.wait(0.2)
+
+    TweenService:Create(MainFrame, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+    TweenService:Create(BlurBg, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+    for _, v in ipairs(MainFrame:GetDescendants()) do
+        if v:IsA("TextLabel") then
+            TweenService:Create(v, TweenInfo.new(0.4), { TextTransparency = 1 }):Play()
+        elseif v:IsA("ImageLabel") then
+            TweenService:Create(v, TweenInfo.new(0.4), { ImageTransparency = 1 }):Play()
+        elseif v:IsA("Frame") then
+            TweenService:Create(v, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+        end
+    end
+    task.wait(0.45)
+    pcall(function() LoadingGui:Destroy() end)
+    if hubWindow then hubWindow:Open() end
+
+    -- ========== Floating UI ==========
+    local ToggleGui = Instance.new("ScreenGui")
+    ToggleGui.Name = "NAZK_Floating"
+    ToggleGui.ResetOnSpawn = false
+    ToggleGui.Parent = GetParent()
+    getgenv().NAZK_ToggleGui = ToggleGui
+
+    local NButton = Instance.new("ImageButton")
+    NButton.Name = "imageLabel"
+    NButton.Size = UDim2.fromOffset(60, 60)
+    NButton.Position = UDim2.new(0, 15, 0.5, -30)
+    NButton.BackgroundTransparency = 1
+    NButton.Image = LOGO_ID
+    NButton.ZIndex = 100
+    NButton.Parent = ToggleGui
+
+    local function CreateRedBlackButton(name, text, pos)
+        local Outer = Instance.new("Frame")
+        Outer.Name = name .. "_Outer"
+        Outer.Size = UDim2.fromOffset(79, 42)
+        Outer.Position = pos
+        Outer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        Outer.BorderSizePixel = 0
+        Outer.ZIndex = 99
+        Outer.Parent = ToggleGui
+        Instance.new("UICorner", Outer).CornerRadius = UDim.new(0, 14)
+        local OuterStroke = Instance.new("UIStroke")
+        OuterStroke.Color = Color3.fromRGB(255, 0, 0)
+        OuterStroke.Thickness = 2.5
+        OuterStroke.Parent = Outer
+
+        local btn = Instance.new("TextButton")
+        btn.Name = name
+        btn.Size = UDim2.fromOffset(75, 38)
+        btn.Position = UDim2.new(0, 2, 0, 2)
+        btn.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+        btn.Text = text
+        btn.TextColor3 = Color3.fromRGB(255, 0, 0)
+        btn.TextSize = 16
+        btn.Font = Enum.Font.GothamBold
+        btn.ZIndex = 100
+        btn.Parent = Outer
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 12)
+
+        return Outer, btn
+    end
+
+    local DashOuter, DashBtn = CreateRedBlackButton("Dash", "Dash", UDim2.new(1, -90, 0.5, -20))
+    getgenv().NAZK_DashButton = DashOuter
+
+    local function MakeDraggable(Button, Callback)
+        local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
+        Button.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                moved = false
+                dragStart = i.Position
+                startPos = Button.Position
+            end
+        end)
+        Button.InputChanged:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+                dragInput = i
+            end
+        end)
+        Button.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+                if not moved then Callback() end
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if i == dragInput and dragging then
+                local d = i.Position - dragStart
+                if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then moved = true end
+                Button.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+            end
+        end)
+    end
+
+    local function MakeDraggableOuter(Outer, Inner, Callback)
+        local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
+        Inner.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                moved = false
+                dragStart = i.Position
+                startPos = Outer.Position
+            end
+        end)
+        Inner.InputChanged:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+                dragInput = i
+            end
+        end)
+        Inner.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+                if not moved then Callback() end
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if i == dragInput and dragging then
+                local d = i.Position - dragStart
+                if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then moved = true end
+                Outer.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+            end
+        end)
+    end
+
+    local isOpen = true
+    MakeDraggable(NButton, function()
+        isOpen = not isOpen
+        if WindowRef then
+            if isOpen then WindowRef:Open() else WindowRef:Close() end
+        end
+    end)
+
+    MakeDraggableOuter(DashOuter, DashBtn, function()
+        DashBtn.Text = "..."
+        if getgenv().NAZK_DoDash then getgenv().NAZK_DoDash() end
+        task.wait(0.25)
+        DashBtn.Text = "Dash"
+    end)
+
+    _G.NAZK_HUB_CLEANUP = function()
+        pcall(function() if getgenv().NAZK_StopRolling then getgenv().NAZK_StopRolling() end end)
+        pcall(function() if getgenv().NAZK_StopCollecting then getgenv().NAZK_StopCollecting() end end)
+        pcall(function() if getgenv().NAZK_MiscFullBright then getgenv().NAZK_SetFullBright(false) end end)
+        pcall(function() if getgenv().NAZK_MiscLowGFX then getgenv().NAZK_SetLowGraphics(false) end end)
+        pcall(function() if ToggleGui then ToggleGui:Destroy() end end)
+        pcall(function() if StatsGui then StatsGui:Destroy() end end)
+        pcall(function() if WindowRef then WindowRef:Destroy() end end)
+        pcall(function() if dashConn then dashConn:Disconnect() end end)
+        pcall(function() if miscCharConn then miscCharConn:Disconnect() end end)
+        pcall(function() if miscJumpConn then miscJumpConn:Disconnect() end end)
+        pcall(function() if miscNoclipConn then miscNoclipConn:Disconnect() end end)
+        pcall(function() if miscAntiAFKConn then miscAntiAFKConn:Disconnect() end end)
+        pcall(function() if miscRespawnConn then miscRespawnConn:Disconnect() end end)
+        pcall(function() if miscRejoinConn then miscRejoinConn:Disconnect() end end)
+        pcall(function() if miscAccConn then miscAccConn:Disconnect() end end)
+        pcall(function() if fpsConn then fpsConn:Disconnect() end end)
+        pcall(function() if pingConn then pingConn:Disconnect() end end)
+        pcall(function() if LoadingGui then LoadingGui:Destroy() end end)
+        getgenv().NAZK_DashButton = nil
+        _G.NAZK_HUB_RUNNING = false
+    end
+end)
