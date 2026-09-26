@@ -25,7 +25,10 @@ local scripts = {
     ["124216119978534"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Ride%20a%20pet",
 
     --// Project Slayer 2
-    ["136406881576517"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/1%20project%20SLAYER%202"
+    ["136406881576517"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/1%20project%20SLAYER%202",
+
+    --// Anime Dice
+    ["113290951185459"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Anime%20Dice"
 }
 
 local url = scripts[placeId]
