@@ -1,0 +1,1378 @@
+--============================================================
+-- MERGED : NAZK HUB RED + LSS Hub (Single WindUI Interface)
+--============================================================
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local UserInputService  = game:GetService("UserInputService")
+local CoreGui           = game:GetService("CoreGui")
+local Debris            = game:GetService("Debris")
+local Workspace         = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+
+if _G.NAZK_HUB_RUNNING then
+    pcall(function() if _G.NAZK_HUB_CLEANUP then _G.NAZK_HUB_CLEANUP() end end)
+    task.wait(0.3)
+end
+_G.NAZK_HUB_RUNNING = true
+
+local LOGO_ID     = "rbxassetid://139759348685642"
+local LOGO_SIZE   = 38
+local LOGO_POS    = UDim2.new(0, -6, 0.5, -19)
+local DISCORD_URL = "https://discord.gg/ne5vgR9q8"
+
+local function GetParent()
+    local ok, res = pcall(function() return gethui() end)
+    if ok and res then return res end
+    return CoreGui
+end
+
+--============================================================
+-- DASH SYSTEM
+--============================================================
+getgenv().NAZK_DashEnabled  = true
+getgenv().NAZK_DashPower    = 45
+getgenv().NAZK_DashVertical = 0
+getgenv().NAZK_DashKey      = Enum.KeyCode.Q
+getgenv().NAZK_DashCooldown = 0.25
+getgenv().NAZK_dashLast     = 0
+
+getgenv().NAZK_DoDash = function()
+    if tick() - (getgenv().NAZK_dashLast or 0) < (getgenv().NAZK_DashCooldown or 0.25) then return end
+    getgenv().NAZK_dashLast = tick()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+    local dir = cam.CFrame.LookVector
+    dir = Vector3.new(dir.X, 0, dir.Z)
+    if dir.Magnitude < 0.01 then return end
+    dir = dir.Unit
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+    bv.Velocity = dir * (getgenv().NAZK_DashPower or 45) + Vector3.new(0, getgenv().NAZK_DashVertical or 0, 0)
+    bv.P = 20000
+    bv.Parent = root
+    Debris:AddItem(bv, 0.15)
+end
+
+local dashConn = UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if not getgenv().NAZK_DashEnabled then return end
+    if input.KeyCode == getgenv().NAZK_DashKey then
+        getgenv().NAZK_DoDash()
+    end
+end)
+
+--============================================================
+-- LOADING UI
+--============================================================
+local LoadingGui = Instance.new("ScreenGui")
+LoadingGui.Name = "NAZK_Loading"
+LoadingGui.ResetOnSpawn = false
+LoadingGui.IgnoreGuiInset = true
+LoadingGui.Parent = GetParent()
+
+local BlurBg = Instance.new("Frame")
+BlurBg.Size = UDim2.new(1, 0, 1, 0)
+BlurBg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+BlurBg.BackgroundTransparency = 0.2
+BlurBg.BorderSizePixel = 0
+BlurBg.Parent = LoadingGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.fromOffset(340, 400)
+MainFrame.Position = UDim2.new(0.5, -170, 0.5, -200)
+MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = LoadingGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 6)
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(255, 0, 0)
+MainStroke.Thickness = 2
+MainStroke.Parent = MainFrame
+
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.fromOffset(140, 140)
+Logo.Position = UDim2.new(0.5, -70, 0, 35)
+Logo.BackgroundTransparency = 1
+Logo.Image = LOGO_ID
+Logo.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Position = UDim2.new(0, 0, 0, 190)
+Title.BackgroundTransparency = 1
+Title.Text = "NAZK HUB"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 36
+Title.Parent = MainFrame
+
+local Sub = Instance.new("TextLabel")
+Sub.Size = UDim2.new(1, 0, 0, 20)
+Sub.Position = UDim2.new(0, 0, 0, 230)
+Sub.BackgroundTransparency = 1
+Sub.Text = "R E D   E D I T I O N"
+Sub.TextColor3 = Color3.fromRGB(255, 0, 0)
+Sub.Font = Enum.Font.GothamBold
+Sub.TextSize = 12
+Sub.Parent = MainFrame
+
+local BarBG = Instance.new("Frame")
+BarBG.Size = UDim2.new(0.75, 0, 0, 8)
+BarBG.Position = UDim2.new(0.125, 0, 0, 285)
+BarBG.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+BarBG.BorderSizePixel = 0
+BarBG.Parent = MainFrame
+Instance.new("UICorner", BarBG).CornerRadius = UDim.new(1, 0)
+
+local BarFill = Instance.new("Frame")
+BarFill.Size = UDim2.new(0, 0, 1, 0)
+BarFill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+BarFill.BorderSizePixel = 0
+BarFill.Parent = BarBG
+Instance.new("UICorner", BarFill).CornerRadius = UDim.new(1, 0)
+
+local Percent = Instance.new("TextLabel")
+Percent.Size = UDim2.new(1, 0, 0, 20)
+Percent.Position = UDim2.new(0, 0, 0, 305)
+Percent.BackgroundTransparency = 1
+Percent.Text = "0%"
+Percent.TextColor3 = Color3.new(1, 1, 1)
+Percent.Font = Enum.Font.GothamBold
+Percent.TextSize = 18
+Percent.Parent = MainFrame
+
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.new(1, 0, 0, 15)
+Status.Position = UDim2.new(0, 0, 0, 260)
+Status.BackgroundTransparency = 1
+Status.Text = "Loading..."
+Status.TextColor3 = Color3.fromRGB(150, 150, 150)
+Status.Font = Enum.Font.Gotham
+Status.TextSize = 12
+Status.Parent = MainFrame
+
+--============================================================
+-- LSS : STATE + GAME HELPERS
+--============================================================
+local State = {
+    AutoTrain = false, AutoSquatBonus = false,
+    AutoSteal = false, AutoPlace = false, AutoHatch = false,
+    AutoSell = false, AutoOffline = false, AutoIndex = false,
+    AutoBuyCoils = false, AutoEquipCoil = false,
+    AutoBuyTrails = false, AutoEquipTrail = false,
+    AutoBarbell = false,
+    AutoAddMutation = false, AutoClaimMutation = false, AutoReturnMutation = false,
+    AntiAFK = true,
+
+    StealMode = "Best Egg",
+    StealZones = {}, StealRarities = {},
+    StealDelay = 5,
+    SellMode = "Lowest CPS First",
+    AutoSellPet = "None",
+    SellMaxCps = 1000,
+    BuyCoilList = {}, BuyTrailList = {},
+    MutationMode = "Auto Select",
+    MutationAnimal = "None",
+}
+
+local function getCharacter() return LocalPlayer.Character end
+local function getHumanoid()
+    local c = getCharacter(); return c and c:FindFirstChildOfClass("Humanoid")
+end
+local function getRoot()
+    local c = getCharacter(); return c and c:FindFirstChild("HumanoidRootPart")
+end
+local function teleportTo(pos)
+    local r = getRoot()
+    if r and pos then r.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0)); return true end
+    return false
+end
+local function holderPosition(holder)
+    if not holder then return nil end
+    if holder:IsA("BasePart") then return holder.Position end
+    if holder:IsA("Attachment") then return holder.WorldPosition end
+    return nil
+end
+local function getPlot()
+    local p = LocalPlayer:FindFirstChild("Plot"); return p and p.Value or nil
+end
+local function getSquatDetector()
+    local plot = getPlot()
+    local zone = plot and plot:FindFirstChild("SquatZone")
+    local floor = zone and zone:FindFirstChild("Floor")
+    return floor and floor:FindFirstChild("Detector") or nil
+end
+local function getPlacementDetector()
+    local plot = getPlot()
+    return plot and plot:FindFirstChild("Detector", true) or nil
+end
+local function getCash()
+    local ls = LocalPlayer:FindFirstChild("leaderstats")
+    local c = ls and ls:FindFirstChild("Cash"); local v = c and c:FindFirstChild("V")
+    return v and tonumber(v.Value) or 0
+end
+local function getLevel()
+    local ls = LocalPlayer:FindFirstChild("leaderstats")
+    local l = ls and ls:FindFirstChild("Level"); local v = l and l:FindFirstChild("V")
+    return v and tonumber(v.Value) or 0
+end
+local function isPetTool(t) return t:IsA("Tool") and t:GetAttribute("IsPetInventoryTool") == true end
+local function isEggTool(t) return t:IsA("Tool") and t:GetAttribute("IsEggTool") == true end
+
+local function forEachContainer(fn)
+    local c = getCharacter()
+    if LocalPlayer.Backpack then fn(LocalPlayer.Backpack) end
+    if c then fn(c) end
+end
+local function findTool(pred)
+    local found
+    forEachContainer(function(cont)
+        if found then return end
+        for _, ch in ipairs(cont:GetChildren()) do
+            if ch:IsA("Tool") and pred(ch) then found = ch; return end
+        end
+    end)
+    return found
+end
+local function countEggTools()
+    local n = 0
+    forEachContainer(function(cont)
+        for _, ch in ipairs(cont:GetChildren()) do if isEggTool(ch) then n += 1 end end
+    end)
+    return n
+end
+local function countPlacedEggs()
+    local plot = getPlot(); local placed = plot and plot:FindFirstChild("PlacedEggs")
+    return placed and #placed:GetChildren() or 0
+end
+local function countReadyEggs()
+    local plot = getPlot(); local placed = plot and plot:FindFirstChild("PlacedEggs")
+    if not placed then return 0 end
+    local n = 0
+    for _, egg in ipairs(placed:GetChildren()) do
+        if egg:GetAttribute("HatchReady") == true then n += 1 end
+    end
+    return n
+end
+local function uniqueAnimalNames()
+    local names, seen = {}, {}
+    forEachContainer(function(cont)
+        for _, ch in ipairs(cont:GetChildren()) do
+            if isPetTool(ch) then
+                local name = ch:GetAttribute("AnimalName") or ch.Name
+                if not seen[name] then seen[name] = true; table.insert(names, name) end
+            end
+        end
+    end)
+    table.sort(names); return names
+end
+local function abbreviate(v)
+    v = tonumber(v) or 0
+    local units = { "", "K", "M", "B", "T", "Qa", "Qi" }
+    local i = 1
+    while v >= 1000 and i < #units do v /= 1000; i += 1 end
+    if i == 1 then return tostring(math.floor(v)) end
+    return string.format("%.2f%s", v, units[i])
+end
+local function formatClock(s)
+    s = math.max(math.floor(s), 0)
+    local h = math.floor(s / 3600); local m = math.floor((s % 3600) / 60); local sec = s % 60
+    return string.format("%02d:%02d:%02d", h, m, sec)
+end
+
+--============================================================
+-- WAIT FOR REMOTES
+--============================================================
+Status.Text = "Waiting for game..."
+local Remotes = ReplicatedStorage:WaitForChild("Remotes", 15)
+
+local function waitRemote(name, parent)
+    local ok, inst = pcall(function() return (parent or Remotes):WaitForChild(name, 10) end)
+    if ok then return inst end
+    return nil
+end
+
+local PlaceEggRequest, DropEggRequest, SellRemote, CoilsRemote, TrailsRemote
+local SquatTrainingRequest, StopSquattingRequest, SquatBonusRequest
+local OfflineRewardsRemote, IndexRewardRemote
+
+if Remotes then
+    PlaceEggRequest        = waitRemote("PlaceEggRequest")
+    DropEggRequest         = waitRemote("DropEggRequest")
+    SellRemote             = waitRemote("Sell")
+    CoilsRemote            = waitRemote("Coils")
+    TrailsRemote           = waitRemote("Trails")
+    SquatTrainingRequest   = waitRemote("SquatTrainingRequest")
+    StopSquattingRequest   = waitRemote("StopSquattingRequest")
+    SquatBonusRequest      = waitRemote("SquatBonusRequest")
+    OfflineRewardsRemote   = waitRemote("OfflineRewards")
+    IndexRewardRemote      = waitRemote("ClaimAnimalIndexReward")
+end
+
+local Settings = ReplicatedStorage:FindFirstChild("Settings")
+local function requireSetting(name)
+    local m = Settings and Settings:FindFirstChild(name)
+    if not m then return nil end
+    local ok, r = pcall(require, m)
+    return ok and r or nil
+end
+local Rarities          = requireSetting("Rarities")
+local SpeedUpgrades     = requireSetting("SpeedUpgrades")
+local TrailSettings     = requireSetting("Trails")
+local BarbellUpgrades   = requireSetting("BarbellUpgrades")
+local RecommendedJumps  = requireSetting("RecommendedJumps")
+
+local ZoneJumpRequirements = { Meadow = 25 }
+if RecommendedJumps and type(RecommendedJumps.List) == "table" then
+    for k, v in pairs(RecommendedJumps.List) do
+        local zone = string.gsub(tostring(k), "%d+$", "")
+        local jump = tonumber(v)
+        if jump and (ZoneJumpRequirements[zone] == nil or jump < ZoneJumpRequirements[zone]) then
+            ZoneJumpRequirements[zone] = jump
+        end
+    end
+end
+
+--============================================================
+-- LISTS
+--============================================================
+local RarityNames = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Celestial", "Eternal" }
+
+local ZoneNames = {}
+do
+    local map = workspace:FindFirstChild("Map")
+    local stages = map and map:FindFirstChild("Stages")
+    if stages then
+        for _, stage in ipairs(stages:GetChildren()) do
+            if stage:FindFirstChild("SpawnedEggs") then table.insert(ZoneNames, stage.Name) end
+        end
+    end
+end
+if #ZoneNames == 0 then
+    ZoneNames = { "Meadow", "Coral Reef", "Winter", "Desert", "Crystal Mines", "Jungle", "Mystic Isles", "Prehistoric", "Celestial Heights", "Savannah" }
+end
+
+local AnimalNames = uniqueAnimalNames()
+if #AnimalNames == 0 then AnimalNames = { "None" } end
+
+for _, z in ipairs(ZoneNames) do State.StealZones[z] = true end
+for _, r in ipairs(RarityNames) do State.StealRarities[r] = true end
+
+--============================================================
+-- BUILD WindUI (Single Window)
+--============================================================
+Status.Text = "Loading WindUI..."
+local ok, WindUI = pcall(function()
+    return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua"))()
+end)
+if not ok or not WindUI then
+    ok, WindUI = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+    end)
+end
+if not ok or not WindUI then
+    warn("[LSS] WindUI failed to load")
+    return
+end
+
+WindUI:AddTheme({
+    Name = "NAZK Red",
+    Accent = Color3.fromRGB(255, 0, 0),
+    Background = Color3.fromRGB(12, 12, 12),
+    Outline = Color3.fromRGB(255, 0, 0),
+    Text = Color3.new(1, 1, 1),
+    Button = Color3.fromRGB(25, 25, 25),
+    Icon = Color3.fromRGB(255, 0, 0),
+})
+
+local Window = WindUI:CreateWindow({
+    Title = "NAZK HUB",
+    Icon = LOGO_ID,
+    Author = "NAZK | RED EDITION",
+    Folder = "NAZK_RED_LSS",
+    Size = UDim2.fromOffset(620, 480),
+    Theme = "NAZK Red",
+    Transparent = true,
+    HasOutline = true,
+})
+pcall(function() Window:EditOpenButton({ Enabled = false }) end)
+
+task.spawn(function()
+    task.wait(0.4)
+    pcall(function()
+        for _, g in ipairs(GetParent():GetChildren()) do
+            if g:IsA("ScreenGui") then
+                for _, v in ipairs(g:GetDescendants()) do
+                    if v:IsA("ImageLabel") and tostring(v.Image):find("139759348685642") then
+                        v.AnchorPoint = Vector2.new(0, 0)
+                        v.Size = UDim2.fromOffset(LOGO_SIZE, LOGO_SIZE)
+                        v.Position = LOGO_POS
+                    end
+                end
+            end
+        end
+    end)
+end)
+
+local function Notify(content, icon)
+    WindUI:Notify({ Title = "NAZK", Content = content, Duration = 3, Icon = icon or LOGO_ID })
+end
+
+--============================================================
+-- TAB : MAIN (Session)
+--============================================================
+local MainTab = Window:Tab({ Title = "Main", Icon = "home" })
+MainTab:Section({ Title = "Session" })
+MainTab:Paragraph({
+    Title = "Welcome to NAZK HUB",
+    Desc = "Jump for Animals | Press RightShift to toggle the menu",
+})
+
+local statusSession = MainTab:Paragraph({ Title = "Session", Desc = "00:00:00" })
+local statusCash    = MainTab:Paragraph({ Title = "Cash",    Desc = "0" })
+local statusLevel   = MainTab:Paragraph({ Title = "Level",   Desc = "0" })
+local statusEggs    = MainTab:Paragraph({ Title = "Eggs",    Desc = "Carried: 0 | Placed: 0" })
+local statusSquat   = MainTab:Paragraph({ Title = "Squatting", Desc = "false" })
+
+--============================================================
+-- TAB : FARMING
+--============================================================
+local FarmingTab = Window:Tab({ Title = "Farming", Icon = "sprout" })
+
+FarmingTab:Section({ Title = "Squats" })
+FarmingTab:Toggle({
+    Title = "Auto Train Squats",
+    Desc = "Teleports to your squat pad and trains jump XP",
+    Default = false,
+    Callback = function(v)
+        State.AutoTrain = v
+        if not v and LocalPlayer:GetAttribute("IsSquatting") == true and StopSquattingRequest then
+            StopSquattingRequest:FireServer()
+        end
+    end
+})
+FarmingTab:Toggle({
+    Title = "Auto Claim Squat Bonus",
+    Desc = "Instantly claims the pink squat bonus popup",
+    Default = false,
+    Callback = function(v) State.AutoSquatBonus = v end
+})
+
+FarmingTab:Section({ Title = "Egg Stealing" })
+FarmingTab:Toggle({
+    Title = "Auto Steal Eggs",
+    Desc = "Grabs an egg, returns to base to bank it, then places it",
+    Default = false,
+    Callback = function(v) State.AutoSteal = v end
+})
+FarmingTab:Dropdown({
+    Title = "Target Mode",
+    Values = { "Best Egg", "Nearest Egg", "Highest Rarity" },
+    Default = "Best Egg",
+    Callback = function(v) State.StealMode = v end
+})
+FarmingTab:Dropdown({
+    Title = "Zones",
+    Values = ZoneNames,
+    Multi = true,
+    Default = ZoneNames,
+    Callback = function(v)
+        State.StealZones = {}
+        if type(v) == "table" then
+            for k, val in pairs(v) do
+                if type(k) == "number" then State.StealZones[val] = true
+                elseif val == true then State.StealZones[k] = true end
+            end
+        end
+    end
+})
+FarmingTab:Dropdown({
+    Title = "Rarities",
+    Values = RarityNames,
+    Multi = true,
+    Default = RarityNames,
+    Callback = function(v)
+        State.StealRarities = {}
+        if type(v) == "table" then
+            for k, val in pairs(v) do
+                if type(k) == "number" then State.StealRarities[val] = true
+                elseif val == true then State.StealRarities[k] = true end
+            end
+        end
+    end
+})
+FarmingTab:Slider({
+    Title = "Train Between Steals",
+    Value = { Min = 0, Max = 60, Default = 5 },
+    Callback = function(v) State.StealDelay = v end
+})
+
+FarmingTab:Section({ Title = "Hatching" })
+FarmingTab:Toggle({
+    Title = "Auto Place Stolen Eggs",
+    Desc = "Places carried eggs on your plot",
+    Default = false,
+    Callback = function(v) State.AutoPlace = v end
+})
+FarmingTab:Toggle({
+    Title = "Auto Hatch Ready Eggs",
+    Desc = "Opens every egg whose hatch timer finished",
+    Default = false,
+    Callback = function(v) State.AutoHatch = v end
+})
+
+FarmingTab:Section({ Title = "Selling" })
+FarmingTab:Toggle({
+    Title = "Auto Sell Junk Pets",
+    Desc = "Equips a pet, walks to the animal seller and sells it",
+    Default = false,
+    Callback = function(v) State.AutoSell = v end
+})
+FarmingTab:Dropdown({
+    Title = "Sell Mode",
+    Values = { "Lowest CPS First", "Chosen Pet" },
+    Default = "Lowest CPS First",
+    Callback = function(v) State.SellMode = v end
+})
+FarmingTab:Dropdown({
+    Title = "Chosen Pet",
+    Values = AnimalNames,
+    Default = "None",
+    Callback = function(v) State.AutoSellPet = v end
+})
+FarmingTab:Input({
+    Title = "Max CPS To Sell",
+    Value = "1000",
+    InputIcon = "dollar-sign",
+    Callback = function(v) State.SellMaxCps = tonumber(v) or 1000 end
+})
+
+FarmingTab:Section({ Title = "Rewards" })
+FarmingTab:Toggle({
+    Title = "Auto Claim Offline Cash",
+    Default = false,
+    Callback = function(v) State.AutoOffline = v end
+})
+FarmingTab:Toggle({
+    Title = "Auto Claim Animal Index",
+    Default = false,
+    Callback = function(v) State.AutoIndex = v end
+})
+
+--============================================================
+-- TAB : INVENTORY
+--============================================================
+local InventoryTab = Window:Tab({ Title = "Inventory", Icon = "package" })
+
+InventoryTab:Section({ Title = "Coils" })
+InventoryTab:Toggle({
+    Title = "Auto Buy Coils",
+    Default = false,
+    Callback = function(v) State.AutoBuyCoils = v end
+})
+InventoryTab:Dropdown({
+    Title = "Coils To Buy",
+    Values = { "Red Coil", "Candy Coil", "Yellow Coil", "Chocolate Coil" },
+    Multi = true,
+    Default = {},
+    Callback = function(v)
+        State.BuyCoilList = {}
+        if type(v) == "table" then
+            for k, val in pairs(v) do
+                if type(k) == "number" then State.BuyCoilList[val] = true
+                elseif val == true then State.BuyCoilList[k] = true end
+            end
+        end
+    end
+})
+InventoryTab:Toggle({
+    Title = "Auto Equip Best Coil",
+    Default = false,
+    Callback = function(v) State.AutoEquipCoil = v end
+})
+
+InventoryTab:Section({ Title = "Trails" })
+InventoryTab:Toggle({
+    Title = "Auto Buy Trails",
+    Default = false,
+    Callback = function(v) State.AutoBuyTrails = v end
+})
+InventoryTab:Dropdown({
+    Title = "Trails To Buy",
+    Values = { "Blue Trail", "Red Trail", "Green Trail", "Yellow Trail", "Purple Trail", "White Trail", "Black Trail", "Galaxy Trail", "Crimson Star Trail", "Rainbow Trail" },
+    Multi = true,
+    Default = {},
+    Callback = function(v)
+        State.BuyTrailList = {}
+        if type(v) == "table" then
+            for k, val in pairs(v) do
+                if type(k) == "number" then State.BuyTrailList[val] = true
+                elseif val == true then State.BuyTrailList[k] = true end
+            end
+        end
+    end
+})
+InventoryTab:Toggle({
+    Title = "Auto Equip Best Trail",
+    Default = false,
+    Callback = function(v) State.AutoEquipTrail = v end
+})
+
+InventoryTab:Section({ Title = "Barbell" })
+InventoryTab:Toggle({
+    Title = "Auto Upgrade Barbell",
+    Default = false,
+    Callback = function(v) State.AutoBarbell = v end
+})
+
+InventoryTab:Section({ Title = "Mutation Machine" })
+InventoryTab:Toggle({
+    Title = "Auto Add Pets",
+    Desc = "Feeds five matching pets into the machine",
+    Default = false,
+    Callback = function(v) State.AutoAddMutation = v end
+})
+InventoryTab:Dropdown({
+    Title = "Mutation Mode",
+    Values = { "Auto Select", "Chosen Animal" },
+    Default = "Auto Select",
+    Callback = function(v) State.MutationMode = v end
+})
+InventoryTab:Dropdown({
+    Title = "Chosen Animal",
+    Values = AnimalNames,
+    Default = "None",
+    Callback = function(v) State.MutationAnimal = v end
+})
+InventoryTab:Toggle({
+    Title = "Auto Claim Gold Mutation",
+    Default = false,
+    Callback = function(v) State.AutoClaimMutation = v end
+})
+InventoryTab:Toggle({
+    Title = "Auto Return Mutation Pets",
+    Default = false,
+    Callback = function(v) State.AutoReturnMutation = v end
+})
+
+--============================================================
+-- TAB : DASH
+--============================================================
+local DashTab = Window:Tab({ Title = "Dash system", Icon = "zap" })
+DashTab:Section({ Title = "Dash Settings" })
+DashTab:Toggle({
+    Title = "Dash Enabled (Key Bind)",
+    Desc = "Works even when UI is closed",
+    Default = true,
+    Callback = function(v) getgenv().NAZK_DashEnabled = v end
+})
+DashTab:Slider({
+    Title = "Dash Power",
+    Value = { Min = 10, Max = 200, Default = 45 },
+    Callback = function(v) getgenv().NAZK_DashPower = v end
+})
+DashTab:Slider({
+    Title = "Dash Height (Vertical)",
+    Value = { Min = 0, Max = 100, Default = 0 },
+    Callback = function(v) getgenv().NAZK_DashVertical = v end
+})
+DashTab:Slider({
+    Title = "Dash Cooldown",
+    Value = { Min = 0, Max = 2, Default = 0.25 },
+    Callback = function(v) getgenv().NAZK_DashCooldown = v end
+})
+DashTab:Dropdown({
+    Title = "Dash Key",
+    Values = { "Q", "E", "F", "LeftShift", "C", "V", "X" },
+    Default = "Q",
+    Callback = function(v)
+        local map = {
+            Q = Enum.KeyCode.Q, E = Enum.KeyCode.E, F = Enum.KeyCode.F,
+            LeftShift = Enum.KeyCode.LeftShift, C = Enum.KeyCode.C,
+            V = Enum.KeyCode.V, X = Enum.KeyCode.X,
+        }
+        getgenv().NAZK_DashKey = map[v] or Enum.KeyCode.Q
+    end
+})
+DashTab:Section({ Title = "Floating Button" })
+DashTab:Button({
+    Title = "Hide Dash Button", Icon = "eye-off",
+    Callback = function()
+        if getgenv().NAZK_HideDashButton then
+            getgenv().NAZK_HideDashButton()
+            Notify("Dash button hidden", "eye-off")
+        end
+    end
+})
+DashTab:Button({
+    Title = "Show Dash Button", Icon = "eye",
+    Callback = function()
+        if getgenv().NAZK_ShowDashButton then
+            getgenv().NAZK_ShowDashButton()
+            Notify("Dash button shown", "eye")
+        end
+    end
+})
+
+--============================================================
+-- TAB : DISCORD
+--============================================================
+local DiscordTab = Window:Tab({ Title = "Discord", Icon = "message-circle" })
+DiscordTab:Section({ Title = "Community" })
+DiscordTab:Paragraph({
+    Title = "Join Our Discord Server",
+    Desc = "If you encounter any issues, bugs, or need support, contact us on our Discord."
+})
+DiscordTab:Paragraph({ Title = "Invite Link", Desc = DISCORD_URL })
+DiscordTab:Button({
+    Title = "Copy Discord Invite", Icon = "copy",
+    Callback = function()
+        local ok = pcall(function() setclipboard(DISCORD_URL) end)
+        if ok then Notify("Discord invite copied", "copy")
+        else Notify("Failed to copy", "alert-triangle") end
+    end
+})
+DiscordTab:Button({
+    Title = "Join Discord Server", Icon = "external-link",
+    Callback = function()
+        pcall(function() setclipboard(DISCORD_URL) end)
+        Notify("Copied - open in your browser", "external-link")
+    end
+})
+
+--============================================================
+-- TAB : SETTINGS
+--============================================================
+local SettingsTab = Window:Tab({ Title = "Settings", Icon = "settings" })
+SettingsTab:Section({ Title = "General" })
+SettingsTab:Toggle({
+    Title = "Anti-AFK",
+    Desc = "Jumps every 5 minutes so Roblox never kicks you",
+    Default = true,
+    Callback = function(v) State.AntiAFK = v end
+})
+
+--============================================================
+-- LSS LOGIC (uses State table)
+--============================================================
+local LastIndexClaim, LastBarbellAction = 0, 0
+local CarryWatchSince, NextStealAt, NextPlaceAttempt, PlaceRotation
+CarryWatchSince = nil; NextStealAt = 0; NextPlaceAttempt = 0; PlaceRotation = 0
+local LastBonusClaim = 0
+local StartedAt = os.clock()
+
+local function isSelected(selection, value)
+    if type(selection) ~= "table" then return true end
+    local count = 0
+    for _ in pairs(selection) do count += 1 end
+    if count == 0 then return true end
+    return selection[value] == true
+end
+
+local function zoneReachable(zone)
+    local req = ZoneJumpRequirements[zone]
+    if req == nil then return true end
+    local jp = LocalPlayer:FindFirstChild("JumpPower")
+    jp = jp and tonumber(jp.Value) or 0
+    return jp >= req
+end
+
+local function findEggPrompt(mode)
+    local map = workspace:FindFirstChild("Map")
+    local stages = map and map:FindFirstChild("Stages")
+    if not stages then return nil, nil end
+    local root = getRoot()
+    local origin = root and root.Position or Vector3.zero
+    local bestPrompt, bestScore, bestPosition
+    for _, stage in ipairs(stages:GetChildren()) do
+        local spawned = stage:FindFirstChild("SpawnedEggs")
+        if spawned and isSelected(State.StealZones, stage.Name) then
+            for _, egg in ipairs(spawned:GetChildren()) do
+                local rarity = egg:GetAttribute("Rarity")
+                if isSelected(State.StealRarities, rarity) then
+                    local prompt = egg:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    if prompt and prompt.Enabled then
+                        local wp = holderPosition(prompt.Parent)
+                        if wp then
+                            local dist = (wp - origin).Magnitude
+                            local rarityIndex = 0
+                            if Rarities and Rarities.GetIndex then
+                                rarityIndex = Rarities.GetIndex(rarity) or 0
+                            end
+                            local score
+                            if mode == "Nearest Egg" then
+                                score = -dist
+                            elseif mode == "Best Egg" then
+                                if not zoneReachable(stage.Name) then continue end
+                                score = rarityIndex * 1000000 - dist * 0.001
+                            else
+                                score = rarityIndex * 1000000 - dist * 0.001
+                            end
+                            if not bestScore or score > bestScore then
+                                bestPrompt, bestScore, bestPosition = prompt, score, wp
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return bestPrompt, bestPosition
+end
+
+local function doCarryRecovery()
+    if not State.AutoSteal and not State.AutoPlace then CarryWatchSince = nil; return end
+    local carried = (tonumber(LocalPlayer:GetAttribute("CarriedEggCount")) or 0) > 0
+    local tool = findTool(isEggTool)
+    if carried and not tool then
+        local base = getPlacementDetector()
+        local root = getRoot()
+        if base and root and (root.Position - base.Position).Magnitude > 40 then
+            teleportTo(base.Position); task.wait(0.4)
+        end
+        if not CarryWatchSince then CarryWatchSince = os.clock()
+        elseif os.clock() - CarryWatchSince > 30 and DropEggRequest then
+            DropEggRequest:FireServer(); CarryWatchSince = os.clock(); task.wait(0.5)
+        end
+    else
+        CarryWatchSince = nil
+    end
+end
+
+local function doAutoTrain()
+    if not State.AutoTrain then return end
+    if State.AutoHatch and countReadyEggs() > 0 then
+        if LocalPlayer:GetAttribute("IsSquatting") == true and StopSquattingRequest then
+            StopSquattingRequest:FireServer()
+        end
+        return
+    end
+    if State.AutoSteal and (tonumber(LocalPlayer:GetAttribute("CarriedEggCount")) or 0) > 0 then return end
+    local detector = getSquatDetector()
+    local root = getRoot()
+    if not detector or not root then return end
+    if (root.Position - detector.Position).Magnitude > 10 then
+        teleportTo(detector.Position); task.wait(0.3)
+    end
+    if LocalPlayer:GetAttribute("IsSquatting") ~= true and SquatTrainingRequest then
+        SquatTrainingRequest:FireServer(detector); task.wait(0.25)
+    end
+end
+
+local function doAutoSquatBonus()
+    if not State.AutoSquatBonus or not SquatBonusRequest then return end
+    if LocalPlayer:GetAttribute("SquatBonusAvailable") ~= true then return end
+    if os.clock() - LastBonusClaim < 0.4 then return end
+    LastBonusClaim = os.clock()
+    local version = math.floor(tonumber(LocalPlayer:GetAttribute("SquatBonusVersion")) or 0)
+    SquatBonusRequest:FireServer(version)
+end
+
+local function doAutoPlace()
+    if not State.AutoPlace or not PlaceEggRequest then return end
+    if os.clock() < NextPlaceAttempt then return end
+    local list = {}
+    forEachContainer(function(cont)
+        for _, ch in ipairs(cont:GetChildren()) do
+            if isEggTool(ch) then table.insert(list, ch) end
+        end
+    end)
+    if #list == 0 then return end
+    PlaceRotation += 1
+    local carrying = list[(PlaceRotation % #list) + 1]
+    local hum = getHumanoid()
+    local detector = getPlacementDetector()
+    if not hum or not detector then return end
+    NextPlaceAttempt = os.clock() + 2
+    pcall(function() hum:EquipTool(carrying) end)
+    task.wait(0.2)
+    PlaceEggRequest:FireServer(carrying:GetAttribute("EggId"), detector.Position + Vector3.new(0, 2, 0))
+    task.wait(0.35)
+    if not carrying.Parent then
+        NextStealAt = os.clock() + math.max(State.StealDelay or 5, 0)
+    end
+end
+
+local function doAutoSteal()
+    if not State.AutoSteal then return end
+    if os.clock() < NextStealAt then return end
+    if countEggTools() >= 3 then return end
+    if (tonumber(LocalPlayer:GetAttribute("CarriedEggCount")) or 0) > 0 then return end
+    local prompt, position = findEggPrompt(State.StealMode)
+    if not prompt or not position then return end
+    if LocalPlayer:GetAttribute("IsSquatting") == true and StopSquattingRequest then
+        StopSquattingRequest:FireServer()
+        local deadline = os.clock() + 1.5
+        while LocalPlayer:GetAttribute("IsSquatting") == true and os.clock() < deadline do task.wait(0.15) end
+    end
+    teleportTo(position); task.wait(0.35)
+    if prompt.Enabled then fireproximityprompt(prompt) end
+    task.wait(0.4)
+    local base = getPlacementDetector()
+    if base then teleportTo(base.Position); task.wait(0.6) end
+end
+
+local function doAutoHatch()
+    if not State.AutoHatch then return end
+    local plot = getPlot()
+    local placed = plot and plot:FindFirstChild("PlacedEggs")
+    if not placed then return end
+    for _, egg in ipairs(placed:GetChildren()) do
+        if egg:GetAttribute("HatchReady") == true then
+            local prompt = egg:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if prompt and prompt.Enabled then
+                local position = holderPosition(prompt.Parent)
+                if position then teleportTo(position); task.wait(0.25) end
+                fireproximityprompt(prompt); task.wait(0.35)
+                return
+            end
+        end
+    end
+end
+
+local function findSellTarget()
+    local mode = State.SellMode
+    local chosen = State.AutoSellPet
+    local maxCps = State.SellMaxCps or 1000
+    local bestTool, bestCps
+    forEachContainer(function(cont)
+        for _, ch in ipairs(cont:GetChildren()) do
+            if isPetTool(ch) then
+                local name = ch:GetAttribute("AnimalName") or ch.Name
+                local cps = tonumber(ch:GetAttribute("CashPerSecond")) or math.huge
+                if mode == "Chosen Pet" then
+                    if name == chosen and (not bestCps or cps < bestCps) then bestTool, bestCps = ch, cps end
+                elseif cps <= maxCps and (not bestCps or cps < bestCps) then
+                    bestTool, bestCps = ch, cps
+                end
+            end
+        end
+    end)
+    return bestTool
+end
+
+local function doAutoSell()
+    if not State.AutoSell then return end
+    if findTool(isEggTool) then return end
+    local tool = findSellTarget()
+    if not tool then return end
+    local hum = getHumanoid()
+    if not hum then return end
+    pcall(function() hum:EquipTool(tool) end)
+    local sellRoot = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Sell")
+    local detector = sellRoot and sellRoot:FindFirstChild("Detector", true)
+    if detector and detector:IsA("BasePart") then teleportTo(detector.Position); task.wait(0.3) end
+    local prompt = detector and detector:FindFirstChild("SellAnimalPrompt", true)
+    if prompt and prompt.Enabled then fireproximityprompt(prompt)
+    elseif SellRemote then SellRemote:FireServer() end
+    task.wait(0.4)
+end
+
+local function doAutoOffline()
+    if not State.AutoOffline or not OfflineRewardsRemote then return end
+    local pending = tonumber(LocalPlayer:GetAttribute("OfflineCashPending")) or 0
+    if pending > 0 then OfflineRewardsRemote:FireServer("Claim"); task.wait(0.25) end
+end
+
+local function doAutoIndex()
+    if not State.AutoIndex or not IndexRewardRemote then return end
+    if os.clock() - LastIndexClaim < 15 then return end
+    LastIndexClaim = os.clock()
+    IndexRewardRemote:FireServer("__ALL__")
+end
+
+local function ownedValue(folder, name)
+    local entry = folder and folder:FindFirstChild(name)
+    return entry and entry.Value == true
+end
+
+local function doAutoCoils()
+    local coilData = LocalPlayer:FindFirstChild("CoilData")
+    if not coilData or not CoilsRemote then return end
+    local owned = coilData:FindFirstChild("Owned")
+    local equipped = coilData:FindFirstChild("Equipped")
+    if State.AutoBuyCoils and SpeedUpgrades then
+        for name in pairs(State.BuyCoilList) do
+            local cfg = SpeedUpgrades.Get(name)
+            if cfg and not ownedValue(owned, name) and getCash() >= cfg.Cost then
+                CoilsRemote:FireServer("Select", name); task.wait(0.25)
+            end
+        end
+    end
+    if State.AutoEquipCoil and SpeedUpgrades and equipped then
+        local bestName, bestOrder = nil, -1
+        if owned then
+            for _, entry in ipairs(owned:GetChildren()) do
+                if entry.Value == true then
+                    local cfg = SpeedUpgrades.Get(entry.Name)
+                    local order = cfg and cfg.Order or 0
+                    if order > bestOrder then bestName, bestOrder = entry.Name, order end
+                end
+            end
+        end
+        if bestName and equipped.Value ~= bestName then
+            CoilsRemote:FireServer("Select", bestName); task.wait(0.2)
+        end
+    end
+end
+
+local function doAutoTrails()
+    local trailData = LocalPlayer:FindFirstChild("TrailData")
+    if not trailData or not TrailsRemote then return end
+    local owned = trailData:FindFirstChild("Owned")
+    local equipped = trailData:FindFirstChild("Equipped")
+    if State.AutoBuyTrails and TrailSettings then
+        for name in pairs(State.BuyTrailList) do
+            local cfg = TrailSettings.Get(name)
+            if cfg and not ownedValue(owned, name) and getCash() >= cfg.Cost then
+                TrailsRemote:FireServer("Select", name); task.wait(0.25)
+            end
+        end
+    end
+    if State.AutoEquipTrail and TrailSettings and equipped then
+        local bestName, bestOrder = nil, -1
+        if owned then
+            for _, entry in ipairs(owned:GetChildren()) do
+                if entry.Value == true then
+                    local cfg = TrailSettings.Get(entry.Name)
+                    local order = cfg and cfg.Order or 0
+                    if order > bestOrder then bestName, bestOrder = entry.Name, order end
+                end
+            end
+        end
+        if bestName and equipped.Value ~= bestName then
+            TrailsRemote:FireServer("Select", bestName); task.wait(0.2)
+        end
+    end
+end
+
+local function doAutoBarbell()
+    if not State.AutoBarbell or not BarbellUpgrades or not BarbellUpgrades.GetNext then return end
+    if os.clock() - LastBarbellAction < 3 then return end
+    LastBarbellAction = os.clock()
+    local level = LocalPlayer:FindFirstChild("BarbellLevel")
+    if not level then return end
+    local nextUp = BarbellUpgrades.GetNext(math.max(math.floor(tonumber(level.Value) or 1), 1))
+    if not nextUp then return end
+    local price = tonumber(nextUp.CashPrice) or 0
+    if getCash() < price then return end
+    local plot = getPlot()
+    local zone = plot and plot:FindFirstChild("SquatZone")
+    local upB = zone and zone:FindFirstChild("UpgradeB")
+    local prompt = upB and upB:FindFirstChild("BarbellUpgradePrompt", true)
+    if not prompt or not prompt.Enabled then return end
+    local pos = holderPosition(prompt.Parent)
+    if pos then teleportTo(pos); task.wait(0.25) end
+    fireproximityprompt(prompt); task.wait(0.4)
+end
+
+local function findMutationPet(targetName)
+    local cand, candCps
+    forEachContainer(function(cont)
+        for _, ch in ipairs(cont:GetChildren()) do
+            if isPetTool(ch) then
+                local name = ch:GetAttribute("AnimalName") or ch.Name
+                local cps = tonumber(ch:GetAttribute("CashPerSecond")) or math.huge
+                if name == targetName and (not candCps or cps < candCps) then cand, candCps = ch, cps end
+            end
+        end
+    end)
+    return cand
+end
+
+local function findDuplicateAnimal()
+    local counts, lowest = {}, {}
+    forEachContainer(function(cont)
+        for _, ch in ipairs(cont:GetChildren()) do
+            if isPetTool(ch) then
+                local name = ch:GetAttribute("AnimalName") or ch.Name
+                local cps = tonumber(ch:GetAttribute("CashPerSecond")) or math.huge
+                counts[name] = (counts[name] or 0) + 1
+                if not lowest[name] or cps < lowest[name] then lowest[name] = cps end
+            end
+        end
+    end)
+    local bestName, bestCps
+    for name, count in pairs(counts) do
+        if count >= 2 and (not bestCps or lowest[name] < bestCps) then bestName, bestCps = name, lowest[name] end
+    end
+    return bestName
+end
+
+local function mutationPromptByName(name)
+    local map = workspace:FindFirstChild("Map")
+    local muts = map and map:FindFirstChild("Mutations")
+    local det = muts and muts:FindFirstChild("Detector")
+    local prompt = det and det:FindFirstChild(name, true)
+    return prompt, det
+end
+
+local function fireMutation(name, detector)
+    local prompt = detector and detector:FindFirstChild(name, true)
+    if not prompt or not prompt.Enabled then return false end
+    local pos = holderPosition(prompt.Parent)
+    if pos then teleportTo(pos); task.wait(0.2) end
+    fireproximityprompt(prompt); task.wait(0.35)
+    return true
+end
+
+local function doAutoMutation()
+    local active = LocalPlayer:GetAttribute("MutationCraftActive") == true
+    local ready = LocalPlayer:GetAttribute("MutationCraftReady") == true
+    local canRemove = LocalPlayer:GetAttribute("MutationCanRemove") == true
+    local _, det = mutationPromptByName("MutationPrompt")
+    if State.AutoClaimMutation and active and ready then fireMutation("MutationPrompt", det); return end
+    if State.AutoReturnMutation and active and canRemove then fireMutation("MutationRemovePrompt", det); return end
+    if not State.AutoAddMutation or active then return end
+    local target = LocalPlayer:GetAttribute("MutationCraftAnimalName")
+    if type(target) ~= "string" or target == "" then
+        if State.MutationMode == "Chosen Animal" then target = State.MutationAnimal
+        else target = findDuplicateAnimal() end
+    end
+    if not target or target == "None" then return end
+    local tool = findMutationPet(target)
+    if not tool then return end
+    local hum = getHumanoid()
+    if not hum then return end
+    pcall(function() hum:EquipTool(tool) end)
+    task.wait(0.2)
+    fireMutation("MutationPrompt", det)
+end
+
+--============================================================
+-- FEATURE LOOPS
+--============================================================
+local LSSAlive = true
+_G.NAZK_HUB_CLEANUP = function()
+    LSSAlive = false
+    pcall(function() if dashConn then dashConn:Disconnect() end end)
+    pcall(function() if ToggleGui then ToggleGui:Destroy() end end)
+    pcall(function() if Window then Window:Destroy() end end)
+    pcall(function() if LoadingGui then LoadingGui:Destroy() end end)
+    getgenv().NAZK_DashButton = nil
+    _G.NAZK_HUB_RUNNING = false
+end
+
+local function featureLoop(fn, delay)
+    task.spawn(function()
+        while LSSAlive and _G.NAZK_HUB_RUNNING do
+            local ok, err = pcall(fn)
+            if not ok and LSSAlive then warn("[LSS] " .. tostring(err)) end
+            task.wait(delay or 0.5)
+        end
+    end)
+end
+
+featureLoop(function()
+    doCarryRecovery(); doAutoPlace(); doAutoSteal(); doAutoSell()
+    doAutoTrain(); doAutoSquatBonus(); doAutoHatch(); doAutoBarbell()
+end, 0.5)
+
+featureLoop(function()
+    doAutoOffline(); doAutoIndex(); doAutoCoils(); doAutoTrails()
+end, 0.5)
+
+featureLoop(doAutoMutation, 6)
+
+featureLoop(function()
+    if State.AntiAFK then
+        pcall(function()
+            local hum = getHumanoid()
+            if hum then hum.Jump = true end
+            local vu = game:GetService("VirtualUser")
+            vu:CaptureController()
+            vu:ClickButton2(Vector2.new())
+        end)
+    end
+end, 300)
+
+featureLoop(function()
+    pcall(function()
+        if statusSession then
+            local txt = formatClock(os.clock() - StartedAt)
+            pcall(function() statusSession:SetDesc(txt) end)
+            pcall(function() statusSession.Desc = txt end)
+        end
+        if statusCash then
+            local txt = abbreviate(getCash())
+            pcall(function() statusCash:SetDesc(txt) end)
+            pcall(function() statusCash.Desc = txt end)
+        end
+        if statusLevel then
+            local txt = tostring(getLevel())
+            pcall(function() statusLevel:SetDesc(txt) end)
+            pcall(function() statusLevel.Desc = txt end)
+        end
+        if statusEggs then
+            local txt = string.format("Carried: %d | Placed: %d", countEggTools(), countPlacedEggs())
+            pcall(function() statusEggs:SetDesc(txt) end)
+            pcall(function() statusEggs.Desc = txt end)
+        end
+        if statusSquat then
+            local txt = tostring(LocalPlayer:GetAttribute("IsSquatting") == true)
+            pcall(function() statusSquat:SetDesc(txt) end)
+            pcall(function() statusSquat.Desc = txt end)
+        end
+    end)
+end, 1)
+
+--============================================================
+-- FINISH LOADING + OPEN WINDOW + FLOATING UI
+--============================================================
+for i = 1, 100 do
+    BarFill.Size = UDim2.new(i / 100, 0, 1, 0)
+    Percent.Text = i .. "%"
+    if i < 30 then Status.Text = "Loading assets..."
+    elseif i < 60 then Status.Text = "Loading WindUI..."
+    elseif i < 90 then Status.Text = "Setting up game..."
+    else Status.Text = "Opening..." end
+    task.wait(0.02)
+end
+
+TweenService:Create(MainFrame, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+TweenService:Create(BlurBg,    TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+for _, v in ipairs(MainFrame:GetDescendants()) do
+    if v:IsA("TextLabel") then
+        TweenService:Create(v, TweenInfo.new(0.4), { TextTransparency = 1 }):Play()
+    elseif v:IsA("ImageLabel") then
+        TweenService:Create(v, TweenInfo.new(0.4), { ImageTransparency = 1 }):Play()
+    elseif v:IsA("Frame") then
+        TweenService:Create(v, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+    end
+end
+task.wait(0.45)
+pcall(function() LoadingGui:Destroy() end)
+Window:Open()
+
+--============================================================
+-- FLOATING UI
+--============================================================
+local ToggleGui = Instance.new("ScreenGui")
+ToggleGui.Name = "NAZK_Floating"
+ToggleGui.ResetOnSpawn = false
+ToggleGui.Parent = GetParent()
+getgenv().NAZK_ToggleGui = ToggleGui
+
+local NButton = Instance.new("ImageButton")
+NButton.Name = "imageLabel"
+NButton.Size = UDim2.fromOffset(60, 60)
+NButton.Position = UDim2.new(0, 15, 0.5, -30)
+NButton.BackgroundTransparency = 1
+NButton.Image = LOGO_ID
+NButton.ZIndex = 100
+NButton.Parent = ToggleGui
+
+local function CreateRedBlackButton(name, text, pos)
+    local Outer = Instance.new("Frame")
+    Outer.Name = name .. "_Outer"
+    Outer.Size = UDim2.fromOffset(79, 42)
+    Outer.Position = pos
+    Outer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    Outer.BorderSizePixel = 0
+    Outer.ZIndex = 99
+    Outer.Parent = ToggleGui
+    Instance.new("UICorner", Outer).CornerRadius = UDim.new(0, 14)
+    local OuterStroke = Instance.new("UIStroke")
+    OuterStroke.Color = Color3.fromRGB(255, 0, 0)
+    OuterStroke.Thickness = 2.5
+    OuterStroke.Parent = Outer
+
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = UDim2.fromOffset(75, 38)
+    btn.Position = UDim2.new(0, 2, 0, 2)
+    btn.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 0, 0)
+    btn.TextSize = 16
+    btn.Font = Enum.Font.GothamBold
+    btn.ZIndex = 100
+    btn.Parent = Outer
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 12)
+    return Outer, btn
+end
+
+local DashOuter, DashBtn = CreateRedBlackButton("Dash", "Dash", UDim2.new(1, -90, 0.5, -20))
+getgenv().NAZK_DashButton = DashOuter
+getgenv().NAZK_HideDashButton = function() DashOuter.Visible = false end
+getgenv().NAZK_ShowDashButton = function() DashOuter.Visible = true end
+
+local function MakeDraggableOuter(Outer, Inner, Callback)
+    local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
+    Inner.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; moved = false; dragStart = i.Position; startPos = Outer.Position
+        end
+    end)
+    Inner.InputChanged:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+            dragInput = i
+        end
+    end)
+    Inner.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            if not moved then Callback() end
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if i == dragInput and dragging then
+            local d = i.Position - dragStart
+            if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then moved = true end
+            Outer.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end)
+end
+
+local function MakeDraggableSimple(Button, Callback)
+    local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
+    Button.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; moved = false; dragStart = i.Position; startPos = Button.Position
+        end
+    end)
+    Button.InputChanged:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+            dragInput = i
+        end
+    end)
+    Button.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            if not moved then Callback() end
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if i == dragInput and dragging then
+            local d = i.Position - dragStart
+            if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then moved = true end
+            Button.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end)
+end
+
+local isOpen = true
+MakeDraggableSimple(NButton, function()
+    isOpen = not isOpen
+    if isOpen then Window:Open() else Window:Close() end
+end)
+
+MakeDraggableOuter(DashOuter, DashBtn, function()
+    DashBtn.Text = "..."
+    if getgenv().NAZK_DoDash then getgenv().NAZK_DoDash() end
+    task.wait(0.25)
+    DashBtn.Text = "Dash"
+end)
+
+WindUI:Notify({
+    Title = "NAZK HUB RED",
+    Content = "Loaded! Discord + Dash + LSS ready.",
+    Duration = 4,
+    Icon = LOGO_ID
+})
