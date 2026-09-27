@@ -1,0 +1,957 @@
+-- NAZK HUB RED | DISCORD + DASH SYSTEM + RUNAWAYS
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Debris = game:GetService("Debris")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollectionService = game:GetService("CollectionService")
+
+local LocalPlayer = Players.LocalPlayer
+
+if _G.NAZK_HUB_RUNNING then
+    pcall(function() if _G.NAZK_HUB_CLEANUP then _G.NAZK_HUB_CLEANUP() end end)
+    task.wait(0.3)
+end
+_G.NAZK_HUB_RUNNING = true
+
+local LOGO_ID    = "rbxassetid://139759348685642"
+local LOGO_SIZE  = 38
+local LOGO_POS   = UDim2.new(0, -6, 0.5, -19)
+local DISCORD_URL = "https://discord.gg/ne5vgR9q8"
+
+local function GetParent()
+    local ok, res = pcall(function() return gethui() end)
+    if ok and res then return res end
+    return CoreGui
+end
+
+-- ========== Dash System (Global) ==========
+getgenv().NAZK_DashEnabled = true
+getgenv().NAZK_DashPower = 45
+getgenv().NAZK_DashVertical = 0
+getgenv().NAZK_DashKey = Enum.KeyCode.Q
+getgenv().NAZK_DashCooldown = 0.25
+getgenv().NAZK_dashLast = 0
+
+getgenv().NAZK_DoDash = function()
+    if tick() - (getgenv().NAZK_dashLast or 0) < (getgenv().NAZK_DashCooldown or 0.25) then return end
+    getgenv().NAZK_dashLast = tick()
+
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+
+    local dir = cam.CFrame.LookVector
+    dir = Vector3.new(dir.X, 0, dir.Z)
+    if dir.Magnitude < 0.01 then return end
+    dir = dir.Unit
+
+    local power = getgenv().NAZK_DashPower or 45
+    local up = getgenv().NAZK_DashVertical or 0
+
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+    bv.Velocity = dir * power + Vector3.new(0, up, 0)
+    bv.P = 20000
+    bv.Parent = root
+    Debris:AddItem(bv, 0.15)
+end
+
+local dashConn = UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if not getgenv().NAZK_DashEnabled then return end
+    if input.KeyCode == getgenv().NAZK_DashKey then
+        getgenv().NAZK_DoDash()
+    end
+end)
+
+-- ========== RUNAWAYS: Auto Kill Setup ==========
+local rw_lastHit = {}
+local rw_lastScan = 0
+local rw_autoKillOn = false
+
+local function rw_fireDamage(target, dmg)
+    pcall(function()
+        ReplicatedStorage.FlowClient.ClientRunner.Event:FireServer("NPCs", "Damage", target, dmg)
+    end)
+end
+
+RunService.Heartbeat:Connect(function()
+    if not rw_autoKillOn then return end
+    local now = tick()
+    for _, npc in ipairs(CollectionService:GetTagged("NPC")) do
+        local hum = npc:FindFirstChild("Humanoid")
+        if hum and hum.Health > 0 and now - (rw_lastHit[hum] or 0) >= 0.1 then
+            rw_lastHit[hum] = now
+            rw_fireDamage(hum, 9999)
+        end
+    end
+    if now - rw_lastScan >= 3 then
+        rw_lastScan = now
+        pcall(function()
+            for _, d in ipairs(workspace.NPCs:GetDescendants()) do
+                if d.Name == "Humanoid" and d.Health > 0 then
+                    rw_fireDamage(d, 1e999)
+                end
+            end
+        end)
+    end
+    for _, heli in ipairs({
+        ReplicatedStorage:FindFirstChild("Assets") and ReplicatedStorage.Assets:FindFirstChild("Helicopter"),
+        workspace:FindFirstChild("Helicopter"),
+    }) do
+        local pilot = heli and heli:FindFirstChild("Pilot")
+        local hum = pilot and pilot:FindFirstChild("Humanoid")
+        if hum and hum.Health > 0 then
+            rw_fireDamage(hum, 1e999)
+        end
+    end
+end)
+
+-- ========== RUNAWAYS: Walk Speed ==========
+local rw_walkSpeed = 1
+RunService.Heartbeat:Connect(function(dt)
+    local Character = LocalPlayer.Character
+    local hum = Character and Character:FindFirstChildWhichIsA("Humanoid")
+    if not Character or not hum or not hum.Parent then return end
+    if hum.MoveDirection.Magnitude > 0 then
+        Character:TranslateBy(hum.MoveDirection * rw_walkSpeed * dt * 10)
+    end
+end)
+
+-- ========== RUNAWAYS: NoClip + Anti Void ==========
+local rw_noclipConn
+local rw_lastSafeCFrame
+local rw_antiVoidBusy = false
+local rw_noclipOn = false
+
+local function rw_enableNoclip()
+    if rw_noclipConn then rw_noclipConn:Disconnect() end
+    rw_noclipConn = RunService.Heartbeat:Connect(function()
+        local character = LocalPlayer.Character
+        if not character or rw_antiVoidBusy then return end
+        local root = character:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+        local y = root.Position.Y
+        if not rw_lastSafeCFrame or y >= rw_lastSafeCFrame.Position.Y - 5 then
+            rw_lastSafeCFrame = root.CFrame
+        elseif rw_lastSafeCFrame.Position.Y - y >= 100 then
+            rw_antiVoidBusy = true
+            root.AssemblyLinearVelocity = Vector3.zero
+            local params = RaycastParams.new()
+            params.FilterType = Enum.RaycastFilterType.Exclude
+            params.FilterDescendantsInstances = { character }
+            local found = false
+            for _ = 1, 20 do
+                root.CFrame = root.CFrame + Vector3.new(0, 150, 0)
+                task.wait()
+                local hit = workspace:Raycast(root.Position, Vector3.new(0, -2000, 0), params)
+                if hit and hit.Instance and hit.Instance:IsA("BasePart") and hit.Instance.CanCollide then
+                    root.CFrame = CFrame.new(hit.Position + Vector3.new(0, 4, 0), root.Position + root.CFrame.LookVector)
+                    found = true
+                    break
+                end
+            end
+            if not found then
+                root.CFrame = root.CFrame + Vector3.new(0, 150, 0)
+            end
+            root.AssemblyLinearVelocity = Vector3.zero
+            rw_lastSafeCFrame = root.CFrame
+            rw_antiVoidBusy = false
+        end
+    end)
+end
+
+local function rw_disableNoclip()
+    if rw_noclipConn then
+        rw_noclipConn:Disconnect()
+        rw_noclipConn = nil
+    end
+    rw_lastSafeCFrame = nil
+    rw_antiVoidBusy = false
+    if LocalPlayer.Character then
+        for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+end
+
+-- ========== RUNAWAYS: God Mode ==========
+local rw_flow = nil
+pcall(function()
+    rw_flow = require(ReplicatedStorage:WaitForChild("FlowClient", 5))
+end)
+
+local rw_blockedRemote = function() end
+local rw_originalTakeDamage = rw_flow and rw_flow.PlayerDamage and rw_flow.PlayerDamage.TakeDamage
+local rw_originalAbandon = rw_flow and rw_flow.Passout and rw_flow.Passout.Abandon
+local rw_humanoidState = {}
+
+local function rw_saveHumanoidState(hum)
+    if rw_humanoidState[hum] then return end
+    rw_humanoidState[hum] = {
+        BreakJointsOnDeath = hum.BreakJointsOnDeath,
+        RequiresNeck = hum.RequiresNeck,
+        DeadEnabled = hum:GetStateEnabled(Enum.HumanoidStateType.Dead),
+    }
+end
+
+local function rw_applyGodMode()
+    if rw_originalTakeDamage and rw_flow and rw_flow.PlayerDamage then
+        rw_flow.PlayerDamage.TakeDamage = rw_blockedRemote
+    end
+    if rw_originalAbandon and rw_flow and rw_flow.Passout then
+        rw_flow.Passout.Abandon = rw_blockedRemote
+    end
+    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if hum then
+        rw_saveHumanoidState(hum)
+        hum.BreakJointsOnDeath = false
+        hum.RequiresNeck = false
+        hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        hum.Health = hum.MaxHealth
+    end
+end
+
+local function rw_restoreGodMode()
+    if rw_flow and rw_flow.PlayerDamage and rw_flow.PlayerDamage.TakeDamage == rw_blockedRemote then
+        rw_flow.PlayerDamage.TakeDamage = rw_originalTakeDamage
+    end
+    if rw_flow and rw_flow.Passout and rw_flow.Passout.Abandon == rw_blockedRemote then
+        rw_flow.Passout.Abandon = rw_originalAbandon
+    end
+    for hum, state in pairs(rw_humanoidState) do
+        if hum.Parent then
+            hum.BreakJointsOnDeath = state.BreakJointsOnDeath
+            hum.RequiresNeck = state.RequiresNeck
+            hum:SetStateEnabled(Enum.HumanoidStateType.Dead, state.DeadEnabled)
+        end
+        rw_humanoidState[hum] = nil
+    end
+end
+
+-- ========== Loading UI ==========
+local LoadingGui = Instance.new("ScreenGui")
+LoadingGui.Name = "NAZK_Loading"
+LoadingGui.ResetOnSpawn = false
+LoadingGui.IgnoreGuiInset = true
+LoadingGui.Parent = GetParent()
+
+local BlurBg = Instance.new("Frame")
+BlurBg.Size = UDim2.new(1, 0, 1, 0)
+BlurBg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+BlurBg.BackgroundTransparency = 0.2
+BlurBg.BorderSizePixel = 0
+BlurBg.Parent = LoadingGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.fromOffset(340, 400)
+MainFrame.Position = UDim2.new(0.5, -170, 0.5, -200)
+MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = LoadingGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 6)
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(255, 0, 0)
+MainStroke.Thickness = 2
+MainStroke.Parent = MainFrame
+
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.fromOffset(140, 140)
+Logo.Position = UDim2.new(0.5, -70, 0, 35)
+Logo.BackgroundTransparency = 1
+Logo.Image = LOGO_ID
+Logo.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Position = UDim2.new(0, 0, 0, 190)
+Title.BackgroundTransparency = 1
+Title.Text = "NAZK HUB"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 36
+Title.Parent = MainFrame
+
+local Sub = Instance.new("TextLabel")
+Sub.Size = UDim2.new(1, 0, 0, 20)
+Sub.Position = UDim2.new(0, 0, 0, 230)
+Sub.BackgroundTransparency = 1
+Sub.Text = "R E D   E D I T I O N"
+Sub.TextColor3 = Color3.fromRGB(255, 0, 0)
+Sub.Font = Enum.Font.GothamBold
+Sub.TextSize = 12
+Sub.Parent = MainFrame
+
+local BarBG = Instance.new("Frame")
+BarBG.Size = UDim2.new(0.75, 0, 0, 8)
+BarBG.Position = UDim2.new(0.125, 0, 0, 285)
+BarBG.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+BarBG.BorderSizePixel = 0
+BarBG.Parent = MainFrame
+Instance.new("UICorner", BarBG).CornerRadius = UDim.new(1, 0)
+
+local BarFill = Instance.new("Frame")
+BarFill.Size = UDim2.new(0, 0, 1, 0)
+BarFill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+BarFill.BorderSizePixel = 0
+BarFill.Parent = BarBG
+Instance.new("UICorner", BarFill).CornerRadius = UDim.new(1, 0)
+
+local Percent = Instance.new("TextLabel")
+Percent.Size = UDim2.new(1, 0, 0, 20)
+Percent.Position = UDim2.new(0, 0, 0, 305)
+Percent.BackgroundTransparency = 1
+Percent.Text = "0%"
+Percent.TextColor3 = Color3.new(1, 1, 1)
+Percent.Font = Enum.Font.GothamBold
+Percent.TextSize = 18
+Percent.Parent = MainFrame
+
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.new(1, 0, 0, 15)
+Status.Position = UDim2.new(0, 0, 0, 260)
+Status.BackgroundTransparency = 1
+Status.Text = "Loading..."
+Status.TextColor3 = Color3.fromRGB(150, 150, 150)
+Status.Font = Enum.Font.Gotham
+Status.TextSize = 12
+Status.Parent = MainFrame
+
+local mainLoaded = false
+local WindowRef = nil
+
+getgenv().NAZK_DashButton = nil
+getgenv().NAZK_HideDashButton = function()
+    local btn = getgenv().NAZK_DashButton
+    if btn then btn.Visible = false end
+end
+getgenv().NAZK_ShowDashButton = function()
+    local btn = getgenv().NAZK_DashButton
+    if btn then btn.Visible = true end
+end
+
+-- ========== Build Hub ==========
+local function BuildHub()
+    local ok, WindUI = pcall(function()
+        return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua"))()
+    end)
+    if not ok or not WindUI then
+        ok, WindUI = pcall(function()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+        end)
+    end
+    if not ok or not WindUI then return nil end
+
+    WindUI:AddTheme({
+        Name = "NAZK Red",
+        Accent = Color3.fromRGB(255, 0, 0),
+        Background = Color3.fromRGB(12, 12, 12),
+        Outline = Color3.fromRGB(255, 0, 0),
+        Text = Color3.new(1, 1, 1),
+        Button = Color3.fromRGB(25, 25, 25),
+        Icon = Color3.fromRGB(255, 0, 0),
+    })
+
+    local Window = WindUI:CreateWindow({
+        Title = "NAZK HUB",
+        Icon = LOGO_ID,
+        Author = "NAZK | RED EDITION",
+        Folder = "NAZK_RED_DISCORD_DASH",
+        Size = UDim2.fromOffset(580, 460),
+        Theme = "NAZK Red",
+        Transparent = true,
+        HasOutline = true,
+    })
+    pcall(function() Window:EditOpenButton({ Enabled = false }) end)
+
+    task.spawn(function()
+        task.wait(0.4)
+        pcall(function()
+            for _, g in ipairs(GetParent():GetChildren()) do
+                if g:IsA("ScreenGui") then
+                    for _, v in ipairs(g:GetDescendants()) do
+                        if v:IsA("ImageLabel") and tostring(v.Image):find("139759348685642") then
+                            v.AnchorPoint = Vector2.new(0, 0)
+                            v.Size = UDim2.fromOffset(LOGO_SIZE, LOGO_SIZE)
+                            v.Position = LOGO_POS
+                        end
+                    end
+                end
+            end
+        end)
+    end)
+
+    local function Notify(content, icon)
+        WindUI:Notify({ Title = "NAZK", Content = content, Duration = 3, Icon = icon or LOGO_ID })
+    end
+
+    -- =====================================================
+    -- 1) DISCORD TAB
+    -- =====================================================
+    local DiscordTab = Window:Tab({ Title = "Discord", Icon = "message-circle" })
+    DiscordTab:Section({ Title = "Community" })
+    DiscordTab:Paragraph({
+        Title = "Join Our Discord Server",
+        Desc = "If you encounter any issues, bugs, or need support, please contact us on our Discord server. Our team is active and ready to help.",
+    })
+    DiscordTab:Paragraph({
+        Title = "Invite Link",
+        Desc = DISCORD_URL,
+    })
+    DiscordTab:Button({
+        Title = "Copy Discord Invite",
+        Icon = "copy",
+        Callback = function()
+            local ok2 = pcall(function() setclipboard(DISCORD_URL) end)
+            if ok2 then Notify("Discord invite copied to clipboard", "copy")
+            else Notify("Failed to copy - use the link above", "alert-triangle") end
+        end
+    })
+    DiscordTab:Button({
+        Title = "Join Discord Server",
+        Icon = "external-link",
+        Callback = function()
+            Notify("Copy the invite link and open it in your browser", "external-link")
+            pcall(function() setclipboard(DISCORD_URL) end)
+        end
+    })
+
+    -- =====================================================
+    -- 2) DASH SYSTEM TAB
+    -- =====================================================
+    local DashTab = Window:Tab({ Title = "Dash system", Icon = "zap" })
+    DashTab:Section({ Title = "Dash Settings" })
+    DashTab:Toggle({
+        Title = "Dash Enabled (Key Bind)",
+        Desc = "Works even when UI is closed",
+        Default = true,
+        Callback = function(v) getgenv().NAZK_DashEnabled = v end
+    })
+    DashTab:Slider({
+        Title = "Dash Power",
+        Value = { Min = 10, Max = 200, Default = 45 },
+        Callback = function(v) getgenv().NAZK_DashPower = v end
+    })
+    DashTab:Slider({
+        Title = "Dash Height (Vertical)",
+        Value = { Min = 0, Max = 100, Default = 0 },
+        Callback = function(v) getgenv().NAZK_DashVertical = v end
+    })
+    DashTab:Slider({
+        Title = "Dash Cooldown",
+        Value = { Min = 0, Max = 2, Default = 0.25 },
+        Callback = function(v) getgenv().NAZK_DashCooldown = v end
+    })
+    DashTab:Dropdown({
+        Title = "Dash Key",
+        Values = { "Q", "E", "F", "LeftShift", "C", "V", "X" },
+        Default = "Q",
+        Callback = function(v)
+            local map = {
+                Q = Enum.KeyCode.Q, E = Enum.KeyCode.E, F = Enum.KeyCode.F,
+                LeftShift = Enum.KeyCode.LeftShift, C = Enum.KeyCode.C,
+                V = Enum.KeyCode.V, X = Enum.KeyCode.X,
+            }
+            getgenv().NAZK_DashKey = map[v] or Enum.KeyCode.Q
+        end
+    })
+    DashTab:Section({ Title = "Floating Button" })
+    DashTab:Button({
+        Title = "Hide Dash Button",
+        Icon = "eye-off",
+        Callback = function()
+            if getgenv().NAZK_HideDashButton then
+                getgenv().NAZK_HideDashButton()
+                Notify("Dash button hidden", "eye-off")
+            end
+        end
+    })
+    DashTab:Button({
+        Title = "Show Dash Button",
+        Icon = "eye",
+        Callback = function()
+            if getgenv().NAZK_ShowDashButton then
+                getgenv().NAZK_ShowDashButton()
+                Notify("Dash button shown", "eye")
+            end
+        end
+    })
+
+    -- =====================================================
+    -- 3) RUNAWAYS TAB (آخر شي + محمي بـ pcall)
+    -- =====================================================
+    task.spawn(function()
+        local okTab = pcall(function()
+            local RunawaysTab = Window:Tab({ Title = "RUNAWAYS", Icon = "gamepad-2" })
+
+            RunawaysTab:Section({ Title = "Combat" })
+
+            RunawaysTab:Toggle({
+                Title = "Auto Kill",
+                Desc = "يقتل كل الأعداء تلقائياً",
+                Default = false,
+                Callback = function(v)
+                    rw_autoKillOn = v
+                    if not v then table.clear(rw_lastHit) end
+                end
+            })
+
+            RunawaysTab:Toggle({
+                Title = "God Mode",
+                Desc = "منع الضرر والموت",
+                Default = false,
+                Callback = function(v)
+                    if v then rw_applyGodMode() else rw_restoreGodMode() end
+                end
+            })
+
+            RunawaysTab:Section({ Title = "Movement" })
+
+            RunawaysTab:Slider({
+                Title = "Walk Speed",
+                Desc = "سرعة المشي (TP Walk)",
+                Value = { Min = 1, Max = 100, Default = 1 },
+                Callback = function(v) rw_walkSpeed = tonumber(v) or 1 end
+            })
+
+            RunawaysTab:Toggle({
+                Title = "NoClip + Anti Void",
+                Desc = "اختراق الجدران مع منع السقوط",
+                Default = false,
+                Callback = function(v)
+                    rw_noclipOn = v
+                    if v then rw_enableNoclip() else rw_disableNoclip() end
+                end
+            })
+
+            RunawaysTab:Button({
+                Title = "Inf Jump",
+                Desc = "قفز لا نهائي",
+                Icon = "arrow-up",
+                Callback = function()
+                    UserInputService.JumpRequest:Connect(function()
+                        local character = LocalPlayer.Character
+                        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+                        if humanoid then
+                            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                        end
+                    end)
+                    Notify("Inf Jump مفعّل", "arrow-up")
+                end
+            })
+
+            RunawaysTab:Section({ Title = "Teleport" })
+
+            RunawaysTab:Button({
+                Title = "Goto FinalDoor",
+                Desc = "ينتقل للباب النهائي ويفتحه",
+                Icon = "door-open",
+                Callback = function()
+                    local character = LocalPlayer.Character
+                    local root = character and character:FindFirstChild("HumanoidRootPart")
+                    if not root then return end
+                    root.CFrame = CFrame.new(
+                        414.023376, 1684.79175, 83590.9922,
+                        -0.987750471, 4.99552533e-09, 0.156041607,
+                        4.77962647e-09, 1, -1.75880632e-09,
+                        -0.156041607, -9.91441151e-10, -0.987750471
+                    )
+                    task.wait(5)
+                    local commandButton = workspace.Map.Buildings.CustomsFinal.CustomsBuilding.FinalDoor.Command.CommandButton
+                    for _, child in ipairs(commandButton:GetChildren()) do
+                        if child.Name == "Prompt" then
+                            root.CFrame = child.CFrame * CFrame.new(0, 0, 5)
+                            task.wait(0.2)
+                            local prompt = child:FindFirstChildOfClass("ProximityPrompt") or child:FindFirstChild("ProximityPrompt")
+                            if prompt then fireproximityprompt(prompt) end
+                        end
+                    end
+                end
+            })
+
+            local vehicleNames = {}
+            pcall(function()
+                for _, vehicle in ipairs(workspace.Vehicles:GetChildren()) do
+                    if vehicle:IsA("Model") or vehicle:IsA("BasePart") then
+                        vehicleNames[#vehicleNames + 1] = vehicle.Name
+                    end
+                end
+            end)
+            table.sort(vehicleNames)
+
+            local selectedVehicle = nil
+            if #vehicleNames > 0 then
+                RunawaysTab:Dropdown({
+                    Title = "Choose a Vehicle",
+                    Values = vehicleNames,
+                    Default = vehicleNames[1],
+                    Callback = function(v) selectedVehicle = v end
+                })
+            end
+
+            RunawaysTab:Button({
+                Title = "Teleport to Vehicle",
+                Icon = "car",
+                Callback = function()
+                    if not selectedVehicle then return end
+                    local vehicle = workspace.Vehicles:FindFirstChild(selectedVehicle)
+                    if not vehicle then return end
+                    local character = LocalPlayer.Character
+                    local root = character and character:FindFirstChild("HumanoidRootPart")
+                    if not root then return end
+                    local cf = vehicle:IsA("BasePart") and vehicle.CFrame or vehicle:GetPivot()
+                    root.CFrame = cf * CFrame.new(0, 5, 0)
+                end
+            })
+
+            RunawaysTab:Section({ Title = "Money / Stars" })
+
+            local get5StarsRunning = false
+            RunawaysTab:Button({
+                Title = "GET 5 STARS",
+                Desc = "يكمل الماب ويجيب 5 نجوم تلقائياً",
+                Icon = "star",
+                Callback = function()
+                    if get5StarsRunning then return end
+                    get5StarsRunning = true
+                    local running = true
+                    local character = LocalPlayer.Character
+                    if not character then
+                        running = false
+                        get5StarsRunning = false
+                        return
+                    end
+                    local savedCFrame = character:GetPivot()
+                    local root = character:FindFirstChild("HumanoidRootPart")
+                    local event
+                    local okFlow = pcall(function()
+                        event = ReplicatedStorage:WaitForChild("FlowClient", 5):WaitForChild("ClientRunner", 5):WaitForChild("Event", 5)
+                    end)
+                    if not okFlow or not event then
+                        Notify("FlowClient غير موجود", "alert-triangle")
+                        get5StarsRunning = false
+                        return
+                    end
+                    task.spawn(function()
+                        while running and character.Parent do
+                            task.wait(0.1)
+                            pcall(function() event:FireServer("GameManager", "Replay") end)
+                            if root and root.Parent and typeof(firetouchinterest) == "function" then
+                                local cash = workspace:FindFirstChild("Cash")
+                                if cash then
+                                    for _, child in ipairs(cash:GetChildren()) do
+                                        local sensor = child:FindFirstChild("TouchSensor")
+                                        if sensor then
+                                            firetouchinterest(root, sensor, true)
+                                            firetouchinterest(root, sensor, false)
+                                        end
+                                    end
+                                end
+                                local loot = workspace:FindFirstChild("Loot")
+                                if loot then
+                                    for _, child in ipairs(loot:GetChildren()) do
+                                        local sensor = child:FindFirstChild("TouchSensor")
+                                            or (child:FindFirstChild("Cash") and child.Cash:FindFirstChild("TouchSensor"))
+                                        if sensor then
+                                            firetouchinterest(root, sensor, true)
+                                            firetouchinterest(root, sensor, false)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                    local function clearWorld()
+                        local map = workspace:FindFirstChild("Map")
+                        if map then
+                            for _, descendant in ipairs(map:GetDescendants()) do
+                                if descendant.Name:find("Glass") then
+                                    pcall(function() event:FireServer("Effects", "BreakGlass", descendant) end)
+                                end
+                            end
+                        end
+                        local npcs = workspace:FindFirstChild("NPCs")
+                        if npcs then
+                            for _, child in ipairs(npcs:GetChildren()) do
+                                local hum = child:FindFirstChild("Humanoid")
+                                if hum then
+                                    pcall(function() event:FireServer("NPCs", "Damage", hum, 13000) end)
+                                end
+                            end
+                        end
+                        local buildings = map and map:FindFirstChild("Buildings")
+                        if buildings then
+                            for _, descendant in ipairs(buildings:GetDescendants()) do
+                                if descendant.Name == "MaxHealth" and descendant.Parent then
+                                    pcall(function() event:FireServer("DamageToOpen", "Damage", descendant.Parent, 6000, "melee") end)
+                                end
+                            end
+                        end
+                    end
+                    local map = workspace:FindFirstChild("Map")
+                    local buildings = map and map:FindFirstChild("Buildings")
+                    if buildings then
+                        for _, child in ipairs(buildings:GetChildren()) do
+                            if child.Name == "PawnShop" and child:IsA("Model") then
+                                clearWorld()
+                                character:PivotTo(child:GetPivot())
+                                clearWorld()
+                                task.wait(1)
+                            end
+                        end
+                    end
+                    local points = { 2500, 22000, 45000, 83700, 120000 }
+                    local hud = LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild("HudGui")
+                    local progress = hud and hud:FindFirstChild("Distance") and hud.Distance:FindFirstChild("Progress")
+                    if progress then
+                        local found = {}
+                        for _, child in ipairs(progress:GetChildren()) do
+                            local n = child.Name:match("Border_(%d+)")
+                            if n then found[#found + 1] = tonumber(n) end
+                        end
+                        if #found > 0 then
+                            table.sort(found)
+                            if #found < 5 then found[#found + 1] = found[#found] + 25000 end
+                            points = found
+                        end
+                    end
+                    for _, v in ipairs(points) do
+                        if not running then break end
+                        character:PivotTo(CFrame.new(savedCFrame.Position.X, 2200, v))
+                        clearWorld()
+                        task.wait(0.25)
+                    end
+                    local map2 = workspace:FindFirstChild("Map")
+                    local buildings2 = map2 and map2:FindFirstChild("Buildings")
+                    local customs = buildings2 and buildings2:FindFirstChild("CustomsFinal")
+                    if customs then
+                        character:PivotTo(customs:GetPivot() * CFrame.new(0, 10, 1500))
+                    else
+                        character:PivotTo(CFrame.new(savedCFrame.Position.X, 2200, points[#points] + 1500))
+                    end
+                    task.wait(2)
+                    running = false
+                    get5StarsRunning = false
+                    if character.Parent then character:PivotTo(savedCFrame) end
+                end
+            })
+        end)
+        if not okTab then
+            warn("[NAZK] RUNAWAYS tab failed to build")
+        end
+    end)
+
+    WindUI:Notify({
+        Title = "NAZK HUB RED",
+        Content = "Loaded - Discord + Dash + RUNAWAYS ready!",
+        Duration = 3,
+        Icon = LOGO_ID
+    })
+
+    return Window, WindUI
+end
+
+-- ========== Boot ==========
+task.spawn(function()
+    local hubWindow, WindUI
+    task.spawn(function()
+        local ok, win, ui = pcall(BuildHub)
+        if ok and win then
+            hubWindow = win
+            WindUI = ui
+            WindowRef = win
+            mainLoaded = true
+        end
+    end)
+
+    for i = 1, 85 do
+        BarFill.Size = UDim2.new(i / 100, 0, 1, 0)
+        Percent.Text = i .. "%"
+        if i < 30 then Status.Text = "Loading assets..."
+        elseif i < 60 then Status.Text = "Loading WindUI..."
+        else Status.Text = "Building UI..." end
+        task.wait(0.02)
+    end
+
+    Status.Text = "Waiting for UI..."
+    local waited = 0
+    while not mainLoaded and waited < 12 do
+        BarFill.Size = UDim2.new(0.85 + math.sin(tick() * 4) * 0.03, 0, 1, 0)
+        task.wait(0.1)
+        waited = waited + 0.1
+    end
+
+    for i = 85, 100 do
+        BarFill.Size = UDim2.new(i / 100, 0, 1, 0)
+        Percent.Text = i .. "%"
+        Status.Text = "Opening..."
+        task.wait(0.03)
+    end
+    task.wait(0.2)
+
+    TweenService:Create(MainFrame, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+    TweenService:Create(BlurBg, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+    for _, v in ipairs(MainFrame:GetDescendants()) do
+        if v:IsA("TextLabel") then
+            TweenService:Create(v, TweenInfo.new(0.4), { TextTransparency = 1 }):Play()
+        elseif v:IsA("ImageLabel") then
+            TweenService:Create(v, TweenInfo.new(0.4), { ImageTransparency = 1 }):Play()
+        elseif v:IsA("Frame") then
+            TweenService:Create(v, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+        end
+    end
+    task.wait(0.45)
+    pcall(function() LoadingGui:Destroy() end)
+    if hubWindow then hubWindow:Open() end
+
+    -- ========== Floating UI ==========
+    local ToggleGui = Instance.new("ScreenGui")
+    ToggleGui.Name = "NAZK_Floating"
+    ToggleGui.ResetOnSpawn = false
+    ToggleGui.Parent = GetParent()
+    getgenv().NAZK_ToggleGui = ToggleGui
+
+    local NButton = Instance.new("ImageButton")
+    NButton.Name = "imageLabel"
+    NButton.Size = UDim2.fromOffset(60, 60)
+    NButton.Position = UDim2.new(0, 15, 0.5, -30)
+    NButton.BackgroundTransparency = 1
+    NButton.Image = LOGO_ID
+    NButton.ZIndex = 100
+    NButton.Parent = ToggleGui
+
+    local function CreateRedBlackButton(name, text, pos)
+        local Outer = Instance.new("Frame")
+        Outer.Name = name .. "_Outer"
+        Outer.Size = UDim2.fromOffset(79, 42)
+        Outer.Position = pos
+        Outer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        Outer.BorderSizePixel = 0
+        Outer.ZIndex = 99
+        Outer.Parent = ToggleGui
+        Instance.new("UICorner", Outer).CornerRadius = UDim.new(0, 14)
+        local OuterStroke = Instance.new("UIStroke")
+        OuterStroke.Color = Color3.fromRGB(255, 0, 0)
+        OuterStroke.Thickness = 2.5
+        OuterStroke.Parent = Outer
+
+        local btn = Instance.new("TextButton")
+        btn.Name = name
+        btn.Size = UDim2.fromOffset(75, 38)
+        btn.Position = UDim2.new(0, 2, 0, 2)
+        btn.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+        btn.Text = text
+        btn.TextColor3 = Color3.fromRGB(255, 0, 0)
+        btn.TextSize = 16
+        btn.Font = Enum.Font.GothamBold
+        btn.ZIndex = 100
+        btn.Parent = Outer
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 12)
+
+        return Outer, btn
+    end
+
+    local DashOuter, DashBtn = CreateRedBlackButton("Dash", "Dash", UDim2.new(1, -90, 0.5, -20))
+    getgenv().NAZK_DashButton = DashOuter
+
+    local function MakeDraggable(Button, Callback)
+        local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
+        Button.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                moved = false
+                dragStart = i.Position
+                startPos = Button.Position
+            end
+        end)
+        Button.InputChanged:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+                dragInput = i
+            end
+        end)
+        Button.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+                if not moved then Callback() end
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if i == dragInput and dragging then
+                local d = i.Position - dragStart
+                if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then moved = true end
+                Button.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+            end
+        end)
+    end
+
+    local function MakeDraggableOuter(Outer, Inner, Callback)
+        local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
+        Inner.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                moved = false
+                dragStart = i.Position
+                startPos = Outer.Position
+            end
+        end)
+        Inner.InputChanged:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+                dragInput = i
+            end
+        end)
+        Inner.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+                if not moved then Callback() end
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if i == dragInput and dragging then
+                local d = i.Position - dragStart
+                if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then moved = true end
+                Outer.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+            end
+        end)
+    end
+
+    local isOpen = true
+    MakeDraggable(NButton, function()
+        isOpen = not isOpen
+        if WindowRef then
+            if isOpen then WindowRef:Open() else WindowRef:Close() end
+        end
+    end)
+
+    MakeDraggableOuter(DashOuter, DashBtn, function()
+        DashBtn.Text = "..."
+        if getgenv().NAZK_DoDash then getgenv().NAZK_DoDash() end
+        task.wait(0.25)
+        DashBtn.Text = "Dash"
+    end)
+
+    _G.NAZK_HUB_CLEANUP = function()
+        pcall(function() if ToggleGui then ToggleGui:Destroy() end end)
+        pcall(function() if WindowRef then WindowRef:Destroy() end end)
+        pcall(function() if dashConn then dashConn:Disconnect() end end)
+        pcall(function() if LoadingGui then LoadingGui:Destroy() end end)
+        pcall(function() if rw_noclipConn then rw_noclipConn:Disconnect() end end)
+        rw_autoKillOn = false
+        getgenv().NAZK_DashButton = nil
+        _G.NAZK_HUB_RUNNING = false
+    end
+end)
