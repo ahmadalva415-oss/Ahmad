@@ -1,21 +1,27 @@
 --[[
-    NAZK HUB RED + Arc HUB | Ride a Pet
+    NAZK HUB | Ride a Pet
     Unified WindUI edition — audited build
 ]]
 
 -- ============================================================================
 -- RE-EXECUTION GUARD + EARLY OWNERSHIP/CLEANUP
 -- ============================================================================
-local previousArc = _G.ArcRideAPet
+-- Preserve cleanup compatibility with the previous build without using its old branding.
+local LEGACY_HUB_KEY = string.char(65, 114, 99, 82, 105, 100, 101, 65, 80, 101, 116)
+local previousNazkHub = _G.NAZK_HUB
+local previousLegacyHub = _G[LEGACY_HUB_KEY]
+local previousHubs = {}
+if previousNazkHub then table.insert(previousHubs, previousNazkHub) end
+if previousLegacyHub and previousLegacyHub ~= previousNazkHub then table.insert(previousHubs, previousLegacyHub) end
 local previousNazkCleanup = _G.NAZK_HUB_CLEANUP
 local previousNazkRunning = false
 pcall(function() previousNazkRunning = getgenv().NAZK_HUB_RUNNING == true end)
 
-if previousArc then
-    if type(previousArc.Unload) == "function" then
-        pcall(previousArc.Unload)
+for _, previousHub in ipairs(previousHubs) do
+    if type(previousHub.Unload) == "function" then
+        pcall(previousHub.Unload)
     else
-        warn("An Arc/Nazk hub instance is still booting and has no cleanup handler; not starting a duplicate.")
+        warn("A NAZK HUB instance is still booting and has no cleanup handler; not starting a duplicate.")
         return
     end
 end
@@ -27,7 +33,7 @@ elseif previousNazkRunning then
 end
 
 local HUB = { conns = {}, drawings = {}, highlights = {}, dead = false, version = "1.10-NazkWind-audit1" }
-_G.ArcRideAPet = HUB
+_G.NAZK_HUB = HUB
 local function track(conn)
     if conn then table.insert(HUB.conns, conn) end
     return conn
@@ -78,7 +84,7 @@ HUB.Unload = function()
         pcall(function() if LoadingGui then LoadingGui:Destroy() end end)
     end
     pcall(function() if Window then Window:Destroy() end end)
-    if _G.ArcRideAPet == HUB then _G.ArcRideAPet = nil end
+    if _G.NAZK_HUB == HUB then _G.NAZK_HUB = nil end
     if ownCleanup and _G.NAZK_HUB_CLEANUP == ownCleanup then _G.NAZK_HUB_CLEANUP = nil end
     pcall(function() getgenv().NAZK_HUB_RUNNING = false end)
 end
@@ -86,7 +92,7 @@ ownCleanup = function() HUB.Unload() end
 _G.NAZK_HUB_CLEANUP = ownCleanup
 
 -- ============================================================================
--- NAZK RED LOADING SCREEN (kept from the original hub)
+-- NAZK HUB loading screen
 -- ============================================================================
 local function CreateLoadingUI()
     local LoadingGui = Instance.new("ScreenGui")
@@ -210,7 +216,7 @@ end
 
 pcall(function()
     WindUI:AddTheme({
-        Name = "NAZK Red",
+        Name = "NAZK",
         Accent = Color3.fromRGB(255, 0, 0),
         Background = Color3.fromRGB(12, 12, 12),
         Outline = Color3.fromRGB(255, 0, 0),
@@ -224,10 +230,10 @@ local windowOk, createdWindow = pcall(function()
     return WindUI:CreateWindow({
         Title = "NAZK HUB | Ride a Pet",
         Icon = LOGO_ID,
-        Author = "NAZK RED EDITION + Arc HUB",
-        Folder = "NAZK_ARC_RIDE_A_PET",
+        Author = "NAZK HUB",
+        Folder = "NAZK_HUB",
         Size = UDim2.fromOffset(720, 520),
-        Theme = "NAZK Red",
+        Theme = "NAZK",
         Transparent = true,
         HasOutline = true,
         OpenButton = { Enabled = false },
@@ -310,7 +316,7 @@ end
 local function safeCallback(fn)
     return function(...)
         local ok, err = pcall(fn, ...)
-        if not ok then pcall(Notify, "Arc HUB", "Error: " .. tostring(err), "Error", 4) end
+        if not ok then pcall(Notify, "NAZK HUB", "Error: " .. tostring(err), "Error", 4) end
     end
 end
 
@@ -394,7 +400,7 @@ end
 local function SafeActionCallback(fn)
     return safeCallback(function(...)
         if HUB.actionBusy then
-            Notify("Arc HUB", "Another character action is running; try again shortly", "Info")
+            Notify("NAZK HUB", "Another character action is running; try again shortly", "Info")
             return
         end
         return RunSerialized(function(...) return fn(...) end, ...)
@@ -1548,7 +1554,7 @@ local markerFolder = nil
 local function MarkerFolder()
     if markerFolder and markerFolder.Parent then return markerFolder end
     markerFolder = Instance.new("Folder")
-    markerFolder.Name = "ArcHubEggMarkers"
+    markerFolder.Name = "NazkHubEggMarkers"
     markerFolder.Parent = Workspace.CurrentCamera or Workspace
     return markerFolder
 end
@@ -1586,7 +1592,7 @@ end
 local function MakeEggMarker(id, egg)
     local color = ESP_COLORS[egg.rarity] or Color3.new(1, 1, 1)
     local part = Instance.new("Part")
-    part.Name = "ArcEggMarker"
+    part.Name = "NazkEggMarker"
     part.Shape = Enum.PartType.Ball
     part.Size = Vector3.new(3, 3, 3)
     part.Anchored = true
@@ -1601,7 +1607,7 @@ local function MakeEggMarker(id, egg)
     part.Parent = MarkerFolder()
 
     local h = Instance.new("Highlight")
-    h.Name = "ArcHubESP"
+    h.Name = "NazkHubESP"
     h.Adornee = part
     h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     h.FillColor = color
@@ -1612,7 +1618,7 @@ local function MakeEggMarker(id, egg)
     table.insert(HUB.highlights, { instance = h, kind = "egg" })
 
     local gui = Instance.new("BillboardGui")
-    gui.Name = "ArcEggLabel"
+    gui.Name = "NazkEggLabel"
     gui.Size = UDim2.fromOffset(180, 30)
     gui.StudsOffsetWorldSpace = Vector3.new(0, 3.2, 0)
     gui.AlwaysOnTop = true
@@ -1646,7 +1652,7 @@ local function HighlightFor(kind, inst)
     end
     if not h then
         h = Instance.new("Highlight")
-        h.Name = "ArcHubESP"
+        h.Name = "NazkHubESP"
         h.FillTransparency = 0.6
         h.OutlineTransparency = 0
         h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
@@ -1882,10 +1888,10 @@ end
 local function TeleportToOwnPlot()
     return RunSerialized(function()
         local plot = OwnPlot()
-        if not plot then return Notify("Arc HUB", "No plot loaded", "Error") end
+        if not plot then return Notify("NAZK HUB", "No plot loaded", "Error") end
         local base = plot:FindFirstChild("Baseplate") or plot:FindFirstChild("Baseplate", true)
         if base and not TravelToCFrame(PartTopCFrame(base)) then
-            Notify("Arc HUB", "Teleport failed", "Error")
+            Notify("NAZK HUB", "Teleport failed", "Error")
         end
     end)
 end
@@ -1893,9 +1899,9 @@ local function TeleportToStall(name)
     return RunSerialized(function()
         local stalls = Workspace:FindFirstChild("Stalls")
         local stall = stalls and stalls:FindFirstChild(name)
-        if not stall then return Notify("Arc HUB", "Stall not found", "Error") end
+        if not stall then return Notify("NAZK HUB", "Stall not found", "Error") end
         local pivot = stall:IsA("Model") and stall:GetPivot().Position or stall.Position
-        if not TravelTo(pivot, 6) then Notify("Arc HUB", "Teleport failed", "Error") end
+        if not TravelTo(pivot, 6) then Notify("NAZK HUB", "Teleport failed", "Error") end
     end)
 end
 
@@ -1978,7 +1984,7 @@ local function EggLoopStep()
             if S.autoHatch then HatchReadyEggs() end
         end
     end)
-    if not ok then pcall(Notify, "Arc HUB", "Egg loop: " .. tostring(err), "Error", 3) end
+    if not ok then pcall(Notify, "NAZK HUB", "Egg loop: " .. tostring(err), "Error", 3) end
     S.busy = false
     HUB.actionBusy = false
     return did
@@ -2192,7 +2198,7 @@ local function MakeDraggableOuter(Outer, Inner, Callback)
     end))
 end
 
-local function CreateRedBlackButton(name, text, pos)
+local function CreateDashButton(name, text, pos)
     local Outer = Instance.new("Frame")
     Outer.Name = name .. "_Outer"
     Outer.Size = UDim2.fromOffset(79, 42)
@@ -2238,7 +2244,7 @@ local function CreateFloatingUI()
     NButton.ZIndex = 100
     NButton.Parent = ToggleGui
 
-    DashOuter, DashBtn = CreateRedBlackButton("Dash", "Dash", UDim2.new(1, -90, 0.5, -20))
+    DashOuter, DashBtn = CreateDashButton("Dash", "Dash", UDim2.new(1, -90, 0.5, -20))
     getgenv().NAZK_DashButton = DashOuter
 
     local isOpen = true
@@ -2277,7 +2283,7 @@ getgenv().NAZK_HUB_RUNNING = true
 
 -- ============================================================================
 -- UNIFIED WINDUI CONTROLS
--- Every original Arc / NAZK command and button is represented below.
+-- Every original NAZK HUB command and button is represented below.
 -- ============================================================================
 local toggleRefs = {}
 local function SetState(key, value)
@@ -2651,11 +2657,11 @@ settingsTab:Section({ Title = "Main" })
 settingsTab:Input({ Title = "Config name", Value = CONFIG_NAME, Placeholder = "rideapet", Callback = function(value) if type(value) == "string" and value ~= "" then CONFIG_NAME = value end end })
 settingsTab:Button({ Title = "Save config", Icon = "save", Callback = safeCallback(SaveWindConfig) })
 settingsTab:Button({ Title = "Load config", Icon = "folder-open", Callback = safeCallback(LoadWindConfig) })
-settingsTab:Button({ Title = "Unload Arc HUB", Icon = "power", Callback = safeCallback(function() if HUB.Unload then HUB.Unload() end end) })
+settingsTab:Button({ Title = "Unload NAZK HUB", Icon = "power", Callback = safeCallback(function() if HUB.Unload then HUB.Unload() end end) })
 
 
 -- ============================================================================
--- UNLOAD (Arc and NAZK together)
+-- UNLOAD NAZK HUB
 -- ============================================================================
 function HUB.Unload()
     if HUB.dead then return end
@@ -2680,9 +2686,9 @@ function HUB.Unload()
     pcall(RestoreCollisions)
     pcall(CleanupNazkVisuals)
     pcall(function() Window:Destroy() end)
-    if _G.ArcRideAPet == HUB then _G.ArcRideAPet = nil end
+    if _G.NAZK_HUB == HUB then _G.NAZK_HUB = nil end
     if _G.NAZK_HUB_CLEANUP == ownCleanup then _G.NAZK_HUB_CLEANUP = nil end
-    print("[NAZK + Arc HUB] Ride a Pet unloaded.")
+    print("[NAZK HUB] Ride a Pet unloaded.")
 end
 
 _G.NAZK_HUB_CLEANUP = ownCleanup
@@ -2778,6 +2784,6 @@ end)
 
 CreateFloatingUI()
 FinishLoading()
-Notify("NAZK HUB RED", "Loaded - Arc Ride a Pet + Discord + Dash ready!", "Success", 3)
+Notify("NAZK HUB", "Ride a Pet + Discord + Dash ready!", "Success", 3)
 
 return HUB
