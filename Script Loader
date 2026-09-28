@@ -31,7 +31,13 @@ local scripts = {
     ["113290951185459"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Anime%20Dice",
 
     --// Runaways
-    ["118418618261207"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Runaways"
+    ["118418618261207"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Runaways",
+
+    --// Blade Ball
+    ["13772394625"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blade%20ball",
+
+    --// Jump for Animals
+    ["126870639873289"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Jump%20for%20animals"
 }
 
 local url = scripts[placeId]
