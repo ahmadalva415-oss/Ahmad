@@ -1,0 +1,2783 @@
+--[[
+    NAZK HUB RED + Arc HUB | Ride a Pet
+    Unified WindUI edition — audited build
+]]
+
+-- ============================================================================
+-- RE-EXECUTION GUARD + EARLY OWNERSHIP/CLEANUP
+-- ============================================================================
+local previousArc = _G.ArcRideAPet
+local previousNazkCleanup = _G.NAZK_HUB_CLEANUP
+local previousNazkRunning = false
+pcall(function() previousNazkRunning = getgenv().NAZK_HUB_RUNNING == true end)
+
+if previousArc then
+    if type(previousArc.Unload) == "function" then
+        pcall(previousArc.Unload)
+    else
+        warn("An Arc/Nazk hub instance is still booting and has no cleanup handler; not starting a duplicate.")
+        return
+    end
+end
+if type(previousNazkCleanup) == "function" then
+    pcall(previousNazkCleanup)
+elseif previousNazkRunning then
+    warn("A NAZK hub instance is still running without a cleanup handler; not starting a duplicate.")
+    return
+end
+
+local HUB = { conns = {}, drawings = {}, highlights = {}, dead = false, version = "1.10-NazkWind-audit1" }
+_G.ArcRideAPet = HUB
+local function track(conn)
+    if conn then table.insert(HUB.conns, conn) end
+    return conn
+end
+local function trackDrawing(d)
+    if d then table.insert(HUB.drawings, d) end
+    return d
+end
+
+local Window, LoadingGui, BlurBg, LoadingFrame, BarFill, Percent, LoadingStatus
+local ToggleGui
+local S
+local RestoreCollisions, ClearEggMarkers, CleanupNazkVisuals
+local ownCleanup
+
+local CoreGui = game:GetService("CoreGui")
+local Debris = game:GetService("Debris")
+local LOGO_ID = "rbxassetid://139759348685642"
+local LOGO_SIZE = 38
+local LOGO_POS = UDim2.new(0, -6, 0.5, -19)
+local DISCORD_URL = "https://discord.gg/ne5vgR9q8"
+local CONFIG_NAME = "rideapet"
+
+local function GetParent()
+    local ok, res = pcall(function() return gethui() end)
+    if ok and res then return res end
+    return CoreGui
+end
+
+getgenv().NAZK_HUB_RUNNING = true
+
+HUB.Unload = function()
+    if HUB.dead then return end
+    HUB.dead = true
+    if S then
+        S.eggLoop, S.petLoop, S.progressLoop, S.luckBuying = false, false, false, false
+        S.farmNoclip, S.farmNoclipActive = false, false
+    end
+    for _, c in ipairs(HUB.conns) do pcall(function() c:Disconnect() end) end
+    HUB.conns = {}
+    if HUB.noclipConn then pcall(function() HUB.noclipConn:Disconnect() end); HUB.noclipConn = nil end
+    if type(RestoreCollisions) == "function" then pcall(RestoreCollisions) end
+    if type(ClearEggMarkers) == "function" then pcall(ClearEggMarkers) end
+    if type(CleanupNazkVisuals) == "function" then
+        pcall(CleanupNazkVisuals)
+    else
+        pcall(function() if ToggleGui then ToggleGui:Destroy() end end)
+        pcall(function() if LoadingGui then LoadingGui:Destroy() end end)
+    end
+    pcall(function() if Window then Window:Destroy() end end)
+    if _G.ArcRideAPet == HUB then _G.ArcRideAPet = nil end
+    if ownCleanup and _G.NAZK_HUB_CLEANUP == ownCleanup then _G.NAZK_HUB_CLEANUP = nil end
+    pcall(function() getgenv().NAZK_HUB_RUNNING = false end)
+end
+ownCleanup = function() HUB.Unload() end
+_G.NAZK_HUB_CLEANUP = ownCleanup
+
+-- ============================================================================
+-- NAZK RED LOADING SCREEN (kept from the original hub)
+-- ============================================================================
+local function CreateLoadingUI()
+    local LoadingGui = Instance.new("ScreenGui")
+    LoadingGui.Name = "NAZK_Loading"
+    LoadingGui.ResetOnSpawn = false
+    LoadingGui.IgnoreGuiInset = true
+    LoadingGui.Parent = GetParent()
+
+    local BlurBg = Instance.new("Frame")
+    BlurBg.Size = UDim2.new(1, 0, 1, 0)
+    BlurBg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    BlurBg.BackgroundTransparency = 0.2
+    BlurBg.BorderSizePixel = 0
+    BlurBg.Parent = LoadingGui
+
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Size = UDim2.fromOffset(340, 400)
+    MainFrame.Position = UDim2.new(0.5, -170, 0.5, -200)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Parent = LoadingGui
+    Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 6)
+    local MainStroke = Instance.new("UIStroke")
+    MainStroke.Color = Color3.fromRGB(255, 0, 0)
+    MainStroke.Thickness = 2
+    MainStroke.Parent = MainFrame
+
+    local Logo = Instance.new("ImageLabel")
+    Logo.Size = UDim2.fromOffset(140, 140)
+    Logo.Position = UDim2.new(0.5, -70, 0, 35)
+    Logo.BackgroundTransparency = 1
+    Logo.Image = LOGO_ID
+    Logo.Parent = MainFrame
+
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1, 0, 0, 40)
+    Title.Position = UDim2.new(0, 0, 0, 190)
+    Title.BackgroundTransparency = 1
+    Title.Text = "NAZK HUB"
+    Title.TextColor3 = Color3.new(1, 1, 1)
+    Title.Font = Enum.Font.GothamBold
+    Title.TextSize = 36
+    Title.Parent = MainFrame
+
+    local Sub = Instance.new("TextLabel")
+    Sub.Size = UDim2.new(1, 0, 0, 20)
+    Sub.Position = UDim2.new(0, 0, 0, 230)
+    Sub.BackgroundTransparency = 1
+    Sub.Text = "R E D   E D I T I O N  +  A R C"
+    Sub.TextColor3 = Color3.fromRGB(255, 0, 0)
+    Sub.Font = Enum.Font.GothamBold
+    Sub.TextSize = 11
+    Sub.Parent = MainFrame
+
+    local BarBG = Instance.new("Frame")
+    BarBG.Size = UDim2.new(0.75, 0, 0, 8)
+    BarBG.Position = UDim2.new(0.125, 0, 0, 285)
+    BarBG.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    BarBG.BorderSizePixel = 0
+    BarBG.Parent = MainFrame
+    Instance.new("UICorner", BarBG).CornerRadius = UDim.new(1, 0)
+
+    local BarFill = Instance.new("Frame")
+    BarFill.Size = UDim2.new(0, 0, 1, 0)
+    BarFill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    BarFill.BorderSizePixel = 0
+    BarFill.Parent = BarBG
+    Instance.new("UICorner", BarFill).CornerRadius = UDim.new(1, 0)
+
+    local Percent = Instance.new("TextLabel")
+    Percent.Size = UDim2.new(1, 0, 0, 20)
+    Percent.Position = UDim2.new(0, 0, 0, 305)
+    Percent.BackgroundTransparency = 1
+    Percent.Text = "0%"
+    Percent.TextColor3 = Color3.new(1, 1, 1)
+    Percent.Font = Enum.Font.GothamBold
+    Percent.TextSize = 18
+    Percent.Parent = MainFrame
+
+    local Status = Instance.new("TextLabel")
+    Status.Size = UDim2.new(1, 0, 0, 15)
+    Status.Position = UDim2.new(0, 0, 0, 260)
+    Status.BackgroundTransparency = 1
+    Status.Text = "Loading..."
+    Status.TextColor3 = Color3.fromRGB(150, 150, 150)
+    Status.Font = Enum.Font.Gotham
+    Status.TextSize = 12
+    Status.Parent = MainFrame
+
+    return LoadingGui, BlurBg, MainFrame, BarFill, Percent, Status
+end
+
+LoadingGui, BlurBg, LoadingFrame, BarFill, Percent, LoadingStatus = CreateLoadingUI()
+
+
+-- ============================================================================
+-- PINNED WINDUI LOAD (loading screen + cleanup are already available)
+-- ============================================================================
+local function LoadWindUI()
+    local ok, result = pcall(function()
+        return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua"))()
+    end)
+    if not ok or not result then
+        ok, result = pcall(function()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+        end)
+    end
+    if not ok or not result then error("WindUI could not be loaded: " .. tostring(result)) end
+    return result
+end
+
+local loadOk, WindUI = pcall(LoadWindUI)
+if HUB.dead then return HUB end
+if not loadOk or not WindUI then
+    local message = "WindUI load failed: " .. tostring(WindUI)
+    if LoadingStatus then LoadingStatus.Text = message end
+    warn(message)
+    HUB.bootError = message
+    return HUB
+end
+
+pcall(function()
+    WindUI:AddTheme({
+        Name = "NAZK Red",
+        Accent = Color3.fromRGB(255, 0, 0),
+        Background = Color3.fromRGB(12, 12, 12),
+        Outline = Color3.fromRGB(255, 0, 0),
+        Text = Color3.new(1, 1, 1),
+        Button = Color3.fromRGB(25, 25, 25),
+        Icon = Color3.fromRGB(255, 0, 0),
+    })
+end)
+
+local windowOk, createdWindow = pcall(function()
+    return WindUI:CreateWindow({
+        Title = "NAZK HUB | Ride a Pet",
+        Icon = LOGO_ID,
+        Author = "NAZK RED EDITION + Arc HUB",
+        Folder = "NAZK_ARC_RIDE_A_PET",
+        Size = UDim2.fromOffset(720, 520),
+        Theme = "NAZK Red",
+        Transparent = true,
+        HasOutline = true,
+        OpenButton = { Enabled = false },
+    })
+end)
+if HUB.dead then return HUB end
+if not windowOk or not createdWindow then
+    local message = "WindUI window creation failed: " .. tostring(createdWindow)
+    if LoadingStatus then LoadingStatus.Text = message end
+    warn(message)
+    HUB.bootError = message
+    return HUB
+end
+Window = createdWindow
+pcall(function() Window:EditOpenButton({ Enabled = false }) end)
+pcall(function() Window:Close() end)
+
+-- ==============================================================================
+-- SERVICES & LOCALS
+-- ==============================================================================
+local Players          = game:GetService("Players")
+local RS               = game:GetService("ReplicatedStorage")
+local Workspace        = game:GetService("Workspace")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService     = game:GetService("TweenService")
+local CollectionService = game:GetService("CollectionService")
+
+local LP = Players.LocalPlayer
+local function GetHRP()
+    local char = LP.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+local function GetHumanoid()
+    local char = LP.Character
+    return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+-- Remotes
+local Remotes = RS:WaitForChild("Remotes", 30)
+local GameRemotes = Remotes and Remotes:WaitForChild("Game", 30)
+if HUB.dead then return HUB end
+local function Remote(name)
+    if not GameRemotes then return nil end
+    return GameRemotes:FindFirstChild(name)
+end
+
+-- GameData (read-only tables the game ships)
+local function SafeRequire(inst)
+    if not inst then return nil end
+    local ok, res = pcall(require, inst)
+    if ok and type(res) == "table" then return res end
+    return nil
+end
+local GameData     = RS:FindFirstChild("GameData")
+local GameServices = RS:FindFirstChild("GameServices")
+local EggData      = SafeRequire(GameData and GameData:FindFirstChild("Eggs"))
+local FoodData     = SafeRequire(GameData and GameData:FindFirstChild("Foods"))
+local NestData     = SafeRequire(GameData and GameData:FindFirstChild("Nests"))
+local RebirthData  = SafeRequire(GameData and GameData:FindFirstChild("Rebirths"))
+local HatchLuck    = SafeRequire(GameData and GameData:FindFirstChild("HatchLuck"))
+local GeneralData  = SafeRequire(GameData and GameData:FindFirstChild("General"))
+local GeneralSvc   = SafeRequire(GameServices and GameServices:FindFirstChild("General"))
+local DayNightSvc  = SafeRequire(GameServices and GameServices:FindFirstChild("DayNight"))
+if HUB.dead then return HUB end
+
+local NEST_PRICES = (NestData and NestData.Prices) or { 0, 1000, 5000, 100000, 1000000 }
+local RARITY_ORDER = { Common = 1, Rare = 2, Epic = 3, Legendary = 4, Mythic = 5, Ethereal = 6, Divine = 7, Volcanic = 8 }
+
+local function Notify(title, content, kind, dur)
+    pcall(function()
+        WindUI:Notify({
+            Title = title,
+            Content = content,
+            Duration = dur or 2.5,
+            Icon = kind == "Error" and "circle-alert" or (kind == "Success" and "circle-check" or "info"),
+        })
+    end)
+end
+local function safeCallback(fn)
+    return function(...)
+        local ok, err = pcall(fn, ...)
+        if not ok then pcall(Notify, "Arc HUB", "Error: " .. tostring(err), "Error", 4) end
+    end
+end
+
+-- ==============================================================================
+-- STATE
+-- ==============================================================================
+S = {
+    -- Egg loop
+    eggLoop = false,
+    eggPriority = "Best Value",     -- Fast Cycle | Best Value | Nearest
+    eggRarities = {},               -- empty = all
+    eggLoopDelay = 0,               -- extra pause per cycle (0 = straight to the next egg)
+    sideInterval = 3,               -- planting/hatching only every X seconds (they would slow the cycle)
+    autoDeliver = true,             -- deliver a collected egg home (cash)
+    autoPlant = false,              -- plant inventory eggs into free nests
+    plantMinLuck = 0,               -- only plant eggs from this luck value on
+    autoHatch = true,
+    hatchDelay = 1.0,
+    maxEggTravel = 0,               -- unused: no distance limit any more (instant TP)
+    volcanicLairPath = true,        -- Volcanic Eggs: enter the lair through its door first
+    lairSettle = 0.8,               -- how long the server may take to see us inside the lair
+    pickupRetries = 8,              -- attempts per egg (server position lag)
+    deliverDelay = 0,               -- pause after the pickup before heading home (0 = instant)
+    useRemotes = true,              -- hard wired: EggPickup/EggArrivalClaim are always fired directly
+
+    usePrompt = false,              -- additionally fire the real ProximityPrompt (costs its hold time)
+    -- Pet loop
+    petLoop = false,
+    autoCollectPets = true,
+    autoFeedPets = false,
+    autoPlacePets = false,
+    placeBestPets = true,
+    -- Progress
+    progressLoop = false,
+    autoUnlockNests = false,
+    autoRebirth = false,
+    autoHatchUpgrades = false,
+    autoClaimIndex = false,
+    autoClaimOffline = false,
+    autoClaimGroup = false,
+    autoClaimEvent = false,
+    autoRadar = false,
+    autoRestock = false,
+    autoBuyFood = false,
+    autoBuyGear = false,
+    -- ESP
+    eggEsp = false,
+    petEsp = false,
+    playerEsp = false,
+    espRarities = {},
+    espEggLabels = true,        -- show name/rarity/distance on the marker
+    espEggMaxDist = 0,          -- 0 = mark every egg
+    -- Player (only the farm noclip is left - the Player tab is removed for good)
+    noclip = false,
+    farmNoclip = true,          -- noclip automatically while the egg farm is running
+    farmNoclipActive = false,
+    -- Luck-Upgrades (Progress-Tab)
+    luckBuying = false,         -- the "Buy luck" button
+    luckBuyDelay = 2,           -- delay between purchases
+    luckBuyMode = "1 Upgrade",  -- "1 Upgrade" | "Max"
+    upgradeReserve = 100000,    -- cash that upgrades must not touch
+    -- intern
+    busy = false,
+    lastEggError = nil,
+    stats = { eggs = 0, hatched = 0, delivered = 0, planted = 0, collected = 0, rebirths = 0, nests = 0, cash = 0 },
+}
+
+-- Debug hooks (live inspection and control from outside, e.g. via executor)
+HUB.state = S
+
+local function RunSerialized(fn, ...)
+    if HUB.dead then return false, "unload" end
+    if HUB.actionBusy then return false, "busy" end
+    HUB.actionBusy = true
+    local ok, a, b, c = pcall(fn, ...)
+    HUB.actionBusy = false
+    if not ok then error(a, 0) end
+    return a, b, c
+end
+
+local function SafeActionCallback(fn)
+    return safeCallback(function(...)
+        if HUB.actionBusy then
+            Notify("Arc HUB", "Another character action is running; try again shortly", "Info")
+            return
+        end
+        return RunSerialized(function(...) return fn(...) end, ...)
+    end)
+end
+
+-- ==============================================================================
+-- HELPERS
+-- ==============================================================================
+local function EggInfo(name)
+    if EggData and EggData[name] then return EggData[name] end
+    return nil
+end
+
+local function RarityRank(rarity)
+    return RARITY_ORDER[rarity] or 0
+end
+
+local function OwnPlot()
+    local plots = Workspace:FindFirstChild("Plots")
+    if not plots then return nil end
+    for _, p in ipairs(plots:GetChildren()) do
+        if p:GetAttribute("NestsOwnerLoaded") == LP.UserId then return p end
+    end
+    -- Fallback wie im Referenz-Script: Plot.Data.Owner (ObjectValue)
+    for _, p in ipairs(plots:GetChildren()) do
+        local data = p:FindFirstChild("Data")
+        local owner = data and data:FindFirstChild("Owner")
+        if owner and owner:IsA("ObjectValue") and owner.Value == LP then return p end
+    end
+    return nil
+end
+local function PlotEggs(plot) return plot and plot:FindFirstChild("Eggs") end
+local function PlotNests(plot) return plot and plot:FindFirstChild("Nests") end
+local function PlotPets(plot) return plot and plot:FindFirstChild("Pets") end
+local function Basket() return LP:FindFirstChild("Basket") end
+local function CarriedEggs() local b = Basket() return b and b:GetChildren() or {} end
+
+-- Harter TP wie im getesteten Referenz-Script: ganzen Character pivoten
+local function PivotCharacter(cframe)
+    if typeof(cframe) ~= "CFrame" then return false end
+    local char, hrp = LP.Character, GetHRP()
+    if not char or not hrp then return false end
+    local ok = pcall(function()
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        char:PivotTo(cframe)
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+    end)
+    if ok then
+        -- remember where WE placed the character (used to detect outside interference)
+        HUB.lastPlacedPos = cframe.Position
+        HUB.lastPlacedAt = os.clock()
+    end
+    return ok
+end
+
+-- Target points like in the reference script: 10 studs above the top edge
+local EGG_HEIGHT_OFFSET = 10
+
+local function EggTopCFrame(model)
+    if not model or not model.Parent then return nil end
+    local ok, bb, size = pcall(function() return model:GetBoundingBox() end)
+    if not ok or typeof(bb) ~= "CFrame" or typeof(size) ~= "Vector3" then return nil end
+    return CFrame.new(Vector3.new(bb.Position.X, bb.Position.Y + size.Y * 0.5 + EGG_HEIGHT_OFFSET, bb.Position.Z))
+end
+
+local function PartTopCFrame(part)
+    if not part or not part:IsA("BasePart") or not part.Parent then return nil end
+    -- exactly like getBaseplateTopCFrame in the reference script: cf * (0, size.Y/2 + 10, 0)
+    return part.CFrame * CFrame.new(0, part.Size.Y * 0.5 + EGG_HEIGHT_OFFSET, 0)
+end
+
+-- Travel to a CFrame: always a hard pivot TP like in the reference script (no tween)
+local function TravelToCFrame(cframe)
+    if typeof(cframe) ~= "CFrame" then return false end
+    return PivotCharacter(cframe)
+end
+
+-- Travel to the egg / to the base / to the nest (by position)
+local function TravelTo(pos, yOffset)
+    if typeof(pos) ~= "Vector3" then return false end
+    return TravelToCFrame(CFrame.new(pos + Vector3.new(0, yOffset or 3, 0)))
+end
+
+local function PlayerCash()
+    local sd = LP:FindFirstChild("SavedData")
+    local cash = sd and sd:FindFirstChild("Cash")
+    return cash and cash.Value or 0
+end
+local function PlayerStat(name)
+    local sd = LP:FindFirstChild("SavedData")
+    local v = sd and sd:FindFirstChild(name)
+    return v and v.Value or 0
+end
+
+-- Short number for the UI (37.4B)
+local function ShortNumber(n)
+    n = tonumber(n) or 0
+    if n >= 1e9 then return string.format("%.2f B", n / 1e9) end
+    if n >= 1e6 then return string.format("%.1f M", n / 1e6) end
+    if n >= 1e3 then return string.format("%.0f k", n / 1e3) end
+    return tostring(math.floor(n))
+end
+
+-- Last prompt contact (real hold time / action text) for the UI
+local lastHold = { duration = nil, method = nil, action = nil }
+local PROMPT_SETTLE = 0.05   -- give the server time to see the TP (fast, but not 0)
+
+-- Real prompt trigger - exactly what an executor's "Proximity Prompt" feature
+-- or the reference script does: ONE fireproximityprompt on the game's prompt.
+-- The executor evaluates the prompt's hold time itself.
+--
+-- IMPORTANT: no prompt:InputHoldBegin()/InputHoldEnd() any more! That wedges the
+-- prompt state on the client (a hold without end, e.g. when the egg disappears
+-- while holding) - after that NO prompt works, not even in other scripts.
+-- That was the bug.
+local function FirePrompt(prompt)
+    if not prompt or not prompt:IsA("ProximityPrompt") or not prompt.Parent then return false end
+    if prompt.Enabled == false then return false end
+    lastHold.duration = tonumber(prompt.HoldDuration) or 0
+    lastHold.action = tostring(prompt.ActionText or "")
+    local ok = pcall(fireproximityprompt, prompt)
+    lastHold.method = ok and "Proximity prompt" or "prompt trigger failed"
+    return ok
+end
+
+-- ==============================================================================
+-- EGG SYSTEM
+--
+-- On pickup the server checks the distance between the player and the egg's spawn
+-- point (limit 90 studs) using ITS OWN copy of the player position. After a
+-- teleport that copy is only current ~0.3-0.5s later, which is why the old
+-- ProximityPrompt route kept failing with "refused: too far from its spawn point".
+-- New: fire the EggPickup remote directly and retry until the carry is full.
+-- ==============================================================================
+local function ServerDataFolder()
+    return RS:FindFirstChild("ServerData")
+end
+local function ActiveEggsFolder()
+    local sd = ServerDataFolder()
+    return sd and sd:FindFirstChild("ActiveEggs")
+end
+local function EggPickupRemote() return Remote("EggPickup") end
+local function EggPlacedRemote() return Remote("EggPlaced") end
+local function ArrivalClaimRemote() return Remote("EggArrivalClaim") end
+
+-- Last server answer to our pickup (the real reason instead of guesswork)
+local lastPickup = { mode = nil, reason = nil, name = nil }
+if EggPickupRemote() then
+    track(EggPickupRemote().OnClientEvent:Connect(function(mode, reason, name)
+        lastPickup = { mode = tostring(mode), reason = tostring(reason), name = tostring(name) }
+    end))
+end
+
+-- All field eggs from the server records (not the rendered stand-ins)
+local function EggRecords()
+    local out = {}
+    local folder = ActiveEggsFolder()
+    if not folder then return out end
+    local now = Workspace:GetServerTimeNow()
+    for _, record in ipairs(folder:GetChildren()) do
+        local name = record:GetAttribute("Egg")
+        local pos = record:GetAttribute("Position")
+        local private = record:GetAttribute("PrivateTo")
+        local dropEnds = tonumber(record:GetAttribute("DropEndsAt"))
+        local falling = dropEnds ~= nil and dropEnds == dropEnds and dropEnds > now
+        if type(name) == "string" and typeof(pos) == "Vector3"
+            and (private == nil or private == LP.UserId) and not falling then
+            local info = EggInfo(name)
+            out[#out + 1] = {
+                record = record,
+                id = record.Name,
+                name = name,
+                pos = pos,
+                weight = tonumber(record:GetAttribute("Weight")) or 1,
+                mutation = record:GetAttribute("Mutation"),
+                rarity = (info and info.Rarity) or "?",
+                luck = (info and info.Luck) or 0,
+                sell = (info and info.SellPrice) or 0,
+                growth = (info and info.GrowthTime) or 0,
+            }
+        end
+    end
+    return out
+end
+
+-- Rendered field eggs (the client builds these models incl. pickup prompt itself)
+local function RenderedEggs()
+    local out = {}
+    local rendered = Workspace:FindFirstChild("RenderedEggs")
+    if not rendered then return out end
+    for _, model in ipairs(rendered:GetChildren()) do
+        if model:IsA("Model") then
+            local pp = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
+            if pp then
+                local info = EggInfo(model.Name)
+                local prompt = model:FindFirstChild("Pickup", true)
+                if not prompt or not prompt:IsA("ProximityPrompt") then
+                    prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+                end
+                out[#out + 1] = {
+                    model = model,
+                    pos = pp.Position,
+                    rarity = (info and info.Rarity) or "?",
+                    prompt = (prompt and prompt:IsA("ProximityPrompt")) and prompt or nil,
+                }
+            end
+        end
+    end
+    return out
+end
+
+-- Rendered egg for a record position (used for the pickup prompt)
+local function RenderedEggNear(pos)
+    if typeof(pos) ~= "Vector3" then return nil end
+    local best, bestD
+    for _, r in ipairs(RenderedEggs()) do
+        local d = (r.pos - pos).Magnitude
+        if d < 12 and (not bestD or d < bestD) then best, bestD = r, d end
+    end
+    return best
+end
+
+-- Reference TP onto a field egg: onto the rendered model (bounding box + 10 studs),
+-- otherwise onto the server position. No distance limit, always a hard pivot.
+local function TravelToEgg(egg)
+    if not egg or typeof(egg.pos) ~= "Vector3" then return false end
+    local rendered = RenderedEggNear(egg.pos)
+    local target = rendered and EggTopCFrame(rendered.model)
+    if not target then target = CFrame.new(egg.pos + Vector3.new(0, EGG_HEIGHT_OFFSET, 0)) end
+    return TravelToCFrame(target)
+end
+
+-- ==============================================================================
+-- VOLCANIC EGG - GUARDIAN LAIR PATH
+--
+-- "Volcanic Egg" is the only egg with RequiresVolcano/SpecificSpawn (GameData.Eggs).
+-- Its pad (Workspace.EggSpawns.Volcanic) is inside the sleeping dragon's lair
+-- (Workspace.Volcano.VolcanoIsland.SleepingVolkaris, region Workspace.GuardianBounds).
+-- The server only accepts the pickup while we count as "inside the lair", which the
+-- plain instant TP is not: it answers "not inside the lair (enter through its door)".
+-- So: enter through the lair door first, wait for the server's own InVolcano marker,
+-- then travel to the egg and claim.
+-- ==============================================================================
+local VOLCANIC_EGG = "Volcanic Egg"
+
+local function IsVolcanicEgg(egg)
+    if not egg then return false end
+    if egg.name == VOLCANIC_EGG then return true end
+    local rec = egg.record
+    if not rec then return false end
+    local ok, val = pcall(function() return rec:GetAttribute("Egg") end)
+    return ok and val == VOLCANIC_EGG
+end
+
+-- The door the lair is entered through (Workspace.Volcano.VolcanoEntrance)
+local function LairDoor()
+    local vol = Workspace:FindFirstChild("Volcano")
+    if not vol then return nil end
+    local p = vol:FindFirstChild("VolcanoEntrance")
+    if p and p:IsA("BasePart") then return p end
+    for _, c in ipairs(vol:GetChildren()) do
+        if c:IsA("BasePart") and string.find(string.lower(c.Name), "entrance", 1, true) then
+            return c
+        end
+    end
+    return nil
+end
+
+-- The lair region box (GameData.Guardian.BoundsTag = "GuardianBounds")
+local function LairBounds()
+    local b = Workspace:FindFirstChild("GuardianBounds")
+    if b and b:IsA("BasePart") then return b end
+    return nil
+end
+
+local function InBox(part, pos)
+    if not (part and typeof(pos) == "Vector3") then return false end
+    local ok, res = pcall(function()
+        local v = part.CFrame:PointToObjectSpace(pos)
+        local h = part.Size * 0.5
+        return math.abs(v.X) <= h.X and math.abs(v.Y) <= h.Y and math.abs(v.Z) <= h.Z
+    end)
+    return ok and res == true
+end
+
+-- The server's own "I am inside the lair" marker (set server side)
+local function ServerSeesInsideLair()
+    local ok, val = pcall(function() return LP:GetAttribute("InVolcano") end)
+    return ok and val == true
+end
+
+local function InsideLair()
+    local hrp = GetHRP()
+    local b = LairBounds()
+    if hrp and b and InBox(b, hrp.Position) then return true end
+    return ServerSeesInsideLair()
+end
+
+-- Walk in through the lair door and wait until the server counts us as inside.
+local function EnterLair()
+    if ServerSeesInsideLair() then return true end
+    local door = LairDoor()
+    for _ = 1, 3 do
+        if HUB.dead then return false end
+        if door then
+            local look = door.CFrame.LookVector
+            -- stand in front of it, then step through it (the entry is the door)
+            for _, step in ipairs({ -7, 0, 7, 0 }) do
+                TravelToCFrame(CFrame.new(door.Position + look * step + Vector3.new(0, 2, 0)))
+                task.wait(0.12)
+            end
+        end
+        local waited = 0
+        while waited < (tonumber(S.lairSettle) or 0.6) do
+            if ServerSeesInsideLair() then return true end
+            task.wait(0.05)
+            waited = waited + 0.05
+        end
+    end
+    return ServerSeesInsideLair() or InsideLair()
+end
+
+-- LoS eggs (tag EggPickupRequiresLineOfSight / RequiresLineOfSight) need line of
+-- sight - aim the camera at the egg after the TP.
+local function AimCameraAtEgg(rendered)
+    local prompt = rendered and rendered.prompt
+    local part = prompt and prompt.Parent
+    if not part or not part:IsA("BasePart") then return false end
+    local needs = prompt.RequiresLineOfSight == true
+    pcall(function()
+        if not needs and part:HasTag("EggPickupRequiresLineOfSight") then needs = true end
+    end)
+    if not needs then return false end
+    local cam = Workspace.CurrentCamera
+    if not cam then return false end
+    pcall(function() cam.CFrame = CFrame.lookAt(cam.CFrame.Position, part.Position) end)
+    return true
+end
+
+local function RarityAllowed(rarity)
+    if not S.eggRarities or next(S.eggRarities) == nil then return true end
+    return S.eggRarities[rarity] == true
+end
+
+-- Priorisierung: Fast Cycle | Best Value | Nearest
+-- Like in the reference script we only tap eggs the client really rendered -
+-- that is where the pickup prompt sits, and where the claim works.
+local function PickTargetEgg()
+    local hrp = GetHRP()
+    if not hrp then return nil end
+    local origin = hrp.Position
+    local renderedList = RenderedEggs()
+    local function Claimable(egg)
+        for _, r in ipairs(renderedList) do
+            if (r.pos - egg.pos).Magnitude < 8 and r.prompt and r.prompt.Parent then return true end
+        end
+        return false
+    end
+    local best, bestScore, bestClaimable = nil, nil, false
+    for _, egg in ipairs(EggRecords()) do
+        if RarityAllowed(egg.rarity) then
+            local travel = ((egg.pos - origin) * Vector3.new(1, 0, 1)).Magnitude
+            -- No distance limit any more: with the instant TP we are at the egg at once.
+            -- The old limit (a saved 978 studs) left only nearby common eggs.
+            local maxTravel = 0
+            if maxTravel <= 0 or travel <= maxTravel then
+                -- "Claimable" (rendered + prompt) only counts when we actually fire the
+                -- prompt as well. With the instant remote the value alone counts.
+                local claimable = S.usePrompt and Claimable(egg) or false
+                local value = RarityRank(egg.rarity) * 1000 + egg.luck + egg.sell * 10
+                local score
+                if S.eggPriority == "Nearest" then
+                    score = -travel
+                elseif S.eggPriority == "Fast Cycle" then
+                    -- schnelle Runden: Wert pro (Reisezeit + Wachstumszeit)
+                    score = value / math.max((travel / 200) + egg.growth + 2, 1)
+                else -- Best Value
+                    score = value - travel * 0.1
+                end
+                -- always prefer eggs with a prompt (rendered), the rest only as a fallback
+                if claimable and not bestClaimable then
+                    best, bestScore, bestClaimable = egg, score, true
+                elseif claimable == bestClaimable and (not bestScore or score > bestScore) then
+                    best, bestScore = egg, score
+                end
+            end
+        end
+    end
+    return best
+end
+
+-- Collect an egg - INSTANT route:
+--   TP onto the egg (10 studs above the top edge) -> fire the EggPickup remote RIGHT AWAY.
+--   No hold time, no settle, no waiting for the prompt. The real ProximityPrompt is
+--   only fired additionally when "Also fire real prompt" is on (off by default, because
+--   its hold time costs exactly the time we want to save).
+local function CollectEgg(egg, tries)
+    if not egg or HUB.dead then return false, "no target" end
+    if #CarriedEggs() > 0 then return false, "carry full" end
+    local before = #CarriedEggs()
+    -- A Volcanic Egg is behind the lair door: go in first, otherwise the server
+    -- only answers "not inside the lair (enter through its door)".
+    local volcanic = IsVolcanicEgg(egg)
+    if volcanic and S.volcanicLairPath ~= false and not ServerSeesInsideLair() then
+        EnterLair()
+    end
+    lastPickup = { mode = nil, reason = nil, name = egg.name, hold = nil, method = nil }
+    local function WaitBasket(seconds)
+        local waited = 0
+        while waited < seconds and #CarriedEggs() == before do
+            task.wait(0.02)
+            waited = waited + 0.02
+        end
+        return #CarriedEggs() > before
+    end
+    local remote = EggPickupRemote()
+    if not remote and not S.usePrompt then return false, "EggPickup remote missing" end
+    -- Claim RIGHT AWAY: remote first (one request, no hold time)
+    local function Claim()
+        if remote then
+            local sent, sendError = pcall(function() remote:FireServer(egg.id) end)
+            lastPickup.method = sent and "Remote (instant)" or "Remote failed"
+            if not sent then lastPickup.reason = tostring(sendError) end
+        end
+        if S.usePrompt then
+            local r = RenderedEggNear(egg.pos)
+            local p = r and r.prompt
+            if p and p.Parent then
+                AimCameraAtEgg(r)
+                FirePrompt(p)
+                lastPickup.hold = lastHold.duration
+                if not lastPickup.method then lastPickup.method = lastHold.method end
+            end
+        end
+    end
+    for _ = 1, tonumber(tries) or S.pickupRetries or 8 do
+        if HUB.dead then return false, "unload" end
+        if #CarriedEggs() > before then return true end
+        if not egg.record.Parent then return false, "egg gone" end
+        -- 1) hard TP straight onto the egg (10 studs above the top edge)
+        local rendered = RenderedEggNear(egg.pos)
+        local prompt = rendered and rendered.prompt
+        local travelTarget = (rendered and EggTopCFrame(rendered.model))
+            or CFrame.new(egg.pos + Vector3.new(0, EGG_HEIGHT_OFFSET, 0))
+        if not TravelToCFrame(travelTarget) then return false, "teleport failed" end
+        if prompt and prompt.Parent then
+            local near = prompt.Parent
+            local hrp = GetHRP()
+            local maxDist = tonumber(prompt.MaxActivationDistance) or 10
+            if hrp and (hrp.Position - near.Position).Magnitude > maxDist then
+                if not TravelToCFrame(CFrame.new(near.Position + Vector3.new(0, math.max(3, maxDist - 2), 0))) then
+                    return false, "teleport to prompt failed"
+                end
+            end
+        end
+        -- 2) claim: for the Volcanic Egg the server has to count us as inside the
+        -- lair (it sets InVolcano for a moment and the lair pushes us back out),
+        -- so stay on the egg and only claim once the server's marker is on.
+        if volcanic then
+            local waited, sinceTp = 0, 0
+            local settle = tonumber(S.lairSettle) or 1.0
+            local target = (rendered and EggTopCFrame(rendered.model))
+                or CFrame.new(egg.pos + Vector3.new(0, EGG_HEIGHT_OFFSET, 0))
+            while waited < settle and not ServerSeesInsideLair() and not HUB.dead do
+                task.wait(0.05)
+                waited = waited + 0.05
+                sinceTp = sinceTp + 0.05
+                if sinceTp >= 0.2 then
+                    -- the lair throws us out - place us back onto the egg
+                    sinceTp = 0
+                    TravelToCFrame(target)
+                end
+            end
+        end
+        Claim()
+        if WaitBasket(0.06) then return true end
+        -- 3) follow-up in case the server has not seen the TP yet
+        Claim()
+        if WaitBasket(0.18) then return true end
+        -- carry full -> stop hammering
+        if lastPickup.mode == "BasketFull" or (lastPickup.reason or ""):find("basket") then
+            return false, "carry full"
+        end
+        -- Volcanic: the server still says we are not in the lair -> step in again
+        if volcanic and (lastPickup.reason or ""):find("lair") then
+            EnterLair()
+        end
+    end
+    if #CarriedEggs() > before then return true end
+    return false, tostring(lastPickup.reason or lastPickup.mode or "no response")
+end
+
+-- Deliver: over our own baseplate -> the game client claims it itself (cash)
+local function DeliverCarried()
+    if #CarriedEggs() == 0 then return false, "carry empty" end
+    local plot = OwnPlot()
+    local base = plot and plot:FindFirstChild("Baseplate")
+    if not base then return false, "no plot" end
+    local cashBefore = PlayerCash()
+    -- Trip home: 10 studs above the baseplate (exactly like the reference script)
+    if not TravelToCFrame(PartTopCFrame(base) or CFrame.new(base.Position + Vector3.new(0, 6, 0))) then
+        return false, "teleport to plot failed"
+    end
+    -- Fire the claim ourselves RIGHT AWAY (instead of waiting for the game client),
+    -- with a few retries - the server's copy of the position is one moment old after
+    -- the TP, which is why we repeat instead of firing once.
+    local claim = ArrivalClaimRemote()
+    if not claim then return false, "egg arrival claim remote missing" end
+    local names = {}
+    for _, c in ipairs(CarriedEggs()) do names[#names + 1] = c.Name end
+    for _ = 1, 8 do
+        if HUB.dead then return false, "unload" end
+        if #CarriedEggs() == 0 then break end
+        local hrp = GetHRP()
+        if not hrp then return false, "character missing during delivery" end
+        local sent, sendError = pcall(function() claim:FireServer(Workspace:GetServerTimeNow(), hrp.Position, names) end)
+        if not sent then return false, "delivery request failed: " .. tostring(sendError) end
+        for _ = 1, 8 do            -- ~0,16s pro Anlauf
+            task.wait(0.02)
+            if #CarriedEggs() == 0 then break end
+        end
+    end
+    if #CarriedEggs() > 0 then return false, "delivery stuck" end
+    S.stats.delivered = S.stats.delivered + 1
+    -- Do NOT wait for the cash evaluation (otherwise every delivery costs extra time):
+    -- kurz schauen, den Rest asynchron nachtragen.
+    local gained = PlayerCash() - cashBefore
+    if gained > 0 then S.stats.cash = S.stats.cash + gained end
+    task.spawn(function()
+        for _ = 1, 30 do
+            if HUB.dead then break end
+            task.wait(0.05)
+            local now = PlayerCash() - cashBefore
+            if now > gained then
+                S.stats.cash = S.stats.cash + (now - gained)
+                gained = now
+            elseif now > 0 then
+                break
+            end
+            if gained > 0 then break end
+        end
+    end)
+    return true, gained
+end
+
+-- Egg tools in the inventory (those are the plantable eggs)
+local function EggTools()
+    local out = {}
+    for _, c in ipairs({ LP:FindFirstChild("Backpack"), LP.Character }) do
+        if c then
+            for _, t in ipairs(c:GetChildren()) do
+                if t:IsA("Tool") and t:HasTag("Egg") then
+                    local info = EggInfo(t.Name)
+                    out[#out + 1] = {
+                        tool = t,
+                        name = t.Name,
+                        weight = tonumber(t:GetAttribute("Weight")) or 1,
+                        mutation = t:GetAttribute("Mutation"),
+                        rarity = (info and info.Rarity) or "?",
+                        luck = (info and info.Luck) or 0,
+                        equipped = t.Parent == LP.Character,
+                    }
+                end
+            end
+        end
+    end
+    return out
+end
+
+local function HeldEggTool()
+    local char = LP.Character
+    if not char then return nil end
+    for _, c in ipairs(char:GetChildren()) do
+        if c:IsA("Tool") and c:HasTag("Egg") then return c end
+    end
+    return nil
+end
+
+local function FreeNest()
+    local plot = OwnPlot()
+    local nests = PlotNests(plot)
+    if not nests then return nil, plot end
+    for _, n in ipairs(nests:GetChildren()) do
+        if n:GetAttribute("Unlocked") == true and not n:GetAttribute("Occupied") then
+            return n, plot
+        end
+    end
+    return nil, plot
+end
+
+local function NestPosition(nest, plot)
+    local anchor = nest:FindFirstChild("PlacePromptAnchor")
+    if anchor and anchor:IsA("BasePart") then return anchor.Position end
+    local model = nest:FindFirstChild("Model")
+    if model then return model:GetPivot().Position end
+    local base = plot and plot:FindFirstChild("Baseplate")
+    return base and base.Position or nil
+end
+
+-- Plant the best inventory egg into a free nest (the game's method, no prompt)
+local function PlantBestEgg(minLuck)
+    if HUB.dead then return false, "unload" end
+    local remote = EggPlacedRemote()
+    if not remote then return false, "EggPlaced remote missing" end
+
+    local noNest = LP:GetAttribute("NoNest") == true
+    local nest, plot
+    if noNest then
+        plot = OwnPlot()
+        if not plot then return false, "no plot" end
+    else
+        nest, plot = FreeNest()
+        if not nest then return false, "no free nest" end
+    end
+
+    local pick
+    for _, entry in ipairs(EggTools()) do
+        if entry.luck >= (tonumber(minLuck) or 0) then
+            if not pick or entry.luck > pick.luck
+                or (entry.luck == pick.luck and RarityRank(entry.rarity) > RarityRank(pick.rarity)) then
+                pick = entry
+            end
+        end
+    end
+    if not pick then return false, "no egg in inventory" end
+
+    local humanoid = GetHumanoid()
+    if not humanoid then return false, "no humanoid" end
+    if HeldEggTool() ~= pick.tool then
+        pcall(function() humanoid:UnequipTools() end)
+        task.wait(0.1)
+        pcall(function() humanoid:EquipTool(pick.tool) end)
+        local waited = 0
+        while waited < 0.8 and HeldEggTool() ~= pick.tool and not HUB.dead do
+            task.wait(0.05)
+            waited = waited + 0.05
+        end
+    end
+    if HeldEggTool() ~= pick.tool then return false, "selected egg not equipped" end
+
+    local eggsFolder = plot and PlotEggs(plot)
+    local before = eggsFolder and #eggsFolder:GetChildren() or 0
+    local pos
+    if noNest then
+        local base = plot:FindFirstChild("Baseplate") or plot:FindFirstChild("Baseplate", true)
+        pos = base and base.Position
+    else
+        pos = NestPosition(nest, plot)
+    end
+    if not pos then return false, noNest and "plot position missing" or "nest position missing" end
+    if not TravelTo(pos, 4) then return false, "teleport to planting position failed" end
+    task.wait(0.25)
+
+    if not noNest and nest:GetAttribute("Occupied") == true then return false, "nest already taken" end
+    local sent, sendError = pcall(function()
+        if noNest then
+            remote:FireServer({ PlantPosition = pos })
+        else
+            remote:FireServer({ NestId = nest.Name })
+        end
+    end)
+    if not sent then return false, "plant request failed: " .. tostring(sendError) end
+
+    local placed = false
+    for _ = 1, 12 do
+        task.wait(0.15)
+        if HUB.dead then return false, "unload" end
+        if (nest and nest:GetAttribute("Occupied") == true)
+            or (eggsFolder and #eggsFolder:GetChildren() > before) then
+            placed = true
+            break
+        end
+    end
+    if placed then
+        S.stats.planted = S.stats.planted + 1
+        return true, pick.name
+    end
+    return false, "place not confirmed"
+end
+
+-- Remaining growth time of a plot egg (uses the game modules, fallback: server time)
+local function GrowthRemaining(egg)
+    local data = egg:FindFirstChild("EggData")
+    local placeTime = data and data:FindFirstChild("PlaceTime")
+    local weight = data and data:FindFirstChild("Weight")
+    local info = EggInfo(egg.Name)
+    if not (placeTime and placeTime.Value > 0 and info and type(info.GrowthTime) == "number") then return nil end
+    local growth = info.GrowthTime
+    if GeneralData and GeneralData.GrowthTimeFor then
+        local ok, res = pcall(GeneralData.GrowthTimeFor, growth, (weight and weight.Value) or 1)
+        if ok and type(res) == "number" then growth = res end
+    end
+    local elapsed
+    if DayNightSvc and DayNightSvc.GrowthElapsed then
+        local ok, res = pcall(DayNightSvc.GrowthElapsed, placeTime.Value)
+        if ok and type(res) == "number" then elapsed = res end
+    end
+    elapsed = elapsed or (Workspace:GetServerTimeNow() - placeTime.Value)
+    return math.max(growth - elapsed, 0)
+end
+
+local function HatchEgg(egg)
+    local pp = egg.PrimaryPart or egg:FindFirstChildWhichIsA("BasePart", true)
+    -- Real route first: the game's hatch prompt (TP 10 studs above the top edge)
+    local prompt = egg:FindFirstChild("Hatch", true)
+    if prompt and prompt:IsA("ProximityPrompt") then
+        if pp and not TravelToCFrame(PartTopCFrame(pp) or CFrame.new(pp.Position + Vector3.new(0, 10, 0))) then
+            return false, "teleport to hatch prompt failed"
+        end
+        task.wait(PROMPT_SETTLE)
+        if FirePrompt(prompt) then return true, "prompt" end
+        -- If the executor cannot trigger prompts, continue to the game's Hatch remote below.
+    end
+    -- Kein Prompt da: Hatch-Remote direkt feuern
+    local key = egg:GetAttribute("EggKey")
+    if not key then return false, "no egg key" end
+    local remote = Remote("Hatch")
+    if not remote then return false, "hatch remote missing" end
+    if pp then
+        if not TravelTo(pp.Position, 4) then return false, "teleport to hatch remote failed" end
+        task.wait(0.2)
+    end
+    local sent, sendError = pcall(function() remote:FireServer({ EggKey = key }) end)
+    return sent, sent and "remote" or ("remote failed: " .. tostring(sendError))
+end
+
+-- Hatch every ripe egg
+-- (the hatch runs as an animation, the egg only disappears a few seconds later)
+local function HatchReadyEggs()
+    if HUB.dead then return 0 end
+    local plot = OwnPlot()
+    local eggs = PlotEggs(plot)
+    if not eggs then return 0 end
+    local before = #eggs:GetChildren()
+    local fired = 0
+    for _, egg in ipairs(eggs:GetChildren()) do
+        if HUB.dead then break end
+        local prompt = egg:FindFirstChild("Hatch", true)
+        local available = prompt and prompt:GetAttribute("HatchPromptAvailable")
+        local remaining = GrowthRemaining(egg)
+        if available == true or (type(remaining) == "number" and remaining <= 0) then
+            if egg.Parent and HatchEgg(egg) then fired = fired + 1 end
+            task.wait(S.hatchDelay)
+        end
+    end
+    if fired == 0 then return 0 end
+    local count = 0
+    for _ = 1, 16 do
+        task.wait(0.25)
+        local now = (eggs.Parent and #eggs:GetChildren()) or 0
+        count = math.max(before - now, 0)
+        if count >= fired then break end
+    end
+    S.stats.hatched = S.stats.hatched + count
+    return count
+end
+
+-- ==============================================================================
+-- PET SYSTEM
+-- ==============================================================================
+local function OwnPlotPets()
+    local plot = OwnPlot()
+    local pets = PlotPets(plot)
+    if not pets then return {} end
+    local out = {}
+    for _, pet in ipairs(pets:GetChildren()) do
+        if pet:GetAttribute("OwnerUserId") == LP.UserId then out[#out + 1] = pet end
+    end
+    return out
+end
+
+local function HeldPets()
+    local out = {}
+    local containers = { LP:FindFirstChild("Backpack"), LP.Character }
+    for _, c in ipairs(containers) do
+        if c then
+            for _, t in ipairs(c:GetChildren()) do
+                if t:IsA("Tool") and t:GetAttribute("PetKey") then out[#out + 1] = t end
+            end
+        end
+    end
+    return out
+end
+
+-- Collect pet earnings: the real prompt on the pet first, the remote only on request
+local function PetCollectPrompt(pet)
+    for _, d in ipairs(pet:GetDescendants()) do
+        if d:IsA("ProximityPrompt") then
+            local txt = string.lower(tostring(d.ActionText or "") .. " " .. tostring(d.ObjectText or "") .. " " .. d.Name)
+            if txt:find("collect") or txt:find("einsammeln") or txt:find("abholen") or txt:find("kassieren") then
+                return d
+            end
+        end
+    end
+    return nil
+end
+
+local function CollectPetEarnings()
+    local remote = Remote("PetCollect")
+    local n = 0
+    for _, pet in ipairs(OwnPlotPets()) do
+        if HUB.dead then break end
+        local prompt = PetCollectPrompt(pet)
+        if prompt then
+            local hrp = GetHRP()
+            local pp = prompt.Parent
+            if hrp and pp and pp:IsA("BasePart") and (hrp.Position - pp.Position).Magnitude > 12 then
+                local moved = TravelTo(pp.Position, 6)
+                if moved then task.wait(PROMPT_SETTLE) end
+                if moved and FirePrompt(prompt) then n = n + 1 end
+            else
+                if FirePrompt(prompt) then n = n + 1 end
+            end
+            task.wait(0.12)
+        else
+            local key = pet:GetAttribute("PetKey")
+            if remote and key then
+                local sent = pcall(function() remote:FireServer(key) end)
+                if sent then n = n + 1 end
+                task.wait(0.08)
+            end
+        end
+    end
+    S.stats.collected = S.stats.collected + n
+    return n
+end
+
+-- Futter-Tool finden
+local function FoodTools()
+    local out = {}
+    local function scan(c)
+        if not c then return end
+        for _, t in ipairs(c:GetChildren()) do
+            if t:IsA("Tool") and not t:GetAttribute("PetKey") then
+                local n = tostring(t.Name)
+                if FoodData and FoodData[n] then out[#out + 1] = t end
+            end
+        end
+    end
+    scan(LP:FindFirstChild("Backpack"))
+    scan(LP.Character)
+    return out
+end
+
+-- Feed pets (equip a food tool + use the feed prompt)
+local function FeedPets()
+    local foods = FoodTools()
+    if #foods == 0 then return false, "no food" end
+    local humanoid = GetHumanoid()
+    if not humanoid then return false, "no humanoid" end
+    local food = foods[1]
+    if humanoid then pcall(function() humanoid:EquipTool(food) end) end
+    task.wait(0.2)
+    local fed = 0
+    for _, pet in ipairs(OwnPlotPets()) do
+        if HUB.dead then break end
+        local prompt = pet:FindFirstChild("Feed", true)
+        if prompt and prompt:IsA("ProximityPrompt") then
+            if FirePrompt(prompt) then fed = fed + 1 end
+            task.wait(0.35)
+        end
+    end
+    return true, fed
+end
+
+-- Place the best held pets (uses the game's own place-best logic,
+-- fallback: PlacePet remote with PetKey + a free nest anchor)
+local function PlaceBestPets()
+    local pg = LP:FindFirstChildOfClass("PlayerGui")
+    local main = pg and pg:FindFirstChild("Main")
+    local tracker = main and main:FindFirstChild("PetsTracker")
+    local placeBest = tracker and tracker:FindFirstChild("PlaceBest")
+    if placeBest then
+        local ok, conns = pcall(getconnections, placeBest.Activated)
+        if ok and #conns > 0 then
+            for _, c in ipairs(conns) do
+                if type(c.Function) == "function" then pcall(c.Function) end
+            end
+            return true
+        end
+    end
+    -- Fallback: schwerste gehaltene Pets selbst setzen
+    local remote = Remote("PlacePet")
+    local plot = OwnPlot()
+    if not (remote and plot) then return false end
+    local nests = PlotNests(plot)
+    if not nests then return false end
+    local freeAnchor
+    for _, n in ipairs(nests:GetChildren()) do
+        if n:GetAttribute("Unlocked") == true and n:GetAttribute("Occupied") ~= true then
+            local anchor = n:FindFirstChild("PlacePromptAnchor")
+            if anchor then freeAnchor = anchor break end
+        end
+    end
+    if not freeAnchor then return false end
+    local pets = HeldPets()
+    table.sort(pets, function(a, b)
+        return (a:GetAttribute("Weight") or 0) > (b:GetAttribute("Weight") or 0)
+    end)
+    local placed = 0
+    for _, pet in ipairs(pets) do
+        if HUB.dead then break end
+        local key = pet:GetAttribute("PetKey")
+        if key then
+            local pos = freeAnchor.Position
+            local sent = pcall(function() remote:FireServer(key, pos.X, pos.Y, pos.Z) end)
+            if sent then placed = placed + 1 end
+            task.wait(0.25)
+            if placed >= 1 then break end
+        end
+    end
+    return placed > 0
+end
+
+-- ==============================================================================
+-- PROGRESS
+-- ==============================================================================
+local function UnlockNests()
+    local plot = OwnPlot()
+    local nests = PlotNests(plot)
+    if not nests then return 0 end
+    local cash = PlayerCash()
+    local unlocked = 0
+    for _, n in ipairs(nests:GetChildren()) do
+        if HUB.dead then break end
+        if n:GetAttribute("Unlocked") ~= true then
+            local idx = tonumber(n.Name) or 1
+            local price = NEST_PRICES[idx] or math.huge
+            if cash >= price then
+                local prompt = n:FindFirstChild("UnlockNest", true)
+                if prompt and prompt:IsA("ProximityPrompt") and FirePrompt(prompt) then
+                    for _ = 1, 12 do
+                        task.wait(0.05)
+                        if n:GetAttribute("Unlocked") == true then
+                            unlocked = unlocked + 1
+                            S.stats.nests = S.stats.nests + 1
+                            cash = PlayerCash()
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return unlocked
+end
+
+local function RebirthCost()
+    local current = tonumber(PlayerStat("Rebirths")) or 0
+    if RebirthData and RebirthData.GetCost then
+        local ok, res = pcall(RebirthData.GetCost, current)
+        if ok and type(res) == "number" then return res end
+    end
+    return 1000000 * (50 ^ current)
+end
+
+local function TryRebirth()
+    local current = tonumber(PlayerStat("Rebirths")) or 0
+    local cap = (RebirthData and RebirthData.Cap) or 6
+    if current >= cap then return false, "cap reached" end
+    if HUB.rebirthPending then return false, "waiting for server confirmation" end
+    if PlayerCash() < RebirthCost() then return false, "not enough cash" end
+    local remote = Remote("Rebirth")
+    if not remote then return false, "rebirth remote missing" end
+    local sent, sendError = pcall(function() remote:FireServer() end)
+    if not sent then return false, "rebirth request failed: " .. tostring(sendError) end
+    HUB.rebirthPending = true
+    task.spawn(function()
+        for _ = 1, 40 do
+            if HUB.dead then return end
+            task.wait(0.25)
+            local now = tonumber(PlayerStat("Rebirths")) or current
+            if now > current then
+                S.stats.rebirths = S.stats.rebirths + (now - current)
+                HUB.rebirthPending = false
+                return
+            end
+        end
+        HUB.rebirthPending = false
+    end)
+    return true, "request sent"
+end
+
+local function ClaimIndexReward()
+    local remote = Remote("ClaimIndexReward")
+    if not remote then return false, "remote missing" end
+    local sent, sendError = pcall(function() remote:FireServer() end)
+    return sent, sent and "request sent" or tostring(sendError)
+end
+local function ClaimOfflineEarnings()
+    local remote = Remote("OfflineEarnings")
+    if not remote then return false, "remote missing" end
+    local sent, sendError = pcall(function() remote:FireServer() end)
+    return sent, sent and "request sent" or tostring(sendError)
+end
+local function ClaimGroupReward()
+    local remote = Remotes and Remotes:FindFirstChild("Reusable") and Remotes.Reusable:FindFirstChild("ClaimGroupReward")
+    if not remote then return false, "remote missing" end
+    local sent, sendError = pcall(function() remote:FireServer() end)
+    return sent, sent and "request sent" or tostring(sendError)
+end
+local function ClaimEventReward()
+    local remote = Remotes and Remotes:FindFirstChild("Reusable") and Remotes.Reusable:FindFirstChild("ClaimEventReward")
+    if not remote then return false, "remote missing" end
+    local sent, sendError = pcall(function() remote:FireServer() end)
+    return sent, sent and "request sent" or tostring(sendError)
+end
+local function ActivateRadar()
+    local remote = Remote("ActivateRadar")
+    if not remote then return false, "remote missing" end
+    local sent, sendError = pcall(function() remote:FireServer() end)
+    return sent, sent and "request sent" or tostring(sendError)
+end
+
+-- ==============================================================================
+-- HATCH-LUCK-UPGRADES (Preis/Multiplier kommen aus GameData.HatchLuck)
+-- ==============================================================================
+local function HatchUpgradeLevel()
+    return tonumber(PlayerStat("HatchUpgrades")) or 0
+end
+
+local function HatchLuckMultiplier()
+    local level = HatchUpgradeLevel()
+    if HatchLuck and type(HatchLuck.GetMultiplier) == "function" then
+        local ok, res = pcall(HatchLuck.GetMultiplier, level)
+        if ok and type(res) == "number" then return res end
+    end
+    return 1 + level
+end
+
+local function HatchUpgradePrice(level)
+    level = tonumber(level) or HatchUpgradeLevel()
+    if HatchLuck and type(HatchLuck.GetPrice) == "function" then
+        local ok, res = pcall(HatchLuck.GetPrice, level)
+        if ok and type(res) == "number" and res >= 0 then return res end
+    end
+    return 5 + level * 5
+end
+
+local function NextHatchUpgradePrice()
+    return HatchUpgradePrice(HatchUpgradeLevel())
+end
+
+local function MaxAffordableHatchUpgrades(availableCash)
+    local level = HatchUpgradeLevel()
+    local cash = tonumber(availableCash)
+    if cash == nil then cash = PlayerCash() end
+    if HatchLuck and type(HatchLuck.GetMaxAffordable) == "function" then
+        local ok, count, cost = pcall(HatchLuck.GetMaxAffordable, level, cash)
+        if ok and type(count) == "number" then
+            return math.max(0, math.floor(count)), (type(cost) == "number" and cost or 0)
+        end
+    end
+    local count, cost = 0, 0
+    for offset = 0, 199 do
+        local price = HatchUpgradePrice(level + offset)
+        if price <= 0 or cost + price > cash then break end
+        count, cost = count + 1, cost + price
+    end
+    return count, cost
+end
+
+local function UpgradeRemote()
+    local plotRemotes = GameRemotes and GameRemotes:FindFirstChild("Plot")
+    return plotRemotes and plotRemotes:FindFirstChild("Upgrades")
+end
+
+-- Buys luck upgrades: mode = "Max" or "1 Upgrade", as long as the reserve stays
+local function BuyHatchUpgrades(mode, force)
+    local remote = UpgradeRemote()
+    if not remote then return false, "upgrades remote missing" end
+    local reserve = force and 0 or math.max(tonumber(S.upgradeReserve) or 0, 0)
+    local selectedMode = mode or S.luckBuyMode
+    local count = 1
+    if selectedMode == "Max" then
+        count = MaxAffordableHatchUpgrades(PlayerCash() - reserve)
+        if count <= 0 then return false, "reserve or insufficient cash" end
+        count = math.min(count, 200)
+    elseif PlayerCash() - NextHatchUpgradePrice() < reserve then
+        return false, "reserve or insufficient cash"
+    end
+
+    local bought = 0
+    for _ = 1, count do
+        if HUB.dead then break end
+        local levelBefore = HatchUpgradeLevel()
+        local price = HatchUpgradePrice(levelBefore)
+        if PlayerCash() - price < reserve then break end
+        -- Use the already-validated single-upgrade request repeatedly instead of the
+        -- server's unbounded "Max" mode, which could spend the cash reserve.
+        local sent, sendError = pcall(function() remote:FireServer(1) end)
+        if not sent then return bought > 0, "upgrade request failed: " .. tostring(sendError) end
+        local confirmed = false
+        for _ = 1, 15 do
+            task.wait(0.1)
+            if HatchUpgradeLevel() > levelBefore then
+                confirmed = true
+                break
+            end
+            if HUB.dead then break end
+        end
+        if not confirmed then break end
+        bought = bought + 1
+    end
+    return bought > 0, bought
+end
+
+-- ==============================================================================
+-- ESP
+-- ==============================================================================
+local ESP_COLORS = {
+    Common = Color3.fromRGB(200, 200, 200),
+    Rare = Color3.fromRGB(80, 160, 255),
+    Epic = Color3.fromRGB(170, 90, 255),
+    Legendary = Color3.fromRGB(255, 190, 60),
+    Mythic = Color3.fromRGB(255, 90, 90),
+    Ethereal = Color3.fromRGB(90, 255, 210),
+    Divine = Color3.fromRGB(255, 255, 140),
+    Volcanic = Color3.fromRGB(255, 120, 40),
+}
+
+-- Highlights are reused (no rebuild per refresh)
+local espMaps = { egg = {}, pet = {}, player = {} }
+
+local function EspRarityOk(rarity)
+    if S.espRarities == nil or next(S.espRarities) == nil then return true end
+    return S.espRarities[rarity] == true
+end
+
+local function HideESP(kind)
+    if kind == "egg" then ClearEggMarkers() end
+    for inst, h in pairs(espMaps[kind]) do
+        pcall(function() h:Destroy() end)
+        espMaps[kind][inst] = nil
+    end
+    for i = #HUB.highlights, 1, -1 do
+        if HUB.highlights[i].kind == kind then table.remove(HUB.highlights, i) end
+    end
+end
+local ClearHighlights = HideESP
+
+-- ── Egg markers: all unclaimed field eggs from ServerData.ActiveEggs,
+--    even those the client is not drawing right now, so you can walk over and
+--    pick them up yourself. ───────────────────────────────────────────────────
+local eggMarkers = {}          -- record-Id -> { part, highlight, gui, label }
+local markerFolder = nil
+
+local function MarkerFolder()
+    if markerFolder and markerFolder.Parent then return markerFolder end
+    markerFolder = Instance.new("Folder")
+    markerFolder.Name = "ArcHubEggMarkers"
+    markerFolder.Parent = Workspace.CurrentCamera or Workspace
+    return markerFolder
+end
+
+local function ForgetHighlight(instance)
+    for i = #HUB.highlights, 1, -1 do
+        if HUB.highlights[i].instance == instance then table.remove(HUB.highlights, i) end
+    end
+end
+
+ClearEggMarkers = function()
+    for id, m in pairs(eggMarkers) do
+        if m.highlight then
+            ForgetHighlight(m.highlight)
+            pcall(function() m.highlight:Destroy() end)
+        end
+        if m.part then pcall(function() m.part:Destroy() end) end
+        eggMarkers[id] = nil
+    end
+end
+
+local function PruneESPMap(kind, seen)
+    local map = espMaps[kind]
+    for inst, highlight in pairs(map) do
+        if not inst.Parent or not highlight.Parent then
+            pcall(function() highlight:Destroy() end)
+            map[inst] = nil
+            ForgetHighlight(highlight)
+        elseif not seen[inst] then
+            highlight.Enabled = false
+        end
+    end
+end
+
+local function MakeEggMarker(id, egg)
+    local color = ESP_COLORS[egg.rarity] or Color3.new(1, 1, 1)
+    local part = Instance.new("Part")
+    part.Name = "ArcEggMarker"
+    part.Shape = Enum.PartType.Ball
+    part.Size = Vector3.new(3, 3, 3)
+    part.Anchored = true
+    part.CanCollide = false
+    part.CanQuery = false       -- does not distort the game's raycasts
+    part.CanTouch = false
+    part.CastShadow = false
+    part.Material = Enum.Material.Neon
+    part.Color = color
+    part.Transparency = 0.6
+    part.CFrame = CFrame.new(egg.pos + Vector3.new(0, 1.5, 0))
+    part.Parent = MarkerFolder()
+
+    local h = Instance.new("Highlight")
+    h.Name = "ArcHubESP"
+    h.Adornee = part
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.FillColor = color
+    h.FillTransparency = 0.7
+    h.OutlineColor = Color3.fromRGB(255, 255, 255)
+    h.OutlineTransparency = 0
+    h.Parent = part
+    table.insert(HUB.highlights, { instance = h, kind = "egg" })
+
+    local gui = Instance.new("BillboardGui")
+    gui.Name = "ArcEggLabel"
+    gui.Size = UDim2.fromOffset(180, 30)
+    gui.StudsOffsetWorldSpace = Vector3.new(0, 3.2, 0)
+    gui.AlwaysOnTop = true
+    gui.LightInfluence = 0
+    gui.MaxDistance = 6000
+    gui.Parent = part
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.fromScale(1, 1)
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 14
+    label.TextStrokeTransparency = 0.35
+    label.TextXAlignment = Enum.TextXAlignment.Center
+    label.TextColor3 = color
+    label.Text = ""
+    label.Parent = gui
+
+    eggMarkers[id] = { part = part, highlight = h, gui = gui, label = label }
+    return eggMarkers[id]
+end
+
+local function HighlightFor(kind, inst)
+    if not inst or not inst.Parent then return nil end
+    if not (inst:IsA("Model") or inst:IsA("BasePart")) then return nil end
+    local map = espMaps[kind]
+    local h = map[inst]
+    if h and not h.Parent then
+        ForgetHighlight(h)
+        h = nil
+        map[inst] = nil
+    end
+    if not h then
+        h = Instance.new("Highlight")
+        h.Name = "ArcHubESP"
+        h.FillTransparency = 0.6
+        h.OutlineTransparency = 0
+        h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        h.OutlineColor = Color3.fromRGB(255, 255, 255)
+        h.Adornee = inst
+        h.Parent = inst
+        map[inst] = h
+        table.insert(HUB.highlights, { instance = h, kind = kind, adornee = inst })
+    end
+    h.Enabled = true
+    return h
+end
+
+local function UpdateEggESP()
+    if not S.eggEsp then HideESP("egg") return end
+    local seen, seenIds, known = {}, {}, {}
+    local own = OwnPlot()
+    local hrp = GetHRP()
+    local origin = hrp and hrp.Position or nil
+    local maxDist = tonumber(S.espEggMaxDist) or 0
+    local labels = S.espEggLabels ~= false
+    local rendered = RenderedEggs()
+
+    -- 1a) ALL unclaimed field eggs (server records) -> marker + highlight
+    for _, egg in ipairs(EggRecords()) do
+        if EspRarityOk(egg.rarity) then
+            local dist = origin and ((egg.pos - origin) * Vector3.new(1, 0, 1)).Magnitude or 0
+            if maxDist <= 0 or dist <= maxDist then
+                local color = ESP_COLORS[egg.rarity] or Color3.new(1, 1, 1)
+                local outline = egg.mutation and Color3.fromRGB(255, 215, 80) or Color3.fromRGB(255, 255, 255)
+                -- matching rendered model in case the client draws it
+                local model, modelDist
+                for _, r in ipairs(rendered) do
+                    local d = (r.pos - egg.pos).Magnitude
+                    if d < 8 and (not modelDist or d < modelDist) then model, modelDist = r.model, d end
+                end
+                if model then
+                    known[model] = true
+                    local h = HighlightFor("egg", model)
+                    if h then
+                        h.FillColor = color
+                        h.OutlineColor = outline
+                        h.FillTransparency = 0.55
+                        seen[model] = true
+                    end
+                end
+                local m = eggMarkers[egg.id]
+                if not m then m = MakeEggMarker(egg.id, egg) end
+                if m and m.part and m.part.Parent then
+                    m.part.CFrame = CFrame.new(egg.pos + Vector3.new(0, 1.5, 0))
+                    m.part.Color = color
+                    m.part.Transparency = model and 0.75 or 0.6
+                    if m.highlight then
+                        m.highlight.Enabled = true
+                        m.highlight.FillColor = color
+                        m.highlight.FillTransparency = model and 0.85 or 0.7
+                        m.highlight.OutlineColor = outline
+                    end
+                    if m.gui then m.gui.Enabled = labels end
+                    if m.label and labels then
+                        m.label.TextColor3 = color
+                        m.label.Text = string.format("%s - %s - %dm%s", egg.name, egg.rarity, math.floor(dist),
+                            egg.mutation and (" - " .. tostring(egg.mutation)) or "")
+                    end
+                end
+                seenIds[egg.id] = true
+            end
+        end
+    end
+
+    -- 1b) still show rendered eggs without a record (e.g. currently falling)
+    for _, r in ipairs(rendered) do
+        if not known[r.model] and EspRarityOk(r.rarity) then
+            local h = HighlightFor("egg", r.model)
+            if h then
+                h.FillColor = ESP_COLORS[r.rarity] or Color3.new(1, 1, 1)
+                h.OutlineColor = Color3.fromRGB(255, 255, 255)
+                h.FillTransparency = 0.55
+                seen[r.model] = true
+            end
+        end
+    end
+
+    -- clean up markers (claimed, gone or filtered out)
+    for id, m in pairs(eggMarkers) do
+        if not seenIds[id] then
+            if m.highlight then
+                ForgetHighlight(m.highlight)
+                pcall(function() m.highlight:Destroy() end)
+            end
+            if m.part then pcall(function() m.part:Destroy() end) end
+            eggMarkers[id] = nil
+        end
+    end
+
+    -- 2) plot eggs (our own outlined green, other players' white)
+    local plots = Workspace:FindFirstChild("Plots")
+    if plots then
+        for _, plot in ipairs(plots:GetChildren()) do
+            local eggs = plot:FindFirstChild("Eggs")
+            if eggs then
+                for _, e in ipairs(eggs:GetChildren()) do
+                    local info = EggInfo(e.Name)
+                    local rarity = (info and info.Rarity) or "?"
+                    if EspRarityOk(rarity) then
+                        local h = HighlightFor("egg", e)
+                        if h then
+                            h.FillColor = ESP_COLORS[rarity] or Color3.new(1, 1, 1)
+                            h.OutlineColor = (plot == own) and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(255, 255, 255)
+                            h.FillTransparency = 0.6
+                            seen[e] = true
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- 3) eggs in our own carry
+    for _, c in ipairs(CarriedEggs()) do
+        local h = HighlightFor("egg", c)
+        if h then
+            h.FillColor = Color3.fromRGB(255, 255, 255)
+            h.OutlineColor = Color3.fromRGB(255, 220, 80)
+            seen[c] = true
+        end
+    end
+
+    PruneESPMap("egg", seen)
+end
+
+local function UpdatePetESP()
+    if not S.petEsp then HideESP("pet") return end
+    local seen = {}
+    local plots = Workspace:FindFirstChild("Plots")
+    if plots then
+        for _, plot in ipairs(plots:GetChildren()) do
+            local pets = plot:FindFirstChild("Pets")
+            if pets then
+                for _, pet in ipairs(pets:GetChildren()) do
+                    local own = pet:GetAttribute("OwnerUserId") == LP.UserId
+                    local h = HighlightFor("pet", pet)
+                    if h then
+                        h.FillColor = own and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(255, 120, 200)
+                        seen[pet] = true
+                    end
+                end
+            end
+        end
+    end
+    -- gehaltene Pets (Backpack)
+    for _, t in ipairs(HeldPets()) do
+        local h = HighlightFor("pet", t)
+        if h then
+            h.FillColor = Color3.fromRGB(80, 200, 255)
+            seen[t] = true
+        end
+    end
+    PruneESPMap("pet", seen)
+end
+
+local function UpdatePlayerESP()
+    if not S.playerEsp then HideESP("player") return end
+    local seen = {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LP and plr.Character then
+            local h = HighlightFor("player", plr.Character)
+            if h then
+                h.FillColor = Color3.fromRGB(255, 80, 80)
+                seen[plr.Character] = true
+            end
+        end
+    end
+    PruneESPMap("player", seen)
+end
+
+local function RefreshESP()
+    pcall(UpdateEggESP)
+    pcall(UpdatePetESP)
+    pcall(UpdatePlayerESP)
+end
+
+-- ==============================================================================
+-- NOCLIP (only for the egg farm - no manual toggle any more)
+-- ==============================================================================
+local noclipOriginal = setmetatable({}, { __mode = "k" })
+local function StartNoclip()
+    if HUB.noclipConn then return end
+    HUB.noclipConn = RunService.Stepped:Connect(function()
+        if not (S.noclip or S.farmNoclipActive) then return end
+        local char = LP.Character
+        if not char then return end
+        for _, d in ipairs(char:GetDescendants()) do
+            if d:IsA("BasePart") then
+                if noclipOriginal[d] == nil then noclipOriginal[d] = d.CanCollide end
+                if d.CanCollide then d.CanCollide = false end
+            end
+        end
+    end)
+end
+
+-- Restore collisions when noclip is no longer needed
+-- (real body parts only, accessories stay as they are)
+local BODY_PARTS = {
+    HumanoidRootPart = true, Head = true, UpperTorso = true, LowerTorso = true, Torso = true,
+    LeftUpperArm = true, RightUpperArm = true, LeftLowerArm = true, RightLowerArm = true,
+    LeftHand = true, RightHand = true, LeftUpperLeg = true, RightUpperLeg = true,
+    LeftLowerLeg = true, RightLowerLeg = true, LeftFoot = true, RightFoot = true,
+}
+RestoreCollisions = function()
+    for part, originalCanCollide in pairs(noclipOriginal) do
+        if part and part.Parent then
+            pcall(function() part.CanCollide = originalCanCollide end)
+        end
+        noclipOriginal[part] = nil
+    end
+end
+
+-- Farm noclip: active only while the egg loop runs
+local function SetFarmNoclip(on)
+    if S.farmNoclipActive == on then return end
+    S.farmNoclipActive = on
+    if on then
+        StartNoclip()
+    elseif not S.noclip then
+        task.delay(0.4, RestoreCollisions)
+    end
+end
+
+-- ==============================================================================
+-- TELEPORTS / UTILITY BUTTONS
+-- ==============================================================================
+local function TeleportToOwnPlot()
+    return RunSerialized(function()
+        local plot = OwnPlot()
+        if not plot then return Notify("Arc HUB", "No plot loaded", "Error") end
+        local base = plot:FindFirstChild("Baseplate") or plot:FindFirstChild("Baseplate", true)
+        if base and not TravelToCFrame(PartTopCFrame(base)) then
+            Notify("Arc HUB", "Teleport failed", "Error")
+        end
+    end)
+end
+local function TeleportToStall(name)
+    return RunSerialized(function()
+        local stalls = Workspace:FindFirstChild("Stalls")
+        local stall = stalls and stalls:FindFirstChild(name)
+        if not stall then return Notify("Arc HUB", "Stall not found", "Error") end
+        local pivot = stall:IsA("Model") and stall:GetPivot().Position or stall.Position
+        if not TravelTo(pivot, 6) then Notify("Arc HUB", "Teleport failed", "Error") end
+    end)
+end
+
+local function TriggerRestock()
+    local pg = LP:FindFirstChildOfClass("PlayerGui")
+    local main = pg and pg:FindFirstChild("Main")
+    local oldShop = main and main:FindFirstChild("OldShop")
+    local restock = oldShop and oldShop:FindFirstChild("Header") and oldShop.Header:FindFirstChild("Restock")
+    if not restock then return false, "Restock button not found" end
+    local ok, conns = pcall(getconnections, restock.Activated)
+    if not ok or type(conns) ~= "table" then return false, "Restock handler unavailable" end
+    local clicked = false
+    for _, c in ipairs(conns) do
+        if type(c.Function) == "function" then
+            local fired = pcall(c.Function)
+            if fired then clicked = true end
+        end
+    end
+    return clicked, clicked and "triggered" or "No handler on the button"
+end
+
+-- ==============================================================================
+-- LOOPS
+-- ==============================================================================
+local function EggLoopStep()
+    if S.busy or HUB.actionBusy then return end
+    -- Shift halten = Auto Farm pausiert (manuell spielen / anderes Script nutzen)
+    if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift) then
+        return
+    end
+    -- Interference detection: if somebody/something else moved us, hold still briefly,
+    -- otherwise we fight the user (or a second script).
+    local hrpNow = GetHRP()
+    if hrpNow and HUB.lastPlacedPos and HUB.lastPlacedAt then
+        local fresh = (os.clock() - HUB.lastPlacedAt) < 0.6
+        if not fresh and (hrpNow.Position - HUB.lastPlacedPos).Magnitude > 40 then
+            HUB.manualUntil = os.clock() + 1.5
+            HUB.lastPlacedPos = hrpNow.Position
+            if (os.clock() - (HUB.manualWarnAt or 0)) > 8 then
+                HUB.manualWarnAt = os.clock()
+                Notify("Auto Farm", "Paused - the character was moved externally", "Info", 3)
+            end
+        end
+    end
+    if HUB.manualUntil and os.clock() < HUB.manualUntil then return end
+    S.busy = true
+    HUB.actionBusy = true
+    local did = false
+    local ok, err = pcall(function()
+        -- 1) TP onto the rendered egg (10 studs above the top edge) -> claim prompt
+        if #CarriedEggs() == 0 then
+            local target = PickTargetEgg()
+            if target then
+                local got, why = CollectEgg(target)
+                if got then
+                    S.stats.eggs = S.stats.eggs + 1
+                    did = true
+                else
+                    S.lastEggError = tostring(why)
+                end
+            end
+        end
+        -- 1b) pause before the trip home (default 0 = straight on)
+        local delay = tonumber(S.deliverDelay) or 0
+        if did and delay > 0 then
+            local t0 = os.clock()
+            while not HUB.dead and (os.clock() - t0) < delay do task.wait(0.02) end
+        end
+        -- 2) TP back over our own baseplate -> deliver (pays cash)
+        if #CarriedEggs() > 0 and S.autoDeliver then
+            if DeliverCarried() then did = true end
+        end
+        -- 3) side tasks (planting/hatching) only every X seconds - their teleports
+        --    would otherwise slow the fast egg cycle down.
+        local now = os.clock()
+        local every = tonumber(S.sideInterval) or 3
+        if every >= 0 and (now - (HUB.lastSideAt or 0)) >= every then
+            HUB.lastSideAt = now
+            if S.autoPlant then PlantBestEgg(S.plantMinLuck) end
+            if S.autoHatch then HatchReadyEggs() end
+        end
+    end)
+    if not ok then pcall(Notify, "Arc HUB", "Egg loop: " .. tostring(err), "Error", 3) end
+    S.busy = false
+    HUB.actionBusy = false
+    return did
+end
+
+local function PetLoopStep()
+    if S.autoCollectPets then CollectPetEarnings() end
+    if S.autoPlacePets and S.placeBestPets then PlaceBestPets() end
+    if S.autoFeedPets then FeedPets() end
+end
+
+local function ProgressLoopStep()
+    if S.autoUnlockNests then UnlockNests() end
+    if S.autoRebirth then
+        local ok, why = TryRebirth()
+        if not ok and why == "not enough cash" then
+            -- still
+        end
+    end
+    if S.autoClaimOffline then ClaimOfflineEarnings() end
+    if S.autoClaimIndex then ClaimIndexReward() end
+    if S.autoClaimGroup then ClaimGroupReward() end
+    if S.autoClaimEvent then ClaimEventReward() end
+    if S.autoRadar then ActivateRadar() end
+end
+
+local function StartLoops()
+    if HUB.loopsRunning then return end
+    HUB.loopsRunning = true
+    task.spawn(function()
+        while not HUB.dead do
+            if S.eggLoop then
+                SetFarmNoclip(S.farmNoclip)   -- through walls to the egg / back to the plot
+                local ok, did = pcall(EggLoopStep)
+                if did then
+                    -- straight on to the next egg; only the optional extra delay slows it
+                    local extra = tonumber(S.eggLoopDelay) or 0
+                    if extra > 0 then task.wait(extra) end
+                else
+                    task.wait(0.12)           -- gerade nichts zu tun -> kurz warten
+                end
+            else
+                SetFarmNoclip(false)          -- Farm aus -> Noclip wieder aus
+                task.wait(0.25)
+            end
+        end
+    end)
+    task.spawn(function()
+        while not HUB.dead do
+            if S.luckBuying then
+                pcall(function() RunSerialized(function() return BuyHatchUpgrades(S.luckBuyMode, false) end) end)
+                task.wait(math.max(tonumber(S.luckBuyDelay) or 2, 0.2))
+            else
+                task.wait(0.25)
+            end
+        end
+    end)
+    task.spawn(function()
+        while not HUB.dead do
+            if S.petLoop then pcall(function() RunSerialized(PetLoopStep) end) end
+            task.wait(3)
+        end
+    end)
+    task.spawn(function()
+        while not HUB.dead do
+            if S.progressLoop then pcall(function() RunSerialized(ProgressLoopStep) end) end
+            task.wait(5)
+        end
+    end)
+    task.spawn(function()
+        while not HUB.dead do
+            -- always call it: also turns the ESP off when the flags come from outside
+            pcall(RefreshESP)
+            task.wait(0.5)
+        end
+    end)
+    task.spawn(function()
+        while not HUB.dead do
+            if S.autoRestock then
+                pcall(function()
+                    RunSerialized(function() return TriggerRestock() end)
+                end)
+                task.wait(30) -- explicit opt-in; throttle repeated shop actions
+            else
+                task.wait(0.5)
+            end
+        end
+    end)
+end
+
+
+-- ============================================================================
+-- NAZK DASH SYSTEM (global behavior preserved)
+-- ============================================================================
+local LocalPlayer = LP
+getgenv().NAZK_DashEnabled = true
+getgenv().NAZK_DashPower = 45
+getgenv().NAZK_DashVertical = 0
+getgenv().NAZK_DashKey = Enum.KeyCode.Q
+getgenv().NAZK_DashCooldown = 0.25
+getgenv().NAZK_dashLast = 0
+
+getgenv().NAZK_DoDash = function()
+    if tick() - (getgenv().NAZK_dashLast or 0) < (getgenv().NAZK_DashCooldown or 0.25) then return end
+    getgenv().NAZK_dashLast = tick()
+
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+
+    local dir = cam.CFrame.LookVector
+    dir = Vector3.new(dir.X, 0, dir.Z)
+    if dir.Magnitude < 0.01 then return end
+    dir = dir.Unit
+
+    local power = getgenv().NAZK_DashPower or 45
+    local up = getgenv().NAZK_DashVertical or 0
+
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+    bv.Velocity = dir * power + Vector3.new(0, up, 0)
+    bv.P = 20000
+    bv.Parent = root
+    Debris:AddItem(bv, 0.15)
+end
+
+local dashConn = track(UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if not getgenv().NAZK_DashEnabled then return end
+    if input.KeyCode == getgenv().NAZK_DashKey then
+        getgenv().NAZK_DoDash()
+    end
+end))
+
+local ToggleGui = nil
+local DashOuter = nil
+local DashBtn = nil
+local NButton = nil
+
+getgenv().NAZK_DashButton = nil
+getgenv().NAZK_HideDashButton = function()
+    local btn = getgenv().NAZK_DashButton
+    if btn then btn.Visible = false end
+end
+getgenv().NAZK_ShowDashButton = function()
+    local btn = getgenv().NAZK_DashButton
+    if btn then btn.Visible = true end
+end
+
+local function MakeDraggable(Button, Callback)
+    local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
+    track(Button.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            moved = false
+            dragStart = i.Position
+            startPos = Button.Position
+        end
+    end))
+    track(Button.InputChanged:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+            dragInput = i
+        end
+    end))
+    track(Button.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            if not moved then Callback() end
+        end
+    end))
+    track(UserInputService.InputChanged:Connect(function(i)
+        if i == dragInput and dragging then
+            local d = i.Position - dragStart
+            if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then moved = true end
+            Button.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end))
+end
+
+local function MakeDraggableOuter(Outer, Inner, Callback)
+    local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
+    track(Inner.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            moved = false
+            dragStart = i.Position
+            startPos = Outer.Position
+        end
+    end))
+    track(Inner.InputChanged:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+            dragInput = i
+        end
+    end))
+    track(Inner.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            if not moved then Callback() end
+        end
+    end))
+    track(UserInputService.InputChanged:Connect(function(i)
+        if i == dragInput and dragging then
+            local d = i.Position - dragStart
+            if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then moved = true end
+            Outer.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end))
+end
+
+local function CreateRedBlackButton(name, text, pos)
+    local Outer = Instance.new("Frame")
+    Outer.Name = name .. "_Outer"
+    Outer.Size = UDim2.fromOffset(79, 42)
+    Outer.Position = pos
+    Outer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    Outer.BorderSizePixel = 0
+    Outer.ZIndex = 99
+    Outer.Parent = ToggleGui
+    Instance.new("UICorner", Outer).CornerRadius = UDim.new(0, 14)
+    local OuterStroke = Instance.new("UIStroke")
+    OuterStroke.Color = Color3.fromRGB(255, 0, 0)
+    OuterStroke.Thickness = 2.5
+    OuterStroke.Parent = Outer
+
+    local btn = Instance.new("TextButton")
+    btn.Name = name
+    btn.Size = UDim2.fromOffset(75, 38)
+    btn.Position = UDim2.new(0, 2, 0, 2)
+    btn.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 0, 0)
+    btn.TextSize = 16
+    btn.Font = Enum.Font.GothamBold
+    btn.ZIndex = 100
+    btn.Parent = Outer
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 12)
+    return Outer, btn
+end
+
+local function CreateFloatingUI()
+    ToggleGui = Instance.new("ScreenGui")
+    ToggleGui.Name = "NAZK_Floating"
+    ToggleGui.ResetOnSpawn = false
+    ToggleGui.Parent = GetParent()
+    getgenv().NAZK_ToggleGui = ToggleGui
+
+    NButton = Instance.new("ImageButton")
+    NButton.Name = "imageLabel"
+    NButton.Size = UDim2.fromOffset(60, 60)
+    NButton.Position = UDim2.new(0, 15, 0.5, -30)
+    NButton.BackgroundTransparency = 1
+    NButton.Image = LOGO_ID
+    NButton.ZIndex = 100
+    NButton.Parent = ToggleGui
+
+    DashOuter, DashBtn = CreateRedBlackButton("Dash", "Dash", UDim2.new(1, -90, 0.5, -20))
+    getgenv().NAZK_DashButton = DashOuter
+
+    local isOpen = true
+    MakeDraggable(NButton, function()
+        isOpen = not isOpen
+        if isOpen then
+            pcall(function() Window:Open() end)
+        else
+            pcall(function() Window:Close() end)
+        end
+    end)
+
+    MakeDraggableOuter(DashOuter, DashBtn, function()
+        DashBtn.Text = "..."
+        if getgenv().NAZK_DoDash then getgenv().NAZK_DoDash() end
+        task.wait(0.25)
+        if DashBtn and DashBtn.Parent then DashBtn.Text = "Dash" end
+    end)
+end
+
+CleanupNazkVisuals = function()
+    pcall(function() if ToggleGui then ToggleGui:Destroy() end end)
+    pcall(function() if LoadingGui then LoadingGui:Destroy() end end)
+    ToggleGui, DashOuter, DashBtn, NButton = nil, nil, nil, nil
+    getgenv().NAZK_DashButton = nil
+    getgenv().NAZK_ToggleGui = nil
+    getgenv().NAZK_DoDash = nil
+    getgenv().NAZK_HideDashButton = nil
+    getgenv().NAZK_ShowDashButton = nil
+    getgenv().NAZK_DashEnabled = false
+    getgenv().NAZK_HUB_RUNNING = false
+end
+
+getgenv().NAZK_HUB_RUNNING = true
+
+
+-- ============================================================================
+-- UNIFIED WINDUI CONTROLS
+-- Every original Arc / NAZK command and button is represented below.
+-- ============================================================================
+local toggleRefs = {}
+local function SetState(key, value)
+    S[key] = value
+    for _, control in ipairs(toggleRefs[key] or {}) do
+        pcall(function() control:Set(value, false) end)
+    end
+end
+
+local function AddToggle(container, options)
+    local stateKey = options.StateKey
+    options.StateKey = nil
+    local userCallback = options.Callback
+    if stateKey then
+        options.Callback = function(value)
+            SetState(stateKey, value)
+            if userCallback then userCallback(value) end
+        end
+    end
+    local value = options.Value
+    if value == nil then value = options.Default end
+    options.Value = value
+    options.Default = nil
+    local control = container:Toggle(options)
+    if stateKey and control then
+        toggleRefs[stateKey] = toggleRefs[stateKey] or {}
+        table.insert(toggleRefs[stateKey], control)
+    end
+    return control
+end
+
+local function AddSlider(container, options)
+    return container:Slider({
+        Flag = options.Flag,
+        Title = options.Title,
+        Desc = options.Desc,
+        Step = options.Step or 1,
+        Value = { Min = options.Min, Max = options.Max, Default = options.Default },
+        Callback = options.Callback,
+    })
+end
+
+local function AddDropdown(container, options)
+    return container:Dropdown({
+        Flag = options.Flag,
+        Title = options.Title,
+        Desc = options.Desc,
+        Values = options.Values,
+        Value = options.Value,
+        AllowNone = options.AllowNone,
+        Multi = options.Multi,
+        Callback = options.Callback,
+    })
+end
+
+local function SelectionNames(list)
+    local out = {}
+    for _, item in ipairs(type(list) == "table" and list or {}) do
+        out[#out + 1] = type(item) == "table" and (item.Title or item.Value or item.Name) or item
+    end
+    return out
+end
+
+local function SetParagraphDesc(control, text)
+    local paragraph = control and control.ParagraphFrame
+    local desc = paragraph and paragraph.UIElements and paragraph.UIElements.Desc
+    if not desc then return false end
+    desc.Text = tostring(text or "")
+    desc.Visible = desc.Text ~= ""
+    return true
+end
+
+-- ------------------------------------------------------------------ Auto Farm / Smart All
+local farmTab = Window:Tab({ Title = "Auto Farm", Icon = "bot" })
+farmTab:Section({ Title = "Smart All" })
+farmTab:Button({
+    Title = "Smart All ON", Icon = "circle-play", Callback = safeCallback(function()
+        SetState("eggLoop", true); SetState("petLoop", true); SetState("progressLoop", true)
+        SetState("autoDeliver", true); SetState("autoHatch", true)
+        SetState("autoCollectPets", true); S.placeBestPets = true; SetState("autoPlacePets", true)
+        SetState("autoUnlockNests", true); SetState("autoClaimIndex", true); SetState("autoClaimOffline", true)
+        StartLoops()
+        Notify("Smart All", "all on", "Success")
+    end)
+})
+farmTab:Button({
+    Title = "All Off", Icon = "circle-stop", Callback = safeCallback(function()
+        SetState("eggLoop", false); SetState("petLoop", false); SetState("progressLoop", false)
+        SetState("autoPlacePets", false)
+        Notify("Smart All", "all off", "Info")
+    end)
+})
+AddToggle(farmTab, { Title = "Egg Loop", StateKey = "eggLoop", Value = false, Flag = "farm_eggl", Callback = safeCallback(function(v) S.eggLoop = v StartLoops() end) })
+AddToggle(farmTab, { Title = "Pet Loop", StateKey = "petLoop", Value = false, Flag = "farm_petl", Callback = safeCallback(function(v) S.petLoop = v StartLoops() end) })
+AddToggle(farmTab, { Title = "Progress Loop", StateKey = "progressLoop", Value = false, Flag = "farm_progl", Callback = safeCallback(function(v) S.progressLoop = v StartLoops() end) })
+
+farmTab:Section({ Title = "Stats" })
+local function StatusParagraph()
+    local hold = tonumber(lastHold.duration) or 0
+    return string.format(
+        "Eggs %d | delivered %d (+%s $) | planted %d | hatched %d | collects %d | nests %d | rebirth %d | luck x%.1f",
+        S.stats.eggs, S.stats.delivered, ShortNumber(S.stats.cash), S.stats.planted, S.stats.hatched,
+        S.stats.collected, S.stats.nests, S.stats.rebirths, HatchLuckMultiplier())
+        .. string.format("\nPickup: %s | real prompt, hold %.2fs | last error: %s",
+            tostring(lastHold.method or "-"), hold, S.lastEggError and tostring(S.lastEggError) or "-")
+end
+local statusLabel = farmTab:Paragraph({ Title = "Stats", Desc = StatusParagraph() })
+task.spawn(function()
+    while not HUB.dead do
+        task.wait(2)
+        SetParagraphDesc(statusLabel, StatusParagraph())
+    end
+end)
+
+-- ------------------------------------------------------------------ Eggs
+local eggsTab = Window:Tab({ Title = "Eggs", Icon = "egg" })
+eggsTab:Section({ Title = "Egg Farm" })
+AddToggle(eggsTab, { Title = "Auto Farm Eggs", StateKey = "eggLoop", Value = false, Flag = "eggs_loop", Callback = safeCallback(function(v) S.eggLoop = v StartLoops() end) })
+AddDropdown(eggsTab, { Title = "Egg Priority", Values = { "Best Value", "Fast Cycle", "Nearest" }, Value = "Best Value", Flag = "eggs_prio", Callback = safeCallback(function(v) S.eggPriority = v end) })
+AddDropdown(eggsTab, {
+    Title = "Rarities (empty = all)", Values = { "Common", "Rare", "Epic", "Legendary", "Mythic", "Ethereal", "Divine", "Volcanic" },
+    Value = {}, AllowNone = true, Multi = true, Flag = "eggs_rarities",
+    Callback = safeCallback(function(list)
+        S.eggRarities = {}
+        for _, r in ipairs(SelectionNames(list)) do S.eggRarities[r] = true end
+    end)
+})
+AddSlider(eggsTab, { Title = "Loop extra delay (0 = instant)", Min = 0, Max = 3, Default = 0, Step = 0.1, Flag = "eggs_delay", Callback = safeCallback(function(v) S.eggLoopDelay = tonumber(v) or 0 end) })
+AddToggle(eggsTab, { Title = "Auto Deliver (Cash)", StateKey = "autoDeliver", Value = true, Flag = "eggs_deliver", Callback = safeCallback(function(v) S.autoDeliver = v end) })
+AddToggle(eggsTab, { Title = "Auto Plant (Inventory)", StateKey = "autoPlant", Value = false, Flag = "eggs_plant", Callback = safeCallback(function(v) S.autoPlant = v if v then StartLoops() end end) })
+AddSlider(eggsTab, { Title = "Pickup Attempts", Min = 2, Max = 20, Default = 8, Step = 1, Flag = "eggs_pickuptries", Callback = safeCallback(function(v) S.pickupRetries = math.floor(tonumber(v) or 8) end) })
+AddToggle(eggsTab, { Title = "Volcanic Lair path", StateKey = "volcanicLairPath", Value = true, Flag = "eggs_lairpath", Callback = safeCallback(function(v) S.volcanicLairPath = v end) })
+AddSlider(eggsTab, { Title = "Plant/Hatch every", Min = 0, Max = 30, Default = 3, Step = 1, Flag = "eggs_sideinterval", Callback = safeCallback(function(v) S.sideInterval = tonumber(v) or 3 end) })
+AddToggle(eggsTab, { Title = "Also fire real prompt (hold time)", StateKey = "usePrompt", Value = false, Flag = "eggs_useprompt", Callback = safeCallback(function(v) S.usePrompt = v end) })
+AddToggle(eggsTab, { Title = "Auto Hatch", StateKey = "autoHatch", Value = true, Flag = "eggs_hatch", Callback = safeCallback(function(v) S.autoHatch = v end) })
+AddToggle(eggsTab, { Title = "Noclip while farming", StateKey = "farmNoclip", Value = true, Flag = "eggs_farmnoclip", Callback = safeCallback(function(v) S.farmNoclip = v if not v then SetFarmNoclip(false) end end) })
+AddSlider(eggsTab, { Title = "Hatch-Delay", Min = 0.2, Max = 5, Default = 1.0, Step = 0.1, Flag = "eggs_hatchdelay", Callback = safeCallback(function(v) S.hatchDelay = tonumber(v) or 1 end) })
+
+eggsTab:Section({ Title = "Egg Actions" })
+eggsTab:Button({
+    Title = "Farm 1 egg", Icon = "egg", Callback = SafeActionCallback(function()
+        if #CarriedEggs() == 0 then
+            local t = PickTargetEgg()
+            if not t then return Notify("Eggs", "no egg found", "Info") end
+            local got, why = CollectEgg(t, 10)
+            if got then
+                Notify("Eggs", t.name .. " picked up", "Success")
+            else
+                Notify("Eggs", "Pickup refused: " .. tostring(why), "Error", 4)
+            end
+        else
+            local ok, gained = DeliverCarried()
+            local txt
+            if ok then
+                txt = (tonumber(gained) or 0) > 0 and ("delivered (+" .. ShortNumber(gained) .. " $)") or "delivered (cash will be credited)"
+            else
+                txt = "Delivery: " .. tostring(gained)
+            end
+            Notify("Eggs", txt, ok and "Success" or "Error")
+        end
+    end)
+})
+eggsTab:Button({ Title = "Hatch ready eggs", Icon = "sparkles", Callback = SafeActionCallback(function() local n = HatchReadyEggs() Notify("Eggs", n .. " egg(s) hatched", "Success") end) })
+eggsTab:Button({
+    Title = "Check plot eggs", Icon = "list", Callback = safeCallback(function()
+        local plot = OwnPlot()
+        local eggs = PlotEggs(plot)
+        if not eggs then return Notify("Eggs", "No plot", "Error") end
+        local lines = {}
+        for _, e in ipairs(eggs:GetChildren()) do
+            local remaining = GrowthRemaining(e)
+            local remainingText = type(remaining) == "number" and (tostring(math.floor(remaining)) .. "s") or "time unknown"
+            lines[#lines + 1] = string.format("%s - %s", e.Name, remainingText)
+        end
+        Notify("Plot eggs", #lines > 0 and table.concat(lines, " | ") or "empty", "Info", 5)
+    end)
+})
+eggsTab:Button({ Title = "Plant best egg", Icon = "sprout", Callback = SafeActionCallback(function() local ok, res = PlantBestEgg(S.plantMinLuck) Notify("Plant", ok and ("planted: " .. tostring(res)) or tostring(res), ok and "Success" or "Error") end) })
+eggsTab:Button({ Title = "Count eggs", Icon = "hash", Callback = safeCallback(function() Notify("Eggs", string.format("%d field eggs | %d egg tools in inventory", #EggRecords(), #EggTools()), "Info", 4) end) })
+
+-- ------------------------------------------------------------------ Pets
+local petsTab = Window:Tab({ Title = "Pets", Icon = "paw-print" })
+petsTab:Section({ Title = "Pet Farm" })
+AddToggle(petsTab, { Title = "Pet Farm", StateKey = "petLoop", Value = false, Flag = "pets_loop", Callback = safeCallback(function(v) S.petLoop = v StartLoops() end) })
+AddToggle(petsTab, { Title = "Collect earnings", StateKey = "autoCollectPets", Value = true, Flag = "pets_collect", Callback = safeCallback(function(v) S.autoCollectPets = v end) })
+AddToggle(petsTab, { Title = "Auto place pets", StateKey = "autoPlacePets", Value = false, Flag = "pets_place", Callback = safeCallback(function(v) S.autoPlacePets = v end) })
+AddToggle(petsTab, { Title = "Auto feed", StateKey = "autoFeedPets", Value = false, Flag = "pets_feed", Callback = safeCallback(function(v) S.autoFeedPets = v end) })
+petsTab:Button({ Title = "Collect earnings", Icon = "coins", Callback = SafeActionCallback(function() local n = CollectPetEarnings() Notify("Pets", n .. " pet(s) collected", "Success") end) })
+petsTab:Button({ Title = "Place best pets", Icon = "trophy", Callback = SafeActionCallback(function() local ok = PlaceBestPets() Notify("Pets", ok and "placed" or "no free slot", ok and "Success" or "Info") end) })
+petsTab:Button({ Title = "Feed", Icon = "utensils", Callback = SafeActionCallback(function() local ok, res = FeedPets() Notify("Pets", ok and ("Fed: " .. tostring(res)) or tostring(res), ok and "Success" or "Error") end) })
+
+petsTab:Section({ Title = "Pet Info" })
+petsTab:Button({
+    Title = "Held pets", Icon = "list", Callback = safeCallback(function()
+        local pets = HeldPets()
+        table.sort(pets, function(a, b) return (a:GetAttribute("Weight") or 0) > (b:GetAttribute("Weight") or 0) end)
+        local lines = {}
+        for i, p in ipairs(pets) do
+            if i > 6 then break end
+            lines[#lines + 1] = string.format("%s (%.0f)", tostring(p:GetAttribute("PetName") or p.Name), tonumber(p:GetAttribute("Weight")) or 0)
+        end
+        Notify("Pets", #lines > 0 and table.concat(lines, " | ") or "none", "Info", 5)
+    end)
+})
+petsTab:Button({
+    Title = "Plot-Pets", Icon = "map-pin", Callback = safeCallback(function()
+        local pets = OwnPlotPets()
+        local lines = {}
+        for _, p in ipairs(pets) do
+            lines[#lines + 1] = string.format("%s (%.0f, Age %s)", tostring(p:GetAttribute("PetName") or p.Name), tonumber(p:GetAttribute("Weight")) or 0, tostring(p:GetAttribute("Age")))
+        end
+        Notify("Plot pets", #lines > 0 and table.concat(lines, " | ") or "none", "Info", 5)
+    end)
+})
+
+-- ------------------------------------------------------------------ Progress
+local progressTab = Window:Tab({ Title = "Progress", Icon = "chart-no-axes-combined" })
+progressTab:Section({ Title = "Auto Progress" })
+AddToggle(progressTab, { Title = "Progress Loop", StateKey = "progressLoop", Value = false, Flag = "prog_loop", Callback = safeCallback(function(v) S.progressLoop = v StartLoops() end) })
+AddToggle(progressTab, { Title = "Buy nests", StateKey = "autoUnlockNests", Value = false, Flag = "prog_nests", Callback = safeCallback(function(v) S.autoUnlockNests = v end) })
+AddToggle(progressTab, { Title = "Auto Rebirth", StateKey = "autoRebirth", Value = false, Flag = "prog_rebirth", Callback = safeCallback(function(v) S.autoRebirth = v end) })
+AddToggle(progressTab, { Title = "Auto Index-Reward", StateKey = "autoClaimIndex", Value = false, Flag = "prog_index", Callback = safeCallback(function(v) S.autoClaimIndex = v end) })
+AddToggle(progressTab, { Title = "Auto offline cash", StateKey = "autoClaimOffline", Value = false, Flag = "prog_offline", Callback = safeCallback(function(v) S.autoClaimOffline = v end) })
+AddToggle(progressTab, { Title = "Auto group reward", StateKey = "autoClaimGroup", Value = false, Flag = "prog_group", Callback = safeCallback(function(v) S.autoClaimGroup = v end) })
+AddToggle(progressTab, { Title = "Auto Event-Reward", StateKey = "autoClaimEvent", Value = false, Flag = "prog_event", Callback = safeCallback(function(v) S.autoClaimEvent = v end) })
+AddToggle(progressTab, { Title = "Auto Radar", StateKey = "autoRadar", Value = false, Flag = "prog_radar", Callback = safeCallback(function(v) S.autoRadar = v end) })
+
+progressTab:Section({ Title = "Luck Upgrades" })
+progressTab:Button({
+    Title = "Buy luck ON/OFF", Icon = "clover", Callback = safeCallback(function()
+        S.luckBuying = not S.luckBuying
+        Notify("Luck", S.luckBuying and ("on | " .. tostring(S.luckBuyMode) .. " every " .. tostring(S.luckBuyDelay) .. "s") or "off", S.luckBuying and "Success" or "Info")
+    end)
+})
+AddSlider(progressTab, { Title = "Buy delay", Min = 0.2, Max = 30, Default = 2, Step = 0.1, Flag = "luck_delay", Callback = safeCallback(function(v) S.luckBuyDelay = tonumber(v) or 2 end) })
+AddDropdown(progressTab, { Title = "Buy mode", Values = { "1 Upgrade", "Max" }, Value = "1 Upgrade", Flag = "luck_mode", Callback = safeCallback(function(v) S.luckBuyMode = tostring(v) end) })
+AddSlider(progressTab, { Title = "Keep cash", Min = 0, Max = 5000000, Default = 100000, Step = 1000, Flag = "luck_reserve", Callback = safeCallback(function(v) S.upgradeReserve = tonumber(v) or 100000 end) })
+
+local function ProgressStatusText()
+    local count = MaxAffordableHatchUpgrades()
+    local plot = OwnPlot()
+    local nests = PlotNests(plot)
+    local open, total = 0, 0
+    if nests then
+        for _, n in ipairs(nests:GetChildren()) do
+            total = total + 1
+            if n:GetAttribute("Unlocked") == true then open = open + 1 end
+        end
+    end
+    return string.format("Luck Lv%d (x%.1f) | next %s $ | affordable %d | nests %d/%d | rebirths %s (%s $)", HatchUpgradeLevel(), HatchLuckMultiplier(), tostring(NextHatchUpgradePrice()), count, open, total, tostring(PlayerStat("Rebirths")), tostring(RebirthCost()))
+end
+progressTab:Section({ Title = "Status" })
+local progStatusLabel = progressTab:Paragraph({ Title = "Status", Desc = ProgressStatusText() })
+task.spawn(function()
+    while not HUB.dead do
+        task.wait(2)
+        SetParagraphDesc(progStatusLabel, ProgressStatusText())
+    end
+end)
+
+-- ------------------------------------------------------------------ Shops
+local shopsTab = Window:Tab({ Title = "Shops", Icon = "store" })
+shopsTab:Section({ Title = "Shop" })
+AddToggle(shopsTab, {
+    Title = "Server autobuy", StateKey = "autoBuyFood", Value = false, Flag = "shop_autobuy", Callback = safeCallback(function(v)
+        S.autoBuyFood = v
+        local remote = Remote("Autobuy")
+        if remote then pcall(function() remote:FireServer(v) end) end
+        Notify("Shop", v and "autobuy on" or "autobuy off", "Info")
+    end)
+})
+AddToggle(shopsTab, { Title = "Auto restock", StateKey = "autoRestock", Value = false, Flag = "shop_restock", Callback = safeCallback(function(v)
+    S.autoRestock = v
+    if v then StartLoops() end
+end) })
+shopsTab:Button({
+    Title = "Restock", Icon = "refresh-cw", Callback = safeCallback(function()
+        local clicked, message = TriggerRestock()
+        Notify("Shop", clicked and "Restock triggered" or tostring(message), clicked and "Success" or "Info")
+    end)
+})
+shopsTab:Section({ Title = "Teleports" })
+shopsTab:Button({ Title = "Food stall", Icon = "utensils", Callback = safeCallback(function() TeleportToStall("Food") end) })
+shopsTab:Button({ Title = "Gear stall", Icon = "wrench", Callback = safeCallback(function() TeleportToStall("Gears") end) })
+shopsTab:Button({ Title = "Sell stall", Icon = "circle-dollar-sign", Callback = safeCallback(function() TeleportToStall("Sell") end) })
+shopsTab:Button({ Title = "Egg tracker", Icon = "radar", Callback = safeCallback(function() TeleportToStall("EggTracker") end) })
+
+-- ------------------------------------------------------------------ ESP
+local espTab = Window:Tab({ Title = "ESP", Icon = "scan-search" })
+espTab:Section({ Title = "ESP" })
+AddToggle(espTab, { Title = "Egg ESP", StateKey = "eggEsp", Value = false, Flag = "esp_egg", Callback = safeCallback(function(v) S.eggEsp = v RefreshESP() end) })
+AddToggle(espTab, { Title = "Pet ESP (own green)", StateKey = "petEsp", Value = false, Flag = "esp_pet", Callback = safeCallback(function(v) S.petEsp = v RefreshESP() end) })
+AddToggle(espTab, { Title = "Player ESP", StateKey = "playerEsp", Value = false, Flag = "esp_player", Callback = safeCallback(function(v) S.playerEsp = v RefreshESP() end) })
+AddDropdown(espTab, {
+    Title = "Rarity filter", Values = { "Common", "Rare", "Epic", "Legendary", "Mythic", "Ethereal", "Divine", "Volcanic" },
+    Value = {}, AllowNone = true, Multi = true, Flag = "esp_rarities",
+    Callback = safeCallback(function(list)
+        S.espRarities = {}
+        for _, r in ipairs(SelectionNames(list)) do S.espRarities[r] = true end
+        RefreshESP()
+    end)
+})
+AddToggle(espTab, { Title = "Eggs: name + distance", StateKey = "espEggLabels", Value = true, Flag = "esp_egglabels", Callback = safeCallback(function(v) S.espEggLabels = v RefreshESP() end) })
+AddSlider(espTab, { Title = "Eggs: markers up to (0 = all)", Min = 0, Max = 8000, Default = 0, Step = 25, Flag = "esp_eggmax", Callback = safeCallback(function(v) S.espEggMaxDist = tonumber(v) or 0 RefreshESP() end) })
+espTab:Button({ Title = "Travel to next egg", Icon = "navigation", Callback = SafeActionCallback(function()
+    local t = PickTargetEgg()
+    if not t then return Notify("Egg ESP", "no egg", "Info") end
+    local moved = TravelToEgg(t)
+    Notify("Egg ESP", moved and t.name or "teleport failed", moved and "Success" or "Error")
+end) })
+
+-- ------------------------------------------------------------------ NAZK Dash system
+local dashTab = Window:Tab({ Title = "Dash system", Icon = "zap" })
+dashTab:Section({ Title = "Dash Settings" })
+AddToggle(dashTab, { Title = "Dash Enabled (Key Bind)", Desc = "Works even when UI is closed", Value = true, Flag = "nazk_dash_enabled", Callback = function(v) getgenv().NAZK_DashEnabled = v end })
+AddSlider(dashTab, { Title = "Dash Power", Min = 10, Max = 200, Default = 45, Step = 1, Flag = "nazk_dash_power", Callback = function(v) getgenv().NAZK_DashPower = v end })
+AddSlider(dashTab, { Title = "Dash Height (Vertical)", Min = 0, Max = 100, Default = 0, Step = 1, Flag = "nazk_dash_vertical", Callback = function(v) getgenv().NAZK_DashVertical = v end })
+AddSlider(dashTab, { Title = "Dash Cooldown", Min = 0, Max = 2, Default = 0.25, Step = 0.05, Flag = "nazk_dash_cooldown", Callback = function(v) getgenv().NAZK_DashCooldown = v end })
+AddDropdown(dashTab, {
+    Title = "Dash Key", Values = { "Q", "E", "F", "LeftShift", "C", "V", "X" }, Value = "Q", Flag = "nazk_dash_key",
+    Callback = function(v)
+        local map = { Q = Enum.KeyCode.Q, E = Enum.KeyCode.E, F = Enum.KeyCode.F, LeftShift = Enum.KeyCode.LeftShift, C = Enum.KeyCode.C, V = Enum.KeyCode.V, X = Enum.KeyCode.X }
+        getgenv().NAZK_DashKey = map[v] or Enum.KeyCode.Q
+    end
+})
+dashTab:Section({ Title = "Floating Button" })
+dashTab:Button({ Title = "Hide Dash Button", Icon = "eye-off", Callback = function() if getgenv().NAZK_HideDashButton then getgenv().NAZK_HideDashButton() Notify("NAZK", "Dash button hidden", "Info") end end })
+dashTab:Button({ Title = "Show Dash Button", Icon = "eye", Callback = function() if getgenv().NAZK_ShowDashButton then getgenv().NAZK_ShowDashButton() Notify("NAZK", "Dash button shown", "Info") end end })
+
+-- ------------------------------------------------------------------ NAZK Discord
+local discordTab = Window:Tab({ Title = "Discord", Icon = "message-circle" })
+discordTab:Section({ Title = "Community" })
+discordTab:Paragraph({ Title = "Join Our Discord Server", Desc = "If you encounter any issues, bugs, or need support, please contact us on our Discord server. Our team is active and ready to help." })
+discordTab:Paragraph({ Title = "Invite Link", Desc = DISCORD_URL })
+discordTab:Button({
+    Title = "Copy Discord Invite", Icon = "copy", Callback = function()
+        local ok = pcall(function() setclipboard(DISCORD_URL) end)
+        if ok then Notify("NAZK", "Discord invite copied to clipboard", "Success") else Notify("NAZK", "Failed to copy - use the link above", "Error") end
+    end
+})
+discordTab:Button({
+    Title = "Join Discord Server", Icon = "external-link", Callback = function()
+        Notify("NAZK", "Copy the invite link and open it in your browser", "Info")
+        pcall(function() setclipboard(DISCORD_URL) end)
+    end
+})
+
+-- ------------------------------------------------------------------ Settings / configuration
+local function SaveWindConfig()
+    local manager = Window and Window.ConfigManager
+    if not manager then return Notify("Config", "WindUI config manager is unavailable", "Error") end
+    local ok, saved = pcall(function()
+        Window.CurrentConfig = manager:Config(CONFIG_NAME)
+        return Window.CurrentConfig:Save()
+    end)
+    Notify("Config", ok and saved and "Saved" or ("Save failed: " .. tostring(saved)), ok and saved and "Success" or "Error")
+end
+
+local function LoadWindConfig()
+    local manager = Window and Window.ConfigManager
+    if not manager then return Notify("Config", "WindUI config manager is unavailable", "Error") end
+    local ok, loaded = pcall(function()
+        Window.CurrentConfig = manager:CreateConfig(CONFIG_NAME)
+        return Window.CurrentConfig:Load()
+    end)
+    Notify("Config", ok and loaded and "Loaded" or ("Load failed: " .. tostring(loaded)), ok and loaded and "Success" or "Error")
+end
+
+local settingsTab = Window:Tab({ Title = "Settings", Icon = "settings" })
+settingsTab:Section({ Title = "Main" })
+settingsTab:Input({ Title = "Config name", Value = CONFIG_NAME, Placeholder = "rideapet", Callback = function(value) if type(value) == "string" and value ~= "" then CONFIG_NAME = value end end })
+settingsTab:Button({ Title = "Save config", Icon = "save", Callback = safeCallback(SaveWindConfig) })
+settingsTab:Button({ Title = "Load config", Icon = "folder-open", Callback = safeCallback(LoadWindConfig) })
+settingsTab:Button({ Title = "Unload Arc HUB", Icon = "power", Callback = safeCallback(function() if HUB.Unload then HUB.Unload() end end) })
+
+
+-- ============================================================================
+-- UNLOAD (Arc and NAZK together)
+-- ============================================================================
+function HUB.Unload()
+    if HUB.dead then return end
+    HUB.dead = true
+    HUB.actionBusy = false
+    S.eggLoop, S.petLoop, S.progressLoop = false, false, false
+    S.luckBuying = false
+
+    for _, c in ipairs(HUB.conns) do pcall(function() c:Disconnect() end) end
+    HUB.conns = {}
+    for _, k in ipairs({ "noclipConn", "loopsRunning" }) do
+        if HUB[k] and type(HUB[k]) ~= "boolean" then pcall(function() HUB[k]:Disconnect() end) end
+        HUB[k] = nil
+    end
+
+    for _, h in ipairs(HUB.highlights) do pcall(function() h.instance:Destroy() end) end
+    HUB.highlights = {}
+    pcall(ClearEggMarkers)
+    for _, d in ipairs(HUB.drawings) do pcall(function() d:Remove() end) end
+    HUB.drawings = {}
+    S.farmNoclip, S.farmNoclipActive = false, false
+    pcall(RestoreCollisions)
+    pcall(CleanupNazkVisuals)
+    pcall(function() Window:Destroy() end)
+    if _G.ArcRideAPet == HUB then _G.ArcRideAPet = nil end
+    if _G.NAZK_HUB_CLEANUP == ownCleanup then _G.NAZK_HUB_CLEANUP = nil end
+    print("[NAZK + Arc HUB] Ride a Pet unloaded.")
+end
+
+_G.NAZK_HUB_CLEANUP = ownCleanup
+
+-- ============================================================================
+-- START
+-- ============================================================================
+local function ExportSerialized(fn)
+    return function(...)
+        return RunSerialized(function(...) return fn(...) end, ...)
+    end
+end
+
+HUB.actions = {
+    PickTargetEgg = PickTargetEgg,
+    CollectEgg = ExportSerialized(CollectEgg),
+    DeliverCarried = ExportSerialized(DeliverCarried),
+    PlantBestEgg = ExportSerialized(PlantBestEgg),
+    HatchReadyEggs = ExportSerialized(HatchReadyEggs),
+    CollectPetEarnings = ExportSerialized(CollectPetEarnings),
+    PlaceBestPets = ExportSerialized(PlaceBestPets),
+    FeedPets = ExportSerialized(FeedPets),
+    UnlockNests = ExportSerialized(UnlockNests),
+    TryRebirth = ExportSerialized(TryRebirth),
+    OwnPlot = OwnPlot,
+    EggRecords = EggRecords,
+    RenderedEggs = RenderedEggs,
+    EggTools = EggTools,
+    GrowthRemaining = GrowthRemaining,
+    IsVolcanicEgg = IsVolcanicEgg,
+    LairDoor = LairDoor,
+    LairBounds = LairBounds,
+    InsideLair = InsideLair,
+    ServerSeesInsideLair = ServerSeesInsideLair,
+    EnterLair = EnterLair,
+}
+StartLoops()
+
+local function FinishLoading()
+    task.spawn(function()
+        for i = 1, 85 do
+            if HUB.dead then return end
+            BarFill.Size = UDim2.new(i / 100, 0, 1, 0)
+            Percent.Text = i .. "%"
+            if i < 30 then LoadingStatus.Text = "Loading assets..."
+            elseif i < 60 then LoadingStatus.Text = "Loading WindUI..."
+            else LoadingStatus.Text = "Building unified UI..." end
+            task.wait(0.02)
+        end
+        for i = 85, 100 do
+            if HUB.dead then return end
+            BarFill.Size = UDim2.new(i / 100, 0, 1, 0)
+            Percent.Text = i .. "%"
+            LoadingStatus.Text = "Opening..."
+            task.wait(0.03)
+        end
+        task.wait(0.2)
+        pcall(function()
+            TweenService:Create(LoadingFrame, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+            TweenService:Create(BlurBg, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+            for _, v in ipairs(LoadingFrame:GetDescendants()) do
+                if v:IsA("TextLabel") then
+                    TweenService:Create(v, TweenInfo.new(0.4), { TextTransparency = 1 }):Play()
+                elseif v:IsA("ImageLabel") then
+                    TweenService:Create(v, TweenInfo.new(0.4), { ImageTransparency = 1 }):Play()
+                elseif v:IsA("Frame") then
+                    TweenService:Create(v, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+                end
+            end
+        end)
+        task.wait(0.45)
+        pcall(function() if LoadingGui then LoadingGui:Destroy() end end)
+        pcall(function() Window:Open() end)
+    end)
+end
+
+task.spawn(function()
+    task.wait(0.4)
+    pcall(function()
+        for _, g in ipairs(GetParent():GetChildren()) do
+            if g:IsA("ScreenGui") then
+                for _, v in ipairs(g:GetDescendants()) do
+                    if v:IsA("ImageLabel") and tostring(v.Image):find("139759348685642") then
+                        v.AnchorPoint = Vector2.new(0, 0)
+                        v.Size = UDim2.fromOffset(LOGO_SIZE, LOGO_SIZE)
+                        v.Position = LOGO_POS
+                    end
+                end
+            end
+        end
+    end)
+end)
+
+CreateFloatingUI()
+FinishLoading()
+Notify("NAZK HUB RED", "Loaded - Arc Ride a Pet + Discord + Dash ready!", "Success", 3)
+
+return HUB
