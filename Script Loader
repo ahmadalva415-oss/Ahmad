@@ -35,6 +35,8 @@ local scripts = {
 
     --// Blade Ball
     ["13772394625"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blade%20ball",
+    ["15144787112"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blade%20ball",
+    ["15264892126"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blade%20ball", -- PlaceId الجديد (Item Duels)
 
     --// Jump for Animals
     ["126870639873289"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Jump%20for%20animals"
