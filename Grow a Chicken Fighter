@@ -47,7 +47,7 @@ local ESPRenderConnection, ESPFillTask
 local ESPHighlights, ESPBoxes, ESPLines, ESPNameTexts, ESPDistanceTexts = {}, {}, {}, {}, {}
 
 -- Dash
-local DashEnabled, DashPower, DashVertical = true, 45, 0
+local DashEnabled, DashPower, DashVertical = false, 45, 0
 local DashKey, DashCooldown = Enum.KeyCode.Q, 0.25
 local dashLast = 0
 
@@ -98,7 +98,7 @@ local AutoExecuteEnabled = false
 local AutoExecuteScriptURL = ""
 
 -- Sound
-local SoundEnabled = true
+local SoundEnabled = false
 local SoundIds = {
     Toggle = "rbxassetid://4590662766",
     Off    = "rbxassetid://4590667848",
@@ -162,6 +162,11 @@ local function LoadSettings()
 end
 LoadSettings()
 
+-- Always start safely: saved settings must not re-enable or alter active features.
+AutoExecuteEnabled = false
+CurrentGravity = DefaultGravity
+Workspace.Gravity = DefaultGravity
+
 --========================================================--
 -- AUTO EXECUTE
 --========================================================--
@@ -178,6 +183,7 @@ end
 -- DASH
 --========================================================--
 local function DoDash()
+    if not DashEnabled then return end
     if tick() - dashLast < DashCooldown then return end
     dashLast = tick()
     local root = GetRoot(); if not root then return end
@@ -996,7 +1002,7 @@ local function BuildHub()
     local DashTab = Window:Tab({ Title = "Dash system", Icon = "zap" })
     DashTab:Section({ Title = "Dash Settings" })
     DashTab:Toggle({
-        Title = "Dash Enabled (Key Bind)", Default = true,
+        Title = "Dash Enabled (Key Bind)", Default = false,
         Desc = "Works even when UI is closed",
         Callback = function(v) DashEnabled = v end
     })
@@ -1184,7 +1190,7 @@ local function BuildHub()
         Callback = function(v) if v then StartInfiniteJump() else StopInfiniteJump() end PlaySound(v and "Toggle" or "Off", 0.3) end
     })
     MiscTab:Toggle({
-        Title = "Sound Effects", Default = true,
+        Title = "Sound Effects", Default = false,
         Callback = function(v) SoundEnabled = v if v then PlaySound("Toggle", 0.3) end end
     })
     MiscTab:Toggle({
@@ -1363,7 +1369,7 @@ end
 --========================================================--
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
-    if input.KeyCode == DashKey then DoDash()
+    if DashEnabled and input.KeyCode == DashKey then DoDash()
     elseif input.KeyCode == Enum.KeyCode.H then
         if WindowRef then
             if WindowRef._Opened ~= false then pcall(function() WindowRef:Close() end) WindowRef._Opened = false
@@ -1448,6 +1454,7 @@ task.spawn(function()
     end
 
     DashOuter = CreateRedBlackButton("Dash", "Dash", UDim2.new(1, -90, 0.5, -20))
+    DashOuter.Visible = false -- Keep the floating dash control off at startup.
     local DashBtn = DashOuter:FindFirstChildOfClass("TextButton")
 
     local function MakeDraggable(Button, Callback)
@@ -1508,7 +1515,7 @@ task.spawn(function()
     end)
     MakeDraggableOuter(DashOuter, DashBtn, function()
         DashBtn.Text = "..."
-        DoDash()
+        if DashEnabled then DoDash() end
         task.wait(0.25); DashBtn.Text = "Dash"
     end)
 
