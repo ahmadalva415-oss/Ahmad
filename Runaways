@@ -756,6 +756,33 @@ local function BuildHub()
         end
     end)
 
+    -- ========== SUPPORT tab: all 59 maps in the source registry ==========
+    local SupportTab = Window:Tab({ Title = "SUPPORT", Icon = "list-checks" })
+    SupportTab:Section({ Title = "Supported Maps (59)" })
+    SupportTab:Paragraph({
+        Title = "NAZK support list",
+        Desc = "The names below come from the source index.json registry. Select a game in the Games integration when its script is available.",
+    })
+    local SupportMaps = {
+        "UNIVERSAL (any shooter)", "Anime Dice", "Build and Kill Zombies", "[NEW] Clicker Simulator!",
+        "Phantom Forces", "Hypershot!", "Mrbeast Island Escape", "[EGG] Find the Egg for a Brainrot",
+        "Clean the WORLD!", "[+1] Loot Evo", "Sell Lemons", "Sell Ores", "Drill Blocks for Brainrots",
+        "Make a Drill Farm", "Clean all the leaves!", "+1 Skill Point Legends", "+1 Speed Monkey Escape",
+        "Dig & Clean", "+1 Muscle Evolution", "+1 Power Per Click", "+1 Drain Water Per Click",
+        "+1 Wings for Brainrots", "+1 Speed Evolve", "+1 Jetpack for Brainrots", "+1 Mine Per Click",
+        "+1 Ammo Per Click", "[W3] +1 Aim Per Click", "[💪] +1 Strength Per Click", "Power Blast Lucky Blocks!",
+        "+1 Looks Per Click", "Pickaxe Simulator!", "+1 Spinjitsu Escape", "Pull a Lucky Fish", "Steal An Egg",
+        "Grow a Chicken Fighter", "[💰] +1 Poor To Rich", "Logo für Brainrots!", "Aura For Brainrots",
+        "Counter Blox", "BloxStrike", "Training To Climb", "Speed Training", "Roll A Gnome", "Arsenal",
+        "[⛰️] Mine a Mountain", "Spin a Gun", "[EVENT] Deagle Arena", "Murderers VS Sheriffs DUELS",
+        "🦸 +1 Superhero Evolution", "TTK Testing", "+1 Cut Grass Adventure", "+1 Chop Trees for Treasure",
+        "[Races]+1 Loot To Forge", "REDLINER", "Roll A Pack!", "Break an Egg", "[TRADE] Beat the Anime Boss!",
+        "Jump for Animals!", "[SWORDS] +1 Slash Per Click!"
+    }
+    for i, mapName in ipairs(SupportMaps) do
+        SupportTab:Paragraph({ Title = string.format("%02d. %s", i, mapName), Desc = "Supported map entry" })
+    end
+
     WindUI:Notify({
         Title = "NAZK HUB RED",
         Content = "Loaded - Discord + Dash + RUNAWAYS ready!",
