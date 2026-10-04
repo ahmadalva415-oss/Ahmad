@@ -1,0 +1,602 @@
+-- NAZK HUB RED | DISCORD + DASH SYSTEM
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Debris = game:GetService("Debris")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+if _G.NAZK_HUB_RUNNING then
+    pcall(function() if _G.NAZK_HUB_CLEANUP then _G.NAZK_HUB_CLEANUP() end end)
+    task.wait(0.3)
+end
+_G.NAZK_HUB_RUNNING = true
+
+local LOGO_ID    = "rbxassetid://139759348685642"
+local LOGO_SIZE  = 38
+local LOGO_POS   = UDim2.new(0, -6, 0.5, -19)
+local DISCORD_URL = "https://discord.gg/ne5vgR9q8"
+
+local function GetParent()
+    local ok, res = pcall(function() return gethui() end)
+    if ok and res then return res end
+    return CoreGui
+end
+
+-- ========== Dash System (Global) ==========
+getgenv().NAZK_DashEnabled = true
+getgenv().NAZK_DashPower = 45
+getgenv().NAZK_DashVertical = 0
+getgenv().NAZK_DashKey = Enum.KeyCode.Q
+getgenv().NAZK_DashCooldown = 0.25
+getgenv().NAZK_dashLast = 0
+
+getgenv().NAZK_DoDash = function()
+    if tick() - (getgenv().NAZK_dashLast or 0) < (getgenv().NAZK_DashCooldown or 0.25) then return end
+    getgenv().NAZK_dashLast = tick()
+
+    local char = LocalPlayer.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+
+    local dir = cam.CFrame.LookVector
+    dir = Vector3.new(dir.X, 0, dir.Z)
+    if dir.Magnitude < 0.01 then return end
+    dir = dir.Unit
+
+    local power = getgenv().NAZK_DashPower or 45
+    local up = getgenv().NAZK_DashVertical or 0
+
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+    bv.Velocity = dir * power + Vector3.new(0, up, 0)
+    bv.P = 20000
+    bv.Parent = root
+    Debris:AddItem(bv, 0.15)
+end
+
+local dashConn = UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if not getgenv().NAZK_DashEnabled then return end
+    if input.KeyCode == getgenv().NAZK_DashKey then
+        getgenv().NAZK_DoDash()
+    end
+end)
+
+-- ========== Loading UI ==========
+local LoadingGui = Instance.new("ScreenGui")
+LoadingGui.Name = "NAZK_Loading"
+LoadingGui.ResetOnSpawn = false
+LoadingGui.IgnoreGuiInset = true
+LoadingGui.Parent = GetParent()
+
+local BlurBg = Instance.new("Frame")
+BlurBg.Size = UDim2.new(1, 0, 1, 0)
+BlurBg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+BlurBg.BackgroundTransparency = 0.2
+BlurBg.BorderSizePixel = 0
+BlurBg.Parent = LoadingGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.fromOffset(340, 400)
+MainFrame.Position = UDim2.new(0.5, -170, 0.5, -200)
+MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = LoadingGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 6)
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(255, 0, 0)
+MainStroke.Thickness = 2
+MainStroke.Parent = MainFrame
+
+local Logo = Instance.new("ImageLabel")
+Logo.Size = UDim2.fromOffset(140, 140)
+Logo.Position = UDim2.new(0.5, -70, 0, 35)
+Logo.BackgroundTransparency = 1
+Logo.Image = LOGO_ID
+Logo.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Position = UDim2.new(0, 0, 0, 190)
+Title.BackgroundTransparency = 1
+Title.Text = "NAZK HUB"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 36
+Title.Parent = MainFrame
+
+local Sub = Instance.new("TextLabel")
+Sub.Size = UDim2.new(1, 0, 0, 20)
+Sub.Position = UDim2.new(0, 0, 0, 230)
+Sub.BackgroundTransparency = 1
+Sub.Text = "R E D   E D I T I O N"
+Sub.TextColor3 = Color3.fromRGB(255, 0, 0)
+Sub.Font = Enum.Font.GothamBold
+Sub.TextSize = 12
+Sub.Parent = MainFrame
+
+local BarBG = Instance.new("Frame")
+BarBG.Size = UDim2.new(0.75, 0, 0, 8)
+BarBG.Position = UDim2.new(0.125, 0, 0, 285)
+BarBG.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+BarBG.BorderSizePixel = 0
+BarBG.Parent = MainFrame
+Instance.new("UICorner", BarBG).CornerRadius = UDim.new(1, 0)
+
+local BarFill = Instance.new("Frame")
+BarFill.Size = UDim2.new(0, 0, 1, 0)
+BarFill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+BarFill.BorderSizePixel = 0
+BarFill.Parent = BarBG
+Instance.new("UICorner", BarFill).CornerRadius = UDim.new(1, 0)
+
+local Percent = Instance.new("TextLabel")
+Percent.Size = UDim2.new(1, 0, 0, 20)
+Percent.Position = UDim2.new(0, 0, 0, 305)
+Percent.BackgroundTransparency = 1
+Percent.Text = "0%"
+Percent.TextColor3 = Color3.new(1, 1, 1)
+Percent.Font = Enum.Font.GothamBold
+Percent.TextSize = 18
+Percent.Parent = MainFrame
+
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.new(1, 0, 0, 15)
+Status.Position = UDim2.new(0, 0, 0, 260)
+Status.BackgroundTransparency = 1
+Status.Text = "Loading..."
+Status.TextColor3 = Color3.fromRGB(150, 150, 150)
+Status.Font = Enum.Font.Gotham
+Status.TextSize = 12
+Status.Parent = MainFrame
+
+local mainLoaded = false
+local WindowRef = nil
+
+getgenv().NAZK_DashButton = nil
+getgenv().NAZK_HideDashButton = function()
+    local btn = getgenv().NAZK_DashButton
+    if btn then btn.Visible = false end
+end
+getgenv().NAZK_ShowDashButton = function()
+    local btn = getgenv().NAZK_DashButton
+    if btn then btn.Visible = true end
+end
+
+-- ========== Build Hub ==========
+local function BuildHub()
+    local ok, WindUI = pcall(function()
+        return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/download/1.6.66/main.lua"))()
+    end)
+    if not ok or not WindUI then
+        ok, WindUI = pcall(function()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+        end)
+    end
+    if not ok or not WindUI then return nil end
+
+    WindUI:AddTheme({
+        Name = "NAZK Red",
+        Accent = Color3.fromRGB(255, 0, 0),
+        Background = Color3.fromRGB(12, 12, 12),
+        Outline = Color3.fromRGB(255, 0, 0),
+        Text = Color3.new(1, 1, 1),
+        Button = Color3.fromRGB(25, 25, 25),
+        Icon = Color3.fromRGB(255, 0, 0),
+    })
+
+    local Window = WindUI:CreateWindow({
+        Title = "NAZK HUB",
+        Icon = LOGO_ID,
+        Author = "NAZK | RED EDITION",
+        Folder = "NAZK_RED_DISCORD_DASH",
+        Size = UDim2.fromOffset(580, 460),
+        Theme = "NAZK Red",
+        Transparent = true,
+        HasOutline = true,
+    })
+    pcall(function() Window:EditOpenButton({ Enabled = false }) end)
+
+    task.spawn(function()
+        task.wait(0.4)
+        pcall(function()
+            for _, g in ipairs(GetParent():GetChildren()) do
+                if g:IsA("ScreenGui") then
+                    for _, v in ipairs(g:GetDescendants()) do
+                        if v:IsA("ImageLabel") and tostring(v.Image):find("139759348685642") then
+                            v.AnchorPoint = Vector2.new(0, 0)
+                            v.Size = UDim2.fromOffset(LOGO_SIZE, LOGO_SIZE)
+                            v.Position = LOGO_POS
+                        end
+                    end
+                end
+            end
+        end)
+    end)
+
+    local function Notify(content, icon)
+        WindUI:Notify({ Title = "NAZK", Content = content, Duration = 3, Icon = icon or LOGO_ID })
+    end
+
+    -- ========== Discord Tab ==========
+    local DiscordTab = Window:Tab({ Title = "Discord", Icon = "message-circle" })
+
+    DiscordTab:Section({ Title = "Community" })
+
+    DiscordTab:Paragraph({
+        Title = "Join Our Discord Server",
+        Desc = "If you encounter any issues, bugs, or need support, please contact us on our Discord server. Our team is active and ready to help.",
+    })
+
+    DiscordTab:Paragraph({
+        Title = "Invite Link",
+        Desc = DISCORD_URL,
+    })
+
+    DiscordTab:Button({
+        Title = "Copy Discord Invite",
+        Icon = "copy",
+        Callback = function()
+            local ok = pcall(function() setclipboard(DISCORD_URL) end)
+            if ok then
+                Notify("Discord invite copied to clipboard", "copy")
+            else
+                Notify("Failed to copy - use the link above", "alert-triangle")
+            end
+        end
+    })
+
+    DiscordTab:Button({
+        Title = "Join Discord Server",
+        Icon = "external-link",
+        Callback = function()
+            Notify("Copy the invite link and open it in your browser", "external-link")
+            pcall(function() setclipboard(DISCORD_URL) end)
+        end
+    })
+
+    -- ========== Dash system Tab ==========
+    local DashTab = Window:Tab({ Title = "Dash system", Icon = "zap" })
+
+    DashTab:Section({ Title = "Dash Settings" })
+
+    DashTab:Toggle({
+        Title = "Dash Enabled (Key Bind)",
+        Desc = "Works even when UI is closed",
+        Default = true,
+        Callback = function(v) getgenv().NAZK_DashEnabled = v end
+    })
+
+    DashTab:Slider({
+        Title = "Dash Power",
+        Value = { Min = 10, Max = 200, Default = 45 },
+        Callback = function(v) getgenv().NAZK_DashPower = v end
+    })
+
+    DashTab:Slider({
+        Title = "Dash Height (Vertical)",
+        Value = { Min = 0, Max = 100, Default = 0 },
+        Callback = function(v) getgenv().NAZK_DashVertical = v end
+    })
+
+    DashTab:Slider({
+        Title = "Dash Cooldown",
+        Value = { Min = 0, Max = 2, Default = 0.25 },
+        Callback = function(v) getgenv().NAZK_DashCooldown = v end
+    })
+
+    DashTab:Dropdown({
+        Title = "Dash Key",
+        Values = { "Q", "E", "F", "LeftShift", "C", "V", "X" },
+        Default = "Q",
+        Callback = function(v)
+            local map = {
+                Q = Enum.KeyCode.Q,
+                E = Enum.KeyCode.E,
+                F = Enum.KeyCode.F,
+                LeftShift = Enum.KeyCode.LeftShift,
+                C = Enum.KeyCode.C,
+                V = Enum.KeyCode.V,
+                X = Enum.KeyCode.X,
+            }
+            getgenv().NAZK_DashKey = map[v] or Enum.KeyCode.Q
+        end
+    })
+
+    DashTab:Section({ Title = "Floating Button" })
+
+    DashTab:Button({
+        Title = "Hide Dash Button",
+        Icon = "eye-off",
+        Callback = function()
+            if getgenv().NAZK_HideDashButton then
+                getgenv().NAZK_HideDashButton()
+                Notify("Dash button hidden", "eye-off")
+            end
+        end
+    })
+
+    DashTab:Button({
+        Title = "Show Dash Button",
+        Icon = "eye",
+        Callback = function()
+            if getgenv().NAZK_ShowDashButton then
+                getgenv().NAZK_ShowDashButton()
+                Notify("Dash button shown", "eye")
+            end
+        end
+    })
+
+    -- ========== SUPPORT: 59 supported games ==========
+    local SupportTab = Window:Tab({ Title = "SUPPORT", Icon = "list-checks" })
+    SupportTab:Section({ Title = "Supported Games (59)" })
+    SupportTab:Paragraph({
+        Title = "NAZK Hub support list",
+        Desc = "This tab lists all 59 supported games.",
+    })
+        SupportTab:Paragraph({ Title = "01. UNIVERSAL (any shooter)", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "02. Anime Dice", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "03. Build and Kill Zombies", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "04. [NEW] Clicker Simulator!", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "05. Phantom Forces", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "06. Hypershot!", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "07. Mrbeast Island Escape", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "08. [EGG] Find the Egg for a Brainrot", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "09. Clean the WORLD!", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "10. [+1] Loot Evo", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "11. Sell Lemons", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "12. Sell Ores", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "13. Drill Blocks for Brainrots", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "14. Make a Drill Farm", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "15. Clean all the leaves!", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "16. +1 Skill Point Legends", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "17. +1 Speed Monkey Escape", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "18. Dig & Clean", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "19. +1 Muscle Evolution", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "20. +1 Power Per Click", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "21. +1 Drain Water Per Click", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "22. +1 Wings for Brainrots", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "23. +1 Speed Evolve", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "24. +1 Jetpack for Brainrots", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "25. +1 Mine Per Click", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "26. +1 Ammo Per Click", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "27. [W3] +1 Aim Per Click", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "28. [💪] +1 Strength Per Click", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "29. Power Blast Lucky Blocks!", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "30. +1 Looks Per Click", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "31. Pickaxe Simulator!", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "32. +1 Spinjitsu Escape", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "33. Pull a Lucky Fish", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "34. Steal An Egg", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "35. Grow a Chicken Fighter", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "36. [💰] +1 Poor To Rich", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "37. Logo für Brainrots!", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "38. Aura For Brainrots", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "39. Counter Blox", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "40. BloxStrike", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "41. Training To Climb", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "42. Speed Training", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "43. Roll A Gnome", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "44. Arsenal", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "45. [⛰️] Mine a Mountain", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "46. Spin a Gun", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "47. [EVENT] Deagle Arena", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "48. Murderers VS Sheriffs DUELS", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "49. 🦸 +1 Superhero Evolution", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "50. TTK Testing", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "51. +1 Cut Grass Adventure", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "52. +1 Chop Trees for Treasure", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "53. [Races]+1 Loot To Forge", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "54. REDLINER", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "55. Roll A Pack!", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "56. Break an Egg", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "57. [TRADE] Beat the Anime Boss!", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "58. Jump for Animals!", Desc = "Supported map" })
+        SupportTab:Paragraph({ Title = "59. [SWORDS] +1 Slash Per Click!", Desc = "Supported map" })
+
+
+    WindUI:Notify({
+        Title = "NAZK HUB RED",
+        Content = "Loaded - Discord + Dash ready!",
+        Duration = 3,
+        Icon = LOGO_ID
+    })
+
+    return Window, WindUI
+end
+
+-- ========== Boot ==========
+task.spawn(function()
+    local hubWindow, WindUI
+    task.spawn(function()
+        local ok, win, ui = pcall(BuildHub)
+        if ok and win then
+            hubWindow = win
+            WindUI = ui
+            WindowRef = win
+            mainLoaded = true
+        end
+    end)
+
+    for i = 1, 85 do
+        BarFill.Size = UDim2.new(i / 100, 0, 1, 0)
+        Percent.Text = i .. "%"
+        if i < 30 then Status.Text = "Loading assets..."
+        elseif i < 60 then Status.Text = "Loading WindUI..."
+        else Status.Text = "Building UI..." end
+        task.wait(0.02)
+    end
+
+    Status.Text = "Waiting for UI..."
+    local waited = 0
+    while not mainLoaded and waited < 12 do
+        BarFill.Size = UDim2.new(0.85 + math.sin(tick() * 4) * 0.03, 0, 1, 0)
+        task.wait(0.1)
+        waited = waited + 0.1
+    end
+
+    for i = 85, 100 do
+        BarFill.Size = UDim2.new(i / 100, 0, 1, 0)
+        Percent.Text = i .. "%"
+        Status.Text = "Opening..."
+        task.wait(0.03)
+    end
+    task.wait(0.2)
+
+    TweenService:Create(MainFrame, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+    TweenService:Create(BlurBg, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+    for _, v in ipairs(MainFrame:GetDescendants()) do
+        if v:IsA("TextLabel") then
+            TweenService:Create(v, TweenInfo.new(0.4), { TextTransparency = 1 }):Play()
+        elseif v:IsA("ImageLabel") then
+            TweenService:Create(v, TweenInfo.new(0.4), { ImageTransparency = 1 }):Play()
+        elseif v:IsA("Frame") then
+            TweenService:Create(v, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+        end
+    end
+    task.wait(0.45)
+    pcall(function() LoadingGui:Destroy() end)
+    if hubWindow then hubWindow:Open() end
+
+    -- ========== Floating UI ==========
+    local ToggleGui = Instance.new("ScreenGui")
+    ToggleGui.Name = "NAZK_Floating"
+    ToggleGui.ResetOnSpawn = false
+    ToggleGui.Parent = GetParent()
+    getgenv().NAZK_ToggleGui = ToggleGui
+
+    local NButton = Instance.new("ImageButton")
+    NButton.Name = "imageLabel"
+    NButton.Size = UDim2.fromOffset(60, 60)
+    NButton.Position = UDim2.new(0, 15, 0.5, -30)
+    NButton.BackgroundTransparency = 1
+    NButton.Image = LOGO_ID
+    NButton.ZIndex = 100
+    NButton.Parent = ToggleGui
+
+    local function CreateRedBlackButton(name, text, pos)
+        local Outer = Instance.new("Frame")
+        Outer.Name = name .. "_Outer"
+        Outer.Size = UDim2.fromOffset(79, 42)
+        Outer.Position = pos
+        Outer.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        Outer.BorderSizePixel = 0
+        Outer.ZIndex = 99
+        Outer.Parent = ToggleGui
+        Instance.new("UICorner", Outer).CornerRadius = UDim.new(0, 14)
+        local OuterStroke = Instance.new("UIStroke")
+        OuterStroke.Color = Color3.fromRGB(255, 0, 0)
+        OuterStroke.Thickness = 2.5
+        OuterStroke.Parent = Outer
+
+        local btn = Instance.new("TextButton")
+        btn.Name = name
+        btn.Size = UDim2.fromOffset(75, 38)
+        btn.Position = UDim2.new(0, 2, 0, 2)
+        btn.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+        btn.Text = text
+        btn.TextColor3 = Color3.fromRGB(255, 0, 0)
+        btn.TextSize = 16
+        btn.Font = Enum.Font.GothamBold
+        btn.ZIndex = 100
+        btn.Parent = Outer
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 12)
+
+        return Outer, btn
+    end
+
+    local DashOuter, DashBtn = CreateRedBlackButton("Dash", "Dash", UDim2.new(1, -90, 0.5, -20))
+    getgenv().NAZK_DashButton = DashOuter
+
+    local function MakeDraggable(Button, Callback)
+        local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
+        Button.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                moved = false
+                dragStart = i.Position
+                startPos = Button.Position
+            end
+        end)
+        Button.InputChanged:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+                dragInput = i
+            end
+        end)
+        Button.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+                if not moved then Callback() end
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if i == dragInput and dragging then
+                local d = i.Position - dragStart
+                if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then moved = true end
+                Button.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+            end
+        end)
+    end
+
+    local function MakeDraggableOuter(Outer, Inner, Callback)
+        local dragging, dragInput, dragStart, startPos, moved = false, nil, nil, nil, false
+        Inner.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                moved = false
+                dragStart = i.Position
+                startPos = Outer.Position
+            end
+        end)
+        Inner.InputChanged:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+                dragInput = i
+            end
+        end)
+        Inner.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+                if not moved then Callback() end
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if i == dragInput and dragging then
+                local d = i.Position - dragStart
+                if math.abs(d.X) > 4 or math.abs(d.Y) > 4 then moved = true end
+                Outer.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+            end
+        end)
+    end
+
+    local isOpen = true
+    MakeDraggable(NButton, function()
+        isOpen = not isOpen
+        if WindowRef then
+            if isOpen then WindowRef:Open() else WindowRef:Close() end
+        end
+    end)
+
+    MakeDraggableOuter(DashOuter, DashBtn, function()
+        DashBtn.Text = "..."
+        if getgenv().NAZK_DoDash then getgenv().NAZK_DoDash() end
+        task.wait(0.25)
+        DashBtn.Text = "Dash"
+    end)
+
+    _G.NAZK_HUB_CLEANUP = function()
+        pcall(function() if ToggleGui then ToggleGui:Destroy() end end)
+        pcall(function() if WindowRef then WindowRef:Destroy() end end)
+        pcall(function() if dashConn then dashConn:Disconnect() end end)
+        pcall(function() if LoadingGui then LoadingGui:Destroy() end end)
+        getgenv().NAZK_DashButton = nil
+        _G.NAZK_HUB_RUNNING = false
+    end
+end)
