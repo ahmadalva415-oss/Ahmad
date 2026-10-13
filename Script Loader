@@ -44,7 +44,10 @@ local scripts = {
     ["15264892126"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blade%20ball", -- PlaceId الجديد (Item Duels)
 
     --// Jump for Animals
-    ["126870639873289"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Jump%20for%20animals"
+    ["126870639873289"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Jump%20for%20animals",
+
+    --// FTAP (Fling Things and People)
+    ["6961824067"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/FTAP"
 }
 
 local url = scripts[placeId]
