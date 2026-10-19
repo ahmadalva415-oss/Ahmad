@@ -11,9 +11,9 @@
 ---------------------------------------------------------------------
 local CONFIG = {
     Title        = "Kira HUB",
-    Subtitle     = "NAZK Interface",
+    Subtitle     = "Kira Interface",
     Version      = "2.0.0",
-    Icon         = "rbxassetid://116452751852160",
+    Icon         = "rbxassetid://119968340280396",
     LibraryUrl   = "https://pastefy.app/9vgkDsd2/raw",
     DefaultTheme = "Crimson",
     MenuKey      = "RightControl",
@@ -36,9 +36,9 @@ pcall(function() CoreGui = game:GetService("CoreGui") end)
 local env = (type(getgenv) == "function" and getgenv()) or _G
 
 -- If the script is executed twice, remove the previous copy first.
-if type(env.NAZK_HUB_UNLOAD) == "function" then
+if type(env.Kira_HUB_UNLOAD) == "function" then
     pcall(env.Kira_HUB_UNLOAD)
-    env.NAZK_HUB_UNLOAD = nil
+    env.Kira_HUB_UNLOAD = nil
 end
 
 ---------------------------------------------------------------------
@@ -148,7 +148,7 @@ local function saveNow(silent)
         notify("Save failed", reason, "Error", 4)
     elseif not warnedSave then
         warnedSave = true
-        warn("[NAZK HUB] auto-save failed: " .. reason)
+        warn("[Kira HUB] auto-save failed: " .. reason)
     end
     return false
 end
@@ -170,7 +170,7 @@ local function onChange(fn)
     return function(...)
         local ok, err = pcall(fn, ...)
         if not ok then
-            warn("[NAZK HUB] callback error: " .. tostring(err))
+            warn("[Kira HUB] callback error: " .. tostring(err))
         end
         scheduleSave()
     end
@@ -193,7 +193,7 @@ end
 local function build(name, fn)
     local ok, err = pcall(fn)
     if not ok then
-        warn("[NAZK HUB] could not build '" .. name .. "': " .. tostring(err))
+        warn("[Kira HUB] could not build '" .. name .. "': " .. tostring(err))
     end
 end
 
@@ -357,7 +357,7 @@ local function createEffectLayer()
     if not parent then return false end
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "NAZK_BackgroundEffects"
+    gui.Name = "Kira_BackgroundEffects"
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.DisplayOrder = 0
@@ -557,7 +557,7 @@ local function setEffect(mode)
     end
     if not createEffectLayer() then
         fx.mode = "Off"
-        warn("[NAZK HUB] could not create the effects layer")
+        warn("[Kira HUB] could not create the effects layer")
         return
     end
 
@@ -673,8 +673,8 @@ local function cleanup()
     pcall(destroyEffectLayer)
     for _, fn in ipairs(cleanupFns) do pcall(fn) end
     -- only clear the global hook if it still belongs to this copy
-    if env.NAZK_HUB_UNLOAD == unload then
-        env.NAZK_HUB_UNLOAD = nil
+    if env.Kira_HUB_UNLOAD == unload then
+        env.Kira_HUB_UNLOAD = nil
     end
 end
 
@@ -682,7 +682,7 @@ unload = function()
     cleanup()
     pcall(function() window:Destroy() end)
 end
-env.NAZK_HUB_UNLOAD = unload
+env.Kira_HUB_UNLOAD = unload
 
 -- Clean up automatically if the window is destroyed from anywhere else.
 if type(window._connections) == "table" then
@@ -720,33 +720,33 @@ build("Controls / Interface", function()
 
     track(group:Slider({
         Name = "Interface Scale", Min = 60, Max = 150, Step = 5, Default = 100,
-        Suffix = "%", Flag = "NAZK_UIScale",
+        Suffix = "%", Flag = "Kira_UIScale",
         Callback = onChange(function(value) window:SetUIScale(value / 100) end),
     }), 100)
 
     track(group:Dropdown({
         Name = "Density", Options = { "Compact", "Default", "Comfortable" }, Default = "Default",
-        SearchAfter = 8, Flag = "NAZK_Density",
+        SearchAfter = 8, Flag = "Kira_Density",
         Callback = onChange(function(value) lib:SetDensity(value) end),
     }), "Default")
 
     track(group:Slider({
-        Name = "Corner Radius", Min = 0, Max = 20, Step = 1, Default = 10, Flag = "NAZK_Corners",
+        Name = "Corner Radius", Min = 0, Max = 20, Step = 1, Default = 10, Flag = "Kira_Corners",
         Callback = onChange(function(value) lib:SetCornerRadius(value) end),
     }), 10)
 
     track(group:Toggle({
-        Name = "Transparent window", Default = false, Flag = "NAZK_Transparent",
+        Name = "Transparent window", Default = false, Flag = "Kira_Transparent",
         Callback = onChange(function(value) window:SetTransparent(value) end),
     }), false)
 
     track(group:Toggle({
-        Name = "Hide my name", Desc = "Useful when recording or streaming", Default = false, Flag = "NAZK_HideName",
+        Name = "Hide my name", Desc = "Useful when recording or streaming", Default = false, Flag = "Kira_HideName",
         Callback = onChange(function(value) window:SetHideName(value) end),
     }), false)
 
     track(group:Toggle({
-        Name = "Hide my avatar", Default = false, Flag = "NAZK_HideAvatar",
+        Name = "Hide my avatar", Default = false, Flag = "Kira_HideAvatar",
         Callback = onChange(function(value) window:SetHideAvatar(value) end),
     }), false)
 end)
@@ -755,7 +755,7 @@ build("Controls / Custom features", function()
     local group = tabs.Controls:AddRightGroupbox("Custom Features", "wrench")
 
     track(group:Toggle({
-        Name = "Enable Feature A", Desc = "Template toggle", Default = false, Flag = "NAZK_FeatureA",
+        Name = "Enable Feature A", Desc = "Template toggle", Default = false, Flag = "Kira_FeatureA",
         Callback = onChange(function(value)
             State.featureA = value
             Features.FeatureA(value)
@@ -764,7 +764,7 @@ build("Controls / Custom features", function()
     }), false)
 
     track(group:Toggle({
-        Name = "Enable Feature B", Desc = "Template toggle", Default = false, Flag = "NAZK_FeatureB",
+        Name = "Enable Feature B", Desc = "Template toggle", Default = false, Flag = "Kira_FeatureB",
         Callback = onChange(function(value)
             State.featureB = value
             Features.FeatureB(value)
@@ -774,7 +774,7 @@ build("Controls / Custom features", function()
 
     track(group:Dropdown({
         Name = "Select Mode", Options = { "Standard", "Compact", "Advanced" }, Default = "Standard",
-        SearchAfter = 8, Flag = "NAZK_Mode",
+        SearchAfter = 8, Flag = "Kira_Mode",
         Callback = onChange(function(value)
             State.mode = value
             Features.Mode(value)
@@ -783,7 +783,7 @@ build("Controls / Custom features", function()
     }), "Standard")
 
     group:Input({
-        Name = "Custom Text", Placeholder = "Type something...", Default = "", Flag = "NAZK_CustomText",
+        Name = "Custom Text", Placeholder = "Type something...", Default = "", Flag = "Kira_CustomText",
         Callback = onChange(function(text) State.customText = text end),
     })
 
@@ -808,16 +808,16 @@ end)
 -- 8b. Display
 ---------------------------------------------------------------------
 build("Display / Theme", function()
-    local group = tabs.Display:AddLeftGroupbox("Theme & Colors", "palette")
+    local group = tabs.Display:AddLeftGroupbox("Themes", "palette")
 
     themeDropdown = group:Dropdown({
         Name = "UI Theme", Options = themeList, Default = CONFIG.DefaultTheme,
-        SearchAfter = 6, Flag = "NAZK_Theme",
+        SearchAfter = 6, Flag = "Kira_Theme",
         Callback = onChange(applyTheme),
     })
 
     group:Toggle({
-        Name = "Tint logo with accent", Default = true, Flag = "NAZK_TintLogo",
+        Name = "Tint logo with accent", Default = true, Flag = "Kira_TintLogo",
         Callback = onChange(function(value)
             State.tintLogo = value
             tintLogo()
@@ -838,85 +838,6 @@ build("Display / ThemeManager", function()
     tabs.Display:ThemeManager({ Side = "Left" })
 end)
 
-local effectControls = {}
-local effectDropdown
-local function trackEffect(control, default)
-    effectControls[#effectControls + 1] = { control = control, default = default }
-    return control
-end
-
-build("Display / Effects", function()
-    local group = tabs.Display:AddRightGroupbox("Background Effects", "sparkles")
-    fx.color = getAccent()
-
-    effectDropdown = group:Dropdown({
-        Name = "Effect", Options = EFFECT_NAMES, Default = "Off", SearchAfter = 8,
-        Flag = "NAZK_Effect", Callback = onChange(setEffect),
-    })
-
-    trackEffect(group:Slider({
-        Name = "Density", Min = 10, Max = 100, Step = 1, Default = fx.density, Suffix = "%",
-        Flag = "NAZK_FxDensity",
-        Callback = onChange(function(value) fx.density = math.clamp(tonumber(value) or 45, 10, 100) end),
-    }), 45)
-
-    trackEffect(group:Slider({
-        Name = "Speed", Min = 25, Max = 300, Step = 5, Default = fx.speed, Suffix = "%",
-        Flag = "NAZK_FxSpeed",
-        Callback = onChange(function(value) fx.speed = math.clamp(tonumber(value) or 100, 25, 300) end),
-    }), 100)
-
-    trackEffect(group:Slider({
-        Name = "Size", Min = 45, Max = 220, Step = 5, Default = fx.size, Suffix = "%",
-        Flag = "NAZK_FxSize",
-        Callback = onChange(function(value) fx.size = math.clamp(tonumber(value) or 100, 45, 220) end),
-    }), 100)
-
-    trackEffect(group:Slider({
-        Name = "Transparency", Min = 0, Max = 85, Step = 1, Default = fx.transparency, Suffix = "%",
-        Flag = "NAZK_FxTransparency",
-        Callback = onChange(function(value) fx.transparency = math.clamp(tonumber(value) or 12, 0, 85) end),
-    }), 12)
-
-    trackEffect(group:Slider({
-        Name = "Side Drift", Min = 0, Max = 40, Step = 1, Default = fx.drift, Suffix = "%",
-        Flag = "NAZK_FxDrift",
-        Callback = onChange(function(value) fx.drift = math.clamp(tonumber(value) or 12, 0, 40) end),
-    }), 12)
-
-    trackEffect(group:Toggle({
-        Name = "Only when the menu is hidden", Default = false, Flag = "NAZK_FxHiddenOnly",
-        Callback = onChange(function(value)
-            fx.hiddenOnly = value
-            updateEffectVisibility()
-        end),
-    }), false)
-
-    trackEffect(group:Toggle({
-        Name = "Use custom color", Default = false, Flag = "NAZK_FxCustom",
-        Callback = onChange(function(value)
-            fx.custom = value
-            refreshEffectColors()
-        end),
-    }), false)
-
-    group:ColorPicker({
-        Name = "Custom Color", Default = fx.color, Flag = "NAZK_FxColor",
-        Callback = onChange(function(color)
-            fx.color = color
-            refreshEffectColors()
-        end),
-    })
-
-    group:ButtonRow({
-        { Name = "Clear effect", Callback = function()
-            setEffect("Off")
-            pcall(function() effectDropdown:Set("Off", true) end)
-        end },
-        { Name = "Reset sliders", Callback = function() resetList(effectControls) end },
-    })
-end)
-
 ---------------------------------------------------------------------
 -- 8c. Settings
 ---------------------------------------------------------------------
@@ -925,7 +846,7 @@ build("Settings / Menu", function()
 
     group:Keybind({
         Name = "Menu key", Desc = "Show / hide the window", Default = Enum.KeyCode[CONFIG.MenuKey],
-        Flag = "NAZK_MenuKey",
+        Flag = "Kira_MenuKey",
         OnChanged = onChange(function(key)
             if key then window:SetKeybind(key) end
         end),
@@ -933,12 +854,12 @@ build("Settings / Menu", function()
 
     group:Toggle({
         Name = "Floating button", Desc = "Draggable open / close button", Default = true,
-        Flag = "NAZK_ToggleButton",
+        Flag = "Kira_ToggleButton",
         Callback = onChange(function(value) window:SetToggleButton(value) end),
     })
 
     group:Toggle({
-        Name = "Show button on PC too", Default = false, Flag = "NAZK_ToggleButtonAll",
+        Name = "Show button on PC too", Default = false, Flag = "Kira_ToggleButtonAll",
         Callback = onChange(function(value)
             window:SetToggleButtonPlatform(value and "Both" or "Mobile")
         end),
@@ -949,7 +870,7 @@ build("Settings / Menu", function()
     local okDrag, currentDrag = pcall(function() return window:GetDragStyle() end)
     group:Dropdown({
         Name = "Drag style", Options = dragStyles, Default = (okDrag and currentDrag) or "Outline",
-        SearchAfter = 8, Flag = "NAZK_DragStyle",
+        SearchAfter = 8, Flag = "Kira_DragStyle",
         Callback = onChange(function(value) window:SetDragStyle(value) end),
     })
 
@@ -958,13 +879,13 @@ build("Settings / Menu", function()
     local okIsland, currentIsland = pcall(function() return window:GetIslandStyle() end)
     group:Dropdown({
         Name = "Minimized bar", Options = islandStyles, Default = (okIsland and currentIsland) or "Show on Hover",
-        SearchAfter = 8, Flag = "NAZK_IslandStyle",
+        SearchAfter = 8, Flag = "Kira_IslandStyle",
         Callback = onChange(function(value) window:SetIslandStyle(value) end),
     })
 
     group:Toggle({
         Name = "Feedback notifications", Desc = "Small toasts when you change a control", Default = true,
-        Flag = "NAZK_Notifications",
+        Flag = "Kira_Notifications",
         Callback = onChange(function(value) State.notifications = value end),
     })
 end)
@@ -974,7 +895,7 @@ build("Settings / Saving", function()
 
     group:Toggle({
         Name = "Auto-save settings", Desc = "Writes to the default config", Default = true,
-        Flag = "NAZK_AutoSave",
+        Flag = "Kira_AutoSave",
         Callback = onChange(function(value) State.autoSave = value end),
     })
 
@@ -984,7 +905,7 @@ build("Settings / Saving", function()
     })
 
     group:ButtonRow({
-        { Name = "Unload NAZK HUB", Style = "Danger", Callback = function()
+        { Name = "Unload Kira HUB", Style = "Danger", Callback = function()
             window:Confirm({
                 Title = "Unload " .. CONFIG.Title,
                 Content = "Close the window and remove all background effects?",
@@ -1008,12 +929,12 @@ build("About", function()
     local about = tabs.About:AddLeftGroupbox("About", "info")
     about:Paragraph({
         Name = CONFIG.Title .. " v" .. CONFIG.Version,
-        Content = "A clean NAZK interface. These are UI controls only: no game logic is attached.",
+        Content = "A clean Kira interface. These are UI controls only: no game logic is attached.",
     })
     about:Button({
         Name = "Test notification", Style = "Primary", Icon = "bell",
         Callback = function()
-            notify(CONFIG.Title, "The NAZK interface is ready.", "Success", 3)
+            notify(CONFIG.Title, "The Kira interface is ready.", "Success", 3)
         end,
     })
 
@@ -1061,4 +982,4 @@ task.delay(4, function() collectLogoImages(); tintLogo() end)
 -- Auto-save stays off until the saved settings have finished applying.
 task.delay(2.5, function() loadingConfig = false end)
 
-notify(CONFIG.Title, restored and "Interface ready. Saved settings restored." or "Interface ready.", "Success", 4)
+notify(CONFIG.Title, restored and "Interface ready. Saved settings restored." or "Interface ready.", "Success", 
