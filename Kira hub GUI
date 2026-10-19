@@ -1,0 +1,1064 @@
+--[[
+    Kira HUB - UI v2.0
+    Interface only: no game logic is attached.
+
+    Edit the CONFIG table below to rename / re-theme the hub.
+    Put your own logic inside the `Features` table (Controls tab).
+]]
+
+---------------------------------------------------------------------
+-- 0. CONFIG
+---------------------------------------------------------------------
+local CONFIG = {
+    Title        = "Kira HUB",
+    Subtitle     = "NAZK Interface",
+    Version      = "2.0.0",
+    Icon         = "rbxassetid://116452751852160",
+    LibraryUrl   = "https://pastefy.app/9vgkDsd2/raw",
+    DefaultTheme = "Crimson",
+    MenuKey      = "RightControl",
+    ConfigFolder = "kira_HUB_UI",
+    ConfigName   = "KiraInterface",
+    LibraryHome  = true, -- keep the library's built-in Home page (profile, stats, server info)
+}
+
+---------------------------------------------------------------------
+-- 1. Services / environment
+---------------------------------------------------------------------
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local TweenService     = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+local CoreGui
+pcall(function() CoreGui = game:GetService("CoreGui") end)
+
+local env = (type(getgenv) == "function" and getgenv()) or _G
+
+-- If the script is executed twice, remove the previous copy first.
+if type(env.NAZK_HUB_UNLOAD) == "function" then
+    pcall(env.Kira_HUB_UNLOAD)
+    env.NAZK_HUB_UNLOAD = nil
+end
+
+---------------------------------------------------------------------
+-- 2. Load the UI library (with retries and a readable error)
+---------------------------------------------------------------------
+local function fetchLibrary()
+    local okGet, source = pcall(function()
+        return game:HttpGet(CONFIG.LibraryUrl)
+    end)
+    if not okGet or type(source) ~= "string" or source == "" then
+        return nil, "could not download the UI library: " .. tostring(source)
+    end
+    local chunk, compileError = loadstring(source)
+    if not chunk then
+        return nil, "could not read the UI library: " .. tostring(compileError)
+    end
+    local okRun, result = pcall(chunk)
+    if not okRun or type(result) ~= "table" then
+        return nil, "the UI library failed to start: " .. tostring(result)
+    end
+    return result
+end
+
+local lib, libError
+for _ = 1, 3 do
+    lib, libError = fetchLibrary()
+    if lib then break end
+    task.wait(1.5)
+end
+if not lib then
+    warn("[Kira HUB] " .. tostring(libError))
+    return
+end
+
+local windowOptions = {
+    Title        = CONFIG.Title,
+    Subtitle     = CONFIG.Subtitle,
+    Icon         = CONFIG.Icon,
+    Keybind      = CONFIG.MenuKey,
+    DefaultTheme = CONFIG.DefaultTheme,
+    ConfigurationSaving = {
+        Enabled    = true,
+        FolderName = CONFIG.ConfigFolder,
+        FileName   = CONFIG.ConfigName,
+    },
+}
+if not CONFIG.LibraryHome then
+    windowOptions.Home = false
+end
+
+local okWindow, window = pcall(function()
+    return lib:CreateWindow(windowOptions)
+end)
+if not okWindow or type(window) ~= "table" then
+    warn("[Kira HUB] could not create the window: " .. tostring(window))
+    return
+end
+
+---------------------------------------------------------------------
+-- 3. State and small helpers
+---------------------------------------------------------------------
+local unloaded = false
+local loadingConfig = true -- blocks auto-save until the saved settings are restored
+local warnedSave = false
+local cleanupFns = {}
+
+local State = {
+    notifications = true,
+    autoSave      = true,
+    tintLogo      = true,
+    featureA      = false,
+    featureB      = false,
+    mode          = "Standard",
+    customText    = "",
+}
+
+local function notify(title, content, kind, duration)
+    if unloaded then return end
+    pcall(function()
+        lib:Notify({
+            Title    = title,
+            Content  = content,
+            Type     = kind,
+            Duration = duration or 3,
+        })
+    end)
+end
+
+-- Small toast used as feedback for control changes (can be switched off in Settings).
+local function feedback(title, content)
+    if State.notifications and not loadingConfig then
+        notify(title, content, nil, 2.5)
+    end
+end
+
+local saveToken = 0
+local function saveNow(silent)
+    local ok, success, err = pcall(function()
+        return window:SaveConfig(CONFIG.ConfigName)
+    end)
+    if ok and success then
+        if not silent then notify("Settings saved", CONFIG.ConfigName, "Success", 2.5) end
+        return true
+    end
+    local reason = ok and tostring(err) or tostring(success)
+    if not silent then
+        notify("Save failed", reason, "Error", 4)
+    elseif not warnedSave then
+        warnedSave = true
+        warn("[NAZK HUB] auto-save failed: " .. reason)
+    end
+    return false
+end
+
+local function scheduleSave()
+    if unloaded or loadingConfig or not State.autoSave then return end
+    saveToken = saveToken + 1
+    local token = saveToken
+    task.delay(1.2, function()
+        if token ~= saveToken or unloaded or loadingConfig then return end
+        -- Never overwrite a named config the user loaded from the Configs box.
+        if window.ConfigName ~= CONFIG.ConfigName then return end
+        saveNow(true)
+    end)
+end
+
+-- Wraps a control callback: runs it safely, then schedules an auto-save.
+local function onChange(fn)
+    return function(...)
+        local ok, err = pcall(fn, ...)
+        if not ok then
+            warn("[NAZK HUB] callback error: " .. tostring(err))
+        end
+        scheduleSave()
+    end
+end
+
+-- Controls registered here are restored by "Reset Controls".
+local tracked = {}
+local function track(control, default)
+    tracked[#tracked + 1] = { control = control, default = default }
+    return control
+end
+
+local function resetList(list)
+    for _, entry in ipairs(list) do
+        pcall(function() entry.control:Set(entry.default) end)
+    end
+end
+
+-- Builds one section of the UI; a failure in one section does not stop the rest.
+local function build(name, fn)
+    local ok, err = pcall(fn)
+    if not ok then
+        warn("[NAZK HUB] could not build '" .. name .. "': " .. tostring(err))
+    end
+end
+
+---------------------------------------------------------------------
+-- 4. Theme accent + logo tint
+---------------------------------------------------------------------
+local function getAccent()
+    local ok, theme = pcall(function() return lib:GetTheme() end)
+    if ok and type(theme) == "table" and typeof(theme.Accent) == "Color3" then
+        return theme.Accent
+    end
+    return Color3.fromRGB(238, 65, 92)
+end
+
+local logoImages = {}
+local function collectLogoImages()
+    if unloaded or not window.Gui then return end
+    local found = {}
+    local ok = pcall(function()
+        for _, object in ipairs(window.Gui:GetDescendants()) do
+            if (object:IsA("ImageLabel") or object:IsA("ImageButton")) and object.Image == CONFIG.Icon then
+                found[#found + 1] = object
+            end
+        end
+    end)
+    if ok then logoImages = found end
+end
+
+local function tintLogo()
+    local color = State.tintLogo and getAccent() or Color3.new(1, 1, 1)
+    for _, image in ipairs(logoImages) do
+        if image.Parent then
+            image.ImageColor3 = color
+        end
+    end
+end
+
+---------------------------------------------------------------------
+-- 5. Background effects (screen-wide particles)
+---------------------------------------------------------------------
+local IS_TOUCH = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+local MAX_EFFECTS = IS_TOUCH and 22 or 36
+
+local fx = {
+    mode         = "Off",
+    density      = 45,
+    speed        = 100,
+    size         = 100,
+    transparency = 12,
+    drift        = 12,
+    hiddenOnly   = false,
+    custom       = false,
+    color        = Color3.fromRGB(238, 65, 92),
+}
+
+local EFFECT_STYLES = {
+    Rain      = { Color = Color3.fromRGB(130, 190, 255), Shape = "bar",      W = 2,   H = 18, Life = 2.5,  ThemeMix = 0.25, Direction = "down" },
+    Snow      = { Color = Color3.fromRGB(245, 250, 255), Shape = "glyph",    Glyph = "\u{2744}", W = 18, H = 18, Life = 6.5, ThemeMix = 0.24, Direction = "down" },
+    Lightning = { Color = Color3.fromRGB(220, 235, 255), Shape = "glyph",    Glyph = "\u{03DF}", W = 15, H = 24, Life = 1.8, ThemeMix = 0.35, Direction = "down" },
+    Fog       = { Color = Color3.fromRGB(210, 220, 235), Shape = "cloud",    W = 150, H = 48, Life = 13,   ThemeMix = 0.48, Direction = "right" },
+    Smoke     = { Color = Color3.fromRGB(155, 160, 175), Shape = "cloud",    W = 54,  H = 54, Life = 10,   ThemeMix = 0.52, Direction = "up" },
+    Bubbles   = { Color = Color3.fromRGB(150, 220, 255), Shape = "ring",     W = 20,  H = 20, Life = 7,    ThemeMix = 0.42, Direction = "up" },
+    Hearts    = { Color = Color3.fromRGB(255, 90, 145),  Shape = "glyph",    Glyph = "\u{2665}", W = 17, H = 17, Life = 6, ThemeMix = 0.48, Direction = "up" },
+    Ash       = { Color = Color3.fromRGB(175, 175, 185), Shape = "dot",      W = 4,   H = 4,  Life = 5,    ThemeMix = 0.38, Direction = "down" },
+    Embers    = { Color = Color3.fromRGB(255, 110, 35),  Shape = "glow",     W = 8,   H = 8,  Life = 3.8,  ThemeMix = 0.46, Direction = "up" },
+    Confetti  = { Color = Color3.fromRGB(255, 205, 75),  Shape = "confetti", W = 8,   H = 15, Life = 4.3,  ThemeMix = 0.48, Direction = "down" },
+    Sakura    = { Color = Color3.fromRGB(255, 145, 195), Shape = "glyph",    Glyph = "\u{273F}", W = 18, H = 18, Life = 6.2, ThemeMix = 0.52, Direction = "down" },
+    Leaves    = { Color = Color3.fromRGB(255, 175, 80),  Shape = "glyph",    Glyph = "\u{2767}", W = 19, H = 19, Life = 5.5, ThemeMix = 0.46, Direction = "down" },
+    Stars     = { Color = Color3.fromRGB(255, 235, 155), Shape = "glyph",    Glyph = "\u{2726}", W = 15, H = 15, Life = 5.7, ThemeMix = 0.42, Direction = "down" },
+    Meteors   = { Color = Color3.fromRGB(255, 185, 105), Shape = "meteor",   W = 3,   H = 38, Life = 1.8,  ThemeMix = 0.50, Direction = "down" },
+    Orbs      = { Color = Color3.fromRGB(165, 125, 255), Shape = "orb",      W = 27,  H = 27, Life = 8,    ThemeMix = 0.62, Direction = "up" },
+    Neon      = { Color = Color3.fromRGB(255, 55, 215),  Shape = "bar",      W = 4,   H = 27, Life = 2.8,  ThemeMix = 0.68, Direction = "down" },
+    Glitch    = { Color = Color3.fromRGB(80, 255, 210),  Shape = "glitch",   W = 24,  H = 5,  Life = 1.7,  ThemeMix = 0.72, Direction = "down" },
+    Galaxy    = { Color = Color3.fromRGB(185, 125, 255), Shape = "glyph",    Glyph = "\u{2727}", W = 17, H = 17, Life = 7.5, ThemeMix = 0.60, Direction = "down" },
+    Aurora    = { Color = Color3.fromRGB(90, 255, 190),  Shape = "cloud",    W = 190, H = 42, Life = 12,   ThemeMix = 0.62, Direction = "right" },
+    Matrix    = { Color = Color3.fromRGB(80, 255, 110),  Shape = "glyph",    Glyph = "01", W = 15, H = 20, Life = 3, ThemeMix = 0.62, Direction = "down" },
+    Coins     = { Color = Color3.fromRGB(255, 210, 65),  Shape = "coin",     W = 19,  H = 19, Life = 5.5,  ThemeMix = 0.55, Direction = "down" },
+}
+
+local EFFECT_NAMES = {
+    "Off", "Rain", "Snow", "Lightning", "Fog", "Smoke", "Bubbles", "Hearts", "Ash", "Embers",
+    "Confetti", "Sakura", "Leaves", "Stars", "Meteors", "Orbs", "Neon", "Glitch", "Galaxy",
+    "Aurora", "Matrix", "Coins",
+}
+
+local effectItems = {}
+local effectGui, effectLayer, visibilityConnection
+local effectGeneration = 0
+
+local function effectColorFor(style)
+    if fx.custom then return fx.color end
+    return style.Color:Lerp(getAccent(), style.ThemeMix or 0.58)
+end
+
+local function refreshEffectColors()
+    for _, item in ipairs(effectItems) do
+        local visual = item.Visual
+        if visual and visual.Parent then
+            local color = effectColorFor(item.Style)
+            visual[item.ColorProperty] = color
+            if item.Stroke and item.Stroke.Parent then
+                item.Stroke.Color = color
+            end
+        end
+    end
+end
+
+local function menuIsVisible()
+    return not window._destroyed and window.Open ~= false and window.Minimized ~= true
+end
+
+local function updateEffectVisibility()
+    if effectLayer and effectLayer.Parent then
+        local visible = (not fx.hiddenOnly) or (not menuIsVisible())
+        if effectLayer.Visible ~= visible then
+            effectLayer.Visible = visible
+        end
+    end
+end
+
+local function clearEffects()
+    effectGeneration = effectGeneration + 1
+    local list = effectItems
+    effectItems = {}
+    for _, item in ipairs(list) do
+        item.dead = true
+        if item.Tween then pcall(function() item.Tween:Cancel() end) end
+        if item.Frame then pcall(function() item.Frame:Destroy() end) end
+    end
+end
+
+local function destroyEffectLayer()
+    clearEffects()
+    if visibilityConnection then
+        visibilityConnection:Disconnect()
+        visibilityConnection = nil
+    end
+    if effectGui then
+        pcall(function() effectGui:Destroy() end)
+    end
+    effectGui, effectLayer = nil, nil
+end
+
+local function getGuiParent()
+    if type(gethui) == "function" then
+        local ok, result = pcall(gethui)
+        if ok and typeof(result) == "Instance" then return result end
+    end
+    if CoreGui then return CoreGui end
+    local player = Players.LocalPlayer
+    return player and player:FindFirstChildOfClass("PlayerGui")
+end
+
+local function createEffectLayer()
+    if effectGui and effectGui.Parent and effectLayer and effectLayer.Parent then
+        return true
+    end
+    destroyEffectLayer()
+
+    local parent = getGuiParent()
+    if not parent then return false end
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "NAZK_BackgroundEffects"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 0
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    local okParent = pcall(function() gui.Parent = parent end)
+    if not okParent then
+        pcall(function() gui:Destroy() end)
+        return false
+    end
+
+    local layer = Instance.new("Frame")
+    layer.Name = "Particles"
+    layer.Size = UDim2.fromScale(1, 1)
+    layer.BackgroundTransparency = 1
+    layer.BorderSizePixel = 0
+    layer.ClipsDescendants = true
+    layer.Active = false
+    layer.ZIndex = 1
+    layer.Parent = gui
+
+    effectGui, effectLayer = gui, layer
+    visibilityConnection = RunService.Heartbeat:Connect(updateEffectVisibility)
+    return true
+end
+
+local function finishParticle(item)
+    if item.dead then return end
+    item.dead = true
+    local index = table.find(effectItems, item)
+    if index then table.remove(effectItems, index) end
+    if item.Frame then pcall(function() item.Frame:Destroy() end) end
+end
+
+local function addCorner(parent, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = radius
+    corner.Parent = parent
+    return corner
+end
+
+-- Creates the visible part of one particle. Returns visual, colorProperty, stroke.
+local function buildVisual(style, color)
+    local shape = style.Shape
+    local transparency = fx.transparency / 100
+
+    if shape == "glyph" then
+        local label = Instance.new("TextLabel")
+        label.Name = "Glyph"
+        label.BackgroundTransparency = 1
+        label.BorderSizePixel = 0
+        label.Size = UDim2.fromScale(1, 1)
+        label.Font = Enum.Font.GothamBold
+        label.Text = style.Glyph
+        label.TextScaled = true
+        label.TextWrapped = false
+        label.TextColor3 = color
+        label.TextTransparency = math.clamp(transparency, 0.02, 0.85)
+        label.TextStrokeColor3 = color
+        label.TextStrokeTransparency = 0.72
+        label.Rotation = math.random(-25, 25)
+        return label, "TextColor3", nil
+    end
+
+    local visual = Instance.new("Frame")
+    visual.Name = "Shape"
+    visual.Size = UDim2.fromScale(1, 1)
+    visual.BorderSizePixel = 0
+    visual.BackgroundColor3 = color
+    visual.BackgroundTransparency = math.clamp(transparency + 0.12, 0.08, 0.92)
+    local stroke
+
+    if shape == "ring" or shape == "orb" or shape == "glow" or shape == "dot" or shape == "coin" then
+        addCorner(visual, UDim.new(1, 0))
+    elseif shape == "cloud" then
+        addCorner(visual, UDim.new(1, 0))
+        local gradient = Instance.new("UIGradient")
+        gradient.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.92),
+            NumberSequenceKeypoint.new(0.5, 0.42),
+            NumberSequenceKeypoint.new(1, 0.92),
+        })
+        gradient.Parent = visual
+    elseif shape == "confetti" or shape == "glitch" then
+        addCorner(visual, UDim.new(0, 2))
+    elseif shape == "meteor" then
+        local gradient = Instance.new("UIGradient")
+        gradient.Rotation = 90
+        gradient.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.12),
+            NumberSequenceKeypoint.new(1, 0.94),
+        })
+        gradient.Parent = visual
+    end
+
+    if shape == "ring" or shape == "orb" then
+        visual.BackgroundTransparency = 1
+        stroke = Instance.new("UIStroke")
+        stroke.Color = color
+        stroke.Thickness = (shape == "orb") and 2 or 1
+        stroke.Transparency = 0.18
+        stroke.Parent = visual
+    elseif shape == "glow" then
+        stroke = Instance.new("UIStroke")
+        stroke.Color = color
+        stroke.Thickness = 2
+        stroke.Transparency = 0.55
+        stroke.Parent = visual
+    elseif shape == "coin" then
+        local mark = Instance.new("TextLabel")
+        mark.Name = "CoinMark"
+        mark.BackgroundTransparency = 1
+        mark.Size = UDim2.fromScale(1, 1)
+        mark.Font = Enum.Font.GothamBold
+        mark.Text = "\u{2022}"
+        mark.TextScaled = true
+        mark.TextColor3 = Color3.fromRGB(120, 75, 12)
+        mark.Parent = visual
+    end
+
+    return visual, "BackgroundColor3", stroke
+end
+
+-- `progress` (0..1) lets the first particles start part-way along their path.
+local function spawnEffect(mode, generation, progress)
+    if unloaded or generation ~= effectGeneration or mode ~= fx.mode then return end
+    if not effectLayer or not effectLayer.Parent then return end
+    local style = EFFECT_STYLES[mode]
+    if not style then return end
+    progress = progress or 0
+
+    local scale = math.clamp(fx.size / 100, 0.45, 2.2)
+    local color = effectColorFor(style)
+    local visual, colorProperty, stroke = buildVisual(style, color)
+
+    local frame = Instance.new("Frame")
+    frame.Name = mode .. "Particle"
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.BackgroundTransparency = 1
+    frame.BorderSizePixel = 0
+    frame.Active = false
+    frame.ZIndex = 1
+    frame.Size = UDim2.fromOffset(math.max(2, math.floor(style.W * scale)), math.max(2, math.floor(style.H * scale)))
+    visual.Parent = frame
+    frame.Parent = effectLayer
+
+    local drift = math.floor(fx.drift)
+    local x, y, targetX, targetY
+    if style.Direction == "up" then
+        x, y = math.random(), 1.08
+        targetX = math.clamp(x + math.random(-drift, drift) / 100, 0.02, 0.98)
+        targetY = -0.08
+    elseif style.Direction == "right" then
+        x = -0.15
+        y = 0.08 + math.random() * 0.84
+        targetX = 1.15
+        targetY = math.clamp(y + math.random(-12, 12) / 100, 0.04, 0.96)
+    else
+        x, y = math.random(), -0.08
+        targetX = math.clamp(x + math.random(-drift, drift) / 100, 0.02, 0.98)
+        targetY = 1.08
+    end
+
+    local startX = x + (targetX - x) * progress
+    local startY = y + (targetY - y) * progress
+    frame.Position = UDim2.new(startX, 0, startY, 0)
+    if style.Shape == "confetti" or style.Shape == "meteor" or style.Shape == "glitch" then
+        frame.Rotation = math.random(-55, 55)
+    end
+
+    local duration = style.Life / math.clamp(fx.speed / 100, 0.25, 3) * (1 - progress)
+    duration = math.max(duration, 0.2)
+
+    local tween = TweenService:Create(frame, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
+        Position = UDim2.new(targetX, 0, targetY, 0),
+        Rotation = frame.Rotation + math.random(-220, 220),
+    })
+    local item = {
+        Frame = frame, Visual = visual, Tween = tween, Style = style,
+        ColorProperty = colorProperty, Stroke = stroke,
+    }
+    effectItems[#effectItems + 1] = item
+    tween.Completed:Connect(function() finishParticle(item) end)
+    tween:Play()
+end
+
+local function effectCap()
+    return math.clamp(math.floor(fx.density * 0.36), 6, MAX_EFFECTS)
+end
+
+local function setEffect(mode)
+    if mode ~= "Off" and not EFFECT_STYLES[mode] then mode = "Off" end
+    fx.mode = mode
+    clearEffects()
+    if mode == "Off" then
+        destroyEffectLayer()
+        return
+    end
+    if not createEffectLayer() then
+        fx.mode = "Off"
+        warn("[NAZK HUB] could not create the effects layer")
+        return
+    end
+
+    local generation = effectGeneration
+    updateEffectVisibility()
+
+    local burst = math.min(math.floor(effectCap() * 0.6), 18)
+    for i = 1, burst do
+        spawnEffect(mode, generation, (i - 1) / burst)
+    end
+
+    task.spawn(function()
+        while not unloaded and fx.mode == mode and generation == effectGeneration do
+            if #effectItems < effectCap() then
+                spawnEffect(mode, generation, 0)
+            end
+            task.wait(math.clamp(0.42 - fx.density * 0.0032, 0.08, 0.4))
+        end
+    end)
+end
+
+---------------------------------------------------------------------
+-- 6. Themes
+---------------------------------------------------------------------
+local THEME_ORDER = {
+    "Midnight", "Ocean", "Rose", "Emerald", "Amber", "Mono", "Nebula", "Synthwave",
+    "Sakura", "Velvet", "Crimson", "Sunset", "Gold", "Cyber", "Toxic", "Matcha",
+    "Aurora", "Frost", "Abyss", "Halloween", "Haunted", "Christmas", "Valentine",
+    "Lunar", "Tropical", "Dracula", "Coffee",
+}
+local ALIAS_ORDER = {
+    "Royal Purple", "Black & Red", "Cyberpunk", "Neon", "Ice", "Galaxy", "White Minimal", "Dark Glass",
+}
+local THEME_ALIASES = {
+    ["Royal Purple"] = "Nebula", ["Black & Red"] = "Crimson", ["Cyberpunk"] = "Cyber",
+    ["Neon"] = "Synthwave", ["Ice"] = "Frost", ["Galaxy"] = "Nebula",
+    ["White Minimal"] = "Mono", ["Dark Glass"] = "Midnight",
+}
+
+local themeList, themeListed = {}, {}
+do
+    local presets = type(lib.ThemePresets) == "table" and lib.ThemePresets or nil
+    local function add(name)
+        if not themeListed[name] then
+            themeListed[name] = true
+            themeList[#themeList + 1] = name
+        end
+    end
+    for _, name in ipairs(THEME_ORDER) do
+        if not presets or presets[name] then add(name) end
+    end
+    if presets then -- presets added by newer library versions
+        local extra, known = {}, {}
+        for _, name in ipairs(THEME_ORDER) do known[name] = true end
+        for name in pairs(presets) do
+            if not known[name] then extra[#extra + 1] = name end
+        end
+        table.sort(extra)
+        for _, name in ipairs(extra) do add(name) end
+    end
+    for _, alias in ipairs(ALIAS_ORDER) do
+        if not presets or presets[THEME_ALIASES[alias]] then add(alias) end
+    end
+end
+
+local currentTheme = CONFIG.DefaultTheme
+local themeDropdown
+
+local function resolveTheme(name)
+    return THEME_ALIASES[name] or name
+end
+
+local function refreshAccentDependents()
+    tintLogo()
+    refreshEffectColors()
+end
+
+local function applyTheme(name)
+    if type(name) ~= "string" then return end
+    currentTheme = name
+    pcall(function() lib:SetTheme(resolveTheme(name)) end)
+    refreshAccentDependents()
+end
+
+-- Runs whenever ANY code changes the theme (our dropdown, ThemeManager, config load).
+local function onThemeChanged()
+    pcall(refreshAccentDependents)
+    local name = lib.ThemeName
+    if themeDropdown and type(name) == "string" and themeListed[name]
+        and resolveTheme(currentTheme) ~= name then
+        currentTheme = name
+        pcall(function() themeDropdown:Set(name, true) end)
+    end
+end
+
+if type(lib._themeListeners) == "table" then
+    table.insert(lib._themeListeners, onThemeChanged)
+    cleanupFns[#cleanupFns + 1] = function()
+        local index = table.find(lib._themeListeners, onThemeChanged)
+        if index then table.remove(lib._themeListeners, index) end
+    end
+end
+
+---------------------------------------------------------------------
+-- 7. Cleanup / unload
+---------------------------------------------------------------------
+local unload -- forward declaration
+
+local function cleanup()
+    if unloaded then return end
+    unloaded = true
+    fx.mode = "Off"
+    pcall(destroyEffectLayer)
+    for _, fn in ipairs(cleanupFns) do pcall(fn) end
+    -- only clear the global hook if it still belongs to this copy
+    if env.NAZK_HUB_UNLOAD == unload then
+        env.NAZK_HUB_UNLOAD = nil
+    end
+end
+
+unload = function()
+    cleanup()
+    pcall(function() window:Destroy() end)
+end
+env.NAZK_HUB_UNLOAD = unload
+
+-- Clean up automatically if the window is destroyed from anywhere else.
+if type(window._connections) == "table" then
+    table.insert(window._connections, { Disconnect = cleanup })
+end
+task.spawn(function()
+    while not unloaded do
+        task.wait(1)
+        if window._destroyed then cleanup() end
+    end
+end)
+
+---------------------------------------------------------------------
+-- 8. Tabs
+---------------------------------------------------------------------
+local tabs = {
+    Controls = window:Tab({ Name = "Controls", Icon = "sliders-horizontal", Desc = "Interface options and custom features" }),
+    Display  = window:Tab({ Name = "Display",  Icon = "palette",            Desc = "Themes, colors and background effects" }),
+    Settings = window:Tab({ Name = "Settings", Icon = "settings",           Desc = "Menu, saved configs and unloading" }),
+    About    = window:Tab({ Name = "About",    Icon = "info" }),
+}
+
+---------------------------------------------------------------------
+-- 8a. Controls
+---------------------------------------------------------------------
+-- Put your own logic here. These run when a control changes
+-- (and when a saved config is restored).
+local Features = {}
+function Features.FeatureA(enabled) end
+function Features.FeatureB(enabled) end
+function Features.Mode(mode) end
+
+build("Controls / Interface", function()
+    local group = tabs.Controls:AddLeftGroupbox("Interface", "monitor")
+
+    track(group:Slider({
+        Name = "Interface Scale", Min = 60, Max = 150, Step = 5, Default = 100,
+        Suffix = "%", Flag = "NAZK_UIScale",
+        Callback = onChange(function(value) window:SetUIScale(value / 100) end),
+    }), 100)
+
+    track(group:Dropdown({
+        Name = "Density", Options = { "Compact", "Default", "Comfortable" }, Default = "Default",
+        SearchAfter = 8, Flag = "NAZK_Density",
+        Callback = onChange(function(value) lib:SetDensity(value) end),
+    }), "Default")
+
+    track(group:Slider({
+        Name = "Corner Radius", Min = 0, Max = 20, Step = 1, Default = 10, Flag = "NAZK_Corners",
+        Callback = onChange(function(value) lib:SetCornerRadius(value) end),
+    }), 10)
+
+    track(group:Toggle({
+        Name = "Transparent window", Default = false, Flag = "NAZK_Transparent",
+        Callback = onChange(function(value) window:SetTransparent(value) end),
+    }), false)
+
+    track(group:Toggle({
+        Name = "Hide my name", Desc = "Useful when recording or streaming", Default = false, Flag = "NAZK_HideName",
+        Callback = onChange(function(value) window:SetHideName(value) end),
+    }), false)
+
+    track(group:Toggle({
+        Name = "Hide my avatar", Default = false, Flag = "NAZK_HideAvatar",
+        Callback = onChange(function(value) window:SetHideAvatar(value) end),
+    }), false)
+end)
+
+build("Controls / Custom features", function()
+    local group = tabs.Controls:AddRightGroupbox("Custom Features", "wrench")
+
+    track(group:Toggle({
+        Name = "Enable Feature A", Desc = "Template toggle", Default = false, Flag = "NAZK_FeatureA",
+        Callback = onChange(function(value)
+            State.featureA = value
+            Features.FeatureA(value)
+            feedback("Feature A", value and "Enabled" or "Disabled")
+        end),
+    }), false)
+
+    track(group:Toggle({
+        Name = "Enable Feature B", Desc = "Template toggle", Default = false, Flag = "NAZK_FeatureB",
+        Callback = onChange(function(value)
+            State.featureB = value
+            Features.FeatureB(value)
+            feedback("Feature B", value and "Enabled" or "Disabled")
+        end),
+    }), false)
+
+    track(group:Dropdown({
+        Name = "Select Mode", Options = { "Standard", "Compact", "Advanced" }, Default = "Standard",
+        SearchAfter = 8, Flag = "NAZK_Mode",
+        Callback = onChange(function(value)
+            State.mode = value
+            Features.Mode(value)
+            feedback("Mode", tostring(value))
+        end),
+    }), "Standard")
+
+    group:Input({
+        Name = "Custom Text", Placeholder = "Type something...", Default = "", Flag = "NAZK_CustomText",
+        Callback = onChange(function(text) State.customText = text end),
+    })
+
+    group:Button({
+        Name = "Apply", Style = "Primary", Icon = "check",
+        Callback = function()
+            local text = State.customText
+            notify("Applied", (text ~= "") and text or "Nothing typed yet", "Success", 2.5)
+        end,
+    })
+
+    group:Button({
+        Name = "Reset Controls", Icon = "rotate-ccw",
+        Callback = function()
+            resetList(tracked)
+            notify("Controls reset", "Everything on this tab is back to its default", "Success", 2.5)
+        end,
+    })
+end)
+
+---------------------------------------------------------------------
+-- 8b. Display
+---------------------------------------------------------------------
+build("Display / Theme", function()
+    local group = tabs.Display:AddLeftGroupbox("Theme & Colors", "palette")
+
+    themeDropdown = group:Dropdown({
+        Name = "UI Theme", Options = themeList, Default = CONFIG.DefaultTheme,
+        SearchAfter = 6, Flag = "NAZK_Theme",
+        Callback = onChange(applyTheme),
+    })
+
+    group:Toggle({
+        Name = "Tint logo with accent", Default = true, Flag = "NAZK_TintLogo",
+        Callback = onChange(function(value)
+            State.tintLogo = value
+            tintLogo()
+        end),
+    })
+
+    group:Button({
+        Name = "Reset UI Theme", Icon = "rotate-ccw",
+        Callback = function()
+            applyTheme(CONFIG.DefaultTheme)
+            pcall(function() themeDropdown:Set(CONFIG.DefaultTheme, true) end)
+        end,
+    })
+end)
+
+-- Library theme editor: custom colors, saved themes, weather.
+build("Display / ThemeManager", function()
+    tabs.Display:ThemeManager({ Side = "Left" })
+end)
+
+local effectControls = {}
+local effectDropdown
+local function trackEffect(control, default)
+    effectControls[#effectControls + 1] = { control = control, default = default }
+    return control
+end
+
+build("Display / Effects", function()
+    local group = tabs.Display:AddRightGroupbox("Background Effects", "sparkles")
+    fx.color = getAccent()
+
+    effectDropdown = group:Dropdown({
+        Name = "Effect", Options = EFFECT_NAMES, Default = "Off", SearchAfter = 8,
+        Flag = "NAZK_Effect", Callback = onChange(setEffect),
+    })
+
+    trackEffect(group:Slider({
+        Name = "Density", Min = 10, Max = 100, Step = 1, Default = fx.density, Suffix = "%",
+        Flag = "NAZK_FxDensity",
+        Callback = onChange(function(value) fx.density = math.clamp(tonumber(value) or 45, 10, 100) end),
+    }), 45)
+
+    trackEffect(group:Slider({
+        Name = "Speed", Min = 25, Max = 300, Step = 5, Default = fx.speed, Suffix = "%",
+        Flag = "NAZK_FxSpeed",
+        Callback = onChange(function(value) fx.speed = math.clamp(tonumber(value) or 100, 25, 300) end),
+    }), 100)
+
+    trackEffect(group:Slider({
+        Name = "Size", Min = 45, Max = 220, Step = 5, Default = fx.size, Suffix = "%",
+        Flag = "NAZK_FxSize",
+        Callback = onChange(function(value) fx.size = math.clamp(tonumber(value) or 100, 45, 220) end),
+    }), 100)
+
+    trackEffect(group:Slider({
+        Name = "Transparency", Min = 0, Max = 85, Step = 1, Default = fx.transparency, Suffix = "%",
+        Flag = "NAZK_FxTransparency",
+        Callback = onChange(function(value) fx.transparency = math.clamp(tonumber(value) or 12, 0, 85) end),
+    }), 12)
+
+    trackEffect(group:Slider({
+        Name = "Side Drift", Min = 0, Max = 40, Step = 1, Default = fx.drift, Suffix = "%",
+        Flag = "NAZK_FxDrift",
+        Callback = onChange(function(value) fx.drift = math.clamp(tonumber(value) or 12, 0, 40) end),
+    }), 12)
+
+    trackEffect(group:Toggle({
+        Name = "Only when the menu is hidden", Default = false, Flag = "NAZK_FxHiddenOnly",
+        Callback = onChange(function(value)
+            fx.hiddenOnly = value
+            updateEffectVisibility()
+        end),
+    }), false)
+
+    trackEffect(group:Toggle({
+        Name = "Use custom color", Default = false, Flag = "NAZK_FxCustom",
+        Callback = onChange(function(value)
+            fx.custom = value
+            refreshEffectColors()
+        end),
+    }), false)
+
+    group:ColorPicker({
+        Name = "Custom Color", Default = fx.color, Flag = "NAZK_FxColor",
+        Callback = onChange(function(color)
+            fx.color = color
+            refreshEffectColors()
+        end),
+    })
+
+    group:ButtonRow({
+        { Name = "Clear effect", Callback = function()
+            setEffect("Off")
+            pcall(function() effectDropdown:Set("Off", true) end)
+        end },
+        { Name = "Reset sliders", Callback = function() resetList(effectControls) end },
+    })
+end)
+
+---------------------------------------------------------------------
+-- 8c. Settings
+---------------------------------------------------------------------
+build("Settings / Menu", function()
+    local group = tabs.Settings:AddLeftGroupbox("Menu", "keyboard")
+
+    group:Keybind({
+        Name = "Menu key", Desc = "Show / hide the window", Default = Enum.KeyCode[CONFIG.MenuKey],
+        Flag = "NAZK_MenuKey",
+        OnChanged = onChange(function(key)
+            if key then window:SetKeybind(key) end
+        end),
+    })
+
+    group:Toggle({
+        Name = "Floating button", Desc = "Draggable open / close button", Default = true,
+        Flag = "NAZK_ToggleButton",
+        Callback = onChange(function(value) window:SetToggleButton(value) end),
+    })
+
+    group:Toggle({
+        Name = "Show button on PC too", Default = false, Flag = "NAZK_ToggleButtonAll",
+        Callback = onChange(function(value)
+            window:SetToggleButtonPlatform(value and "Both" or "Mobile")
+        end),
+    })
+
+    local dragStyles = type(lib.DragStyles) == "table" and lib.DragStyles
+        or { "Outline", "Brackets", "Ghost", "Frame", "Off" }
+    local okDrag, currentDrag = pcall(function() return window:GetDragStyle() end)
+    group:Dropdown({
+        Name = "Drag style", Options = dragStyles, Default = (okDrag and currentDrag) or "Outline",
+        SearchAfter = 8, Flag = "NAZK_DragStyle",
+        Callback = onChange(function(value) window:SetDragStyle(value) end),
+    })
+
+    local islandStyles = type(lib.IslandStyles) == "table" and lib.IslandStyles
+        or { "Show on Hover", "Always Show" }
+    local okIsland, currentIsland = pcall(function() return window:GetIslandStyle() end)
+    group:Dropdown({
+        Name = "Minimized bar", Options = islandStyles, Default = (okIsland and currentIsland) or "Show on Hover",
+        SearchAfter = 8, Flag = "NAZK_IslandStyle",
+        Callback = onChange(function(value) window:SetIslandStyle(value) end),
+    })
+
+    group:Toggle({
+        Name = "Feedback notifications", Desc = "Small toasts when you change a control", Default = true,
+        Flag = "NAZK_Notifications",
+        Callback = onChange(function(value) State.notifications = value end),
+    })
+end)
+
+build("Settings / Saving", function()
+    local group = tabs.Settings:AddLeftGroupbox("Saving", "save")
+
+    group:Toggle({
+        Name = "Auto-save settings", Desc = "Writes to the default config", Default = true,
+        Flag = "NAZK_AutoSave",
+        Callback = onChange(function(value) State.autoSave = value end),
+    })
+
+    group:Button({
+        Name = "Save settings now", Style = "Primary", Icon = "save",
+        Callback = function() saveNow(false) end,
+    })
+
+    group:ButtonRow({
+        { Name = "Unload NAZK HUB", Style = "Danger", Callback = function()
+            window:Confirm({
+                Title = "Unload " .. CONFIG.Title,
+                Content = "Close the window and remove all background effects?",
+                Icon = "power",
+                ConfirmText = "Unload",
+                Callback = unload,
+            })
+        end },
+    })
+end)
+
+-- Library config box: create / save / load / delete configs, autoload, share codes.
+build("Settings / ConfigManager", function()
+    tabs.Settings:ConfigManager({ Side = "Right" })
+end)
+
+---------------------------------------------------------------------
+-- 8d. About
+---------------------------------------------------------------------
+build("About", function()
+    local about = tabs.About:AddLeftGroupbox("About", "info")
+    about:Paragraph({
+        Name = CONFIG.Title .. " v" .. CONFIG.Version,
+        Content = "A clean NAZK interface. These are UI controls only: no game logic is attached.",
+    })
+    about:Button({
+        Name = "Test notification", Style = "Primary", Icon = "bell",
+        Callback = function()
+            notify(CONFIG.Title, "The NAZK interface is ready.", "Success", 3)
+        end,
+    })
+
+    local tips = tabs.About:AddRightGroupbox("Tips", "lightbulb")
+    tips:Paragraph({
+        Name = "On mobile",
+        Content = "Use the floating button to open or close the menu. Drag it to move it.",
+    })
+    tips:Paragraph({
+        Name = "Saving",
+        Content = "Settings auto-save to the default config. Use the Configs box in Settings to keep several setups and pick an autoload.",
+    })
+end)
+
+---------------------------------------------------------------------
+-- 9. Start-up
+---------------------------------------------------------------------
+local function loadSavedSettings()
+    local loaded = false
+
+    local okAuto, autoload = pcall(function() return window:GetAutoload() end)
+    if okAuto and autoload then
+        local ok, result = pcall(function() return window:LoadAutoload() end)
+        loaded = ok and result == true
+    end
+
+    if not loaded then
+        local okExists, exists = pcall(function() return window:ConfigExists(CONFIG.ConfigName) end)
+        if okExists and exists then
+            local ok, result = pcall(function() return window:LoadConfig(CONFIG.ConfigName) end)
+            loaded = ok and result == true
+        end
+    end
+    return loaded
+end
+
+local restored = loadSavedSettings()
+
+-- The logo is created by the library during its intro, so look for it a few times.
+collectLogoImages()
+tintLogo()
+task.delay(1.5, function() collectLogoImages(); tintLogo() end)
+task.delay(4, function() collectLogoImages(); tintLogo() end)
+
+-- Auto-save stays off until the saved settings have finished applying.
+task.delay(2.5, function() loadingConfig = false end)
+
+notify(CONFIG.Title, restored and "Interface ready. Saved settings restored." or "Interface ready.", "Success", 4)
