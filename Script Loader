@@ -1,3 +1,4 @@
+
 --// NAZK HUB - Delta Loader
 
 local placeId = tostring(game.PlaceId)
@@ -5,13 +6,19 @@ local placeId = tostring(game.PlaceId)
 local scripts = {
     ["142823291"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Mm2",
     ["286090429"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/NAZK%20hub%20arsenal",
+
+    --// Haze Seas
     ["99664616626491"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween",
     ["14979402479"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween",
     ["6918802270"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween",
+
+    --// Aura
     ["109509029034984"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/+1%20Aura%20per%20click",
+
+    --// Arabian Keyboard
     ["89625393697373"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Arabian%20keyboard",
 
-    --// Blox Fruits (All Seas)
+    --// Blox Fruits
     ["100117331123089"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blox%20fruit",
     ["79091703265657"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blox%20fruit",
     ["85211729168715"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blox%20fruit",
@@ -41,15 +48,19 @@ local scripts = {
     --// Blade Ball
     ["13772394625"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blade%20ball",
     ["15144787112"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blade%20ball",
-    ["15264892126"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blade%20ball", -- PlaceId الجديد (Item Duels)
+    ["15264892126"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blade%20ball",
 
     --// Jump for Animals
     ["126870639873289"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Jump%20for%20animals",
 
-    --// FTAP (Fling Things and People)
-    ["6961824067"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/FTAP"
+    --// FTAP
+    ["6961824067"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/FTAP",
+
+    --// Violence District
+    ["93978595733734"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Violence%20district"
 }
 
+--// Find Script
 local url = scripts[placeId]
 
 if not url then
@@ -57,6 +68,7 @@ if not url then
     return
 end
 
+--// Download Script
 local ok, response = pcall(function()
     return game:HttpGet(url)
 end)
@@ -71,6 +83,7 @@ if not response or response == "" then
     return
 end
 
+--// Load Script
 local execute, err = loadstring(response)
 
 if not execute then
@@ -78,6 +91,7 @@ if not execute then
     return
 end
 
+--// Execute Script
 local run, result = pcall(execute)
 
 if not run then
