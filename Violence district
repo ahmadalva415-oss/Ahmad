@@ -2,8 +2,10 @@
 do
 	local TweenService = game:GetService("TweenService")
 	local Players = game:GetService("Players")
+	local ContentProvider = game:GetService("ContentProvider")
 
 	local TITLE = "ASH3"
+	local LOGO_ID = "125282844393157" -- Roblox image ID of the logo ("" = use the drawn logo)
 	local LOAD_TIME = 3.5
 	local WHITE = Color3.new(1, 1, 1)
 	local NEON = Color3.fromRGB(255, 255, 255)
@@ -93,6 +95,7 @@ do
 	}, root)
 	new("UIScale", { Scale = uiScale }, content)
 
+	-- logo space: the logo sits at x 240..1013, y 222..858 inside the 1254x1254 image
 	local LW, LH = 773, 636
 	local LOGO_W = 210
 	local K = LOGO_W / LW
@@ -112,6 +115,7 @@ do
 	}, content)
 	local logoScale = new("UIScale", { Scale = 0.6 }, logo)
 
+	-- soft neon halo (sits in front of the logo as a faint glow)
 	local HALO = 460
 	local glow = new("CanvasGroup", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -119,7 +123,7 @@ do
 		Size = UDim2.fromOffset(HALO, HALO),
 		BackgroundTransparency = 1,
 		GroupTransparency = 1,
-		ZIndex = 1,
+		ZIndex = 3,
 	}, logo)
 	for i = 1, 22 do
 		local f = i / 22
@@ -133,6 +137,22 @@ do
 		}, glow)
 		new("UICorner", { CornerRadius = UDim.new(0.5, 0) }, c)
 	end
+
+	-- top-to-bottom reveal container
+	local reveal = new("Frame", {
+		Position = UDim2.fromOffset(-PAD, -PAD),
+		Size = UDim2.fromOffset(WP, 0),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+		ZIndex = 2,
+	}, logo)
+	local stage = new("Frame", {
+		Size = UDim2.fromOffset(WP, HP),
+		BackgroundTransparency = 1,
+	}, reveal)
+
+	-- fallback: the logo drawn from neon rectangles (only used if the image fails to load)
+	local prompt, cursorHolder
 
 	local function neonRect(parentFrame, cx, cy, w, h, rot)
 		local function mk(z, fillOn, thick, tr, col)
@@ -158,73 +178,95 @@ do
 		mk(3, true, 1.5, 0, WHITE)
 	end
 
-	local reveal = new("Frame", {
-		Position = UDim2.fromOffset(-PAD, -PAD),
-		Size = UDim2.fromOffset(WP, 0),
-		BackgroundTransparency = 1,
-		ClipsDescendants = true,
-		ZIndex = 2,
-	}, logo)
-	local stage = new("Frame", {
-		Size = UDim2.fromOffset(WP, HP),
-		BackgroundTransparency = 1,
-	}, reveal)
+	local function drawLogo()
+		local midX = PAD + 388 * K
+		local clipH = PAD + H
+		local leftClip = new("Frame", {
+			Size = UDim2.fromOffset(midX, clipH),
+			BackgroundTransparency = 1,
+			ClipsDescendants = true,
+			ZIndex = 1,
+		}, stage)
+		local rightClip = new("Frame", {
+			Position = UDim2.fromOffset(midX, 0),
+			Size = UDim2.fromOffset(WP - midX, clipH),
+			BackgroundTransparency = 1,
+			ClipsDescendants = true,
+			ZIndex = 1,
+		}, stage)
 
-	local midX = PAD + 388 * K
-	local clipH = PAD + H
-	local leftClip = new("Frame", {
-		Size = UDim2.fromOffset(midX, clipH),
-		BackgroundTransparency = 1,
-		ClipsDescendants = true,
-		ZIndex = 1,
-	}, stage)
-	local rightClip = new("Frame", {
-		Position = UDim2.fromOffset(midX, 0),
-		Size = UDim2.fromOffset(WP - midX, clipH),
-		BackgroundTransparency = 1,
-		ClipsDescendants = true,
-		ZIndex = 1,
-	}, stage)
+		local legL, legW = 820 * K, 132.3 * K
+		local lx, ly = px(481.3, 589.4)
+		local rx, ry = px(774.7, 589.4)
+		neonRect(leftClip, lx, ly, legL, legW, -58.6)
+		neonRect(rightClip, rx - midX, ry, legL, legW, 58.6)
 
-	local legL, legW = 820 * K, 132.3 * K
-	local lx, ly = px(481.3, 589.4)
-	local rx, ry = px(774.7, 589.4)
-	neonRect(leftClip, lx, ly, legL, legW, -58.6)
-	neonRect(rightClip, rx - midX, ry, legL, legW, 58.6)
+		prompt = new("CanvasGroup", {
+			Size = UDim2.fromOffset(WP, HP),
+			BackgroundTransparency = 1,
+			GroupTransparency = 1,
+			ZIndex = 2,
+		}, stage)
 
-	local prompt = new("CanvasGroup", {
-		Size = UDim2.fromOffset(WP, HP),
-		BackgroundTransparency = 1,
-		GroupTransparency = 1,
-		ZIndex = 2,
-	}, stage)
+		local _, midY = px(0, 691)
+		local upClip = new("Frame", {
+			Size = UDim2.fromOffset(WP, midY),
+			BackgroundTransparency = 1,
+			ClipsDescendants = true,
+		}, prompt)
+		local downClip = new("Frame", {
+			Position = UDim2.fromOffset(0, midY),
+			Size = UDim2.fromOffset(WP, HP - midY),
+			BackgroundTransparency = 1,
+			ClipsDescendants = true,
+		}, prompt)
 
-	local _, midY = px(0, 691)
-	local upClip = new("Frame", {
-		Size = UDim2.fromOffset(WP, midY),
-		BackgroundTransparency = 1,
-		ClipsDescendants = true,
-	}, prompt)
-	local downClip = new("Frame", {
-		Position = UDim2.fromOffset(0, midY),
-		Size = UDim2.fromOffset(WP, HP - midY),
-		BackgroundTransparency = 1,
-		ClipsDescendants = true,
-	}, prompt)
+		local armL, armT = 126.5 * K, 38 * K
+		local ax, ay = px(600.4, 667.4)
+		local bx, by = px(600.4, 714.6)
+		neonRect(upClip, ax, ay, armL, armT, 42)
+		neonRect(downClip, bx, by - midY, armL, armT, -42)
 
-	local armL, armT = 126.5 * K, 38 * K
-	local ax, ay = px(600.4, 667.4)
-	local bx, by = px(600.4, 714.6)
-	neonRect(upClip, ax, ay, armL, armT, 42)
-	neonRect(downClip, bx, by - midY, armL, armT, -42)
+		cursorHolder = new("Frame", {
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+		}, prompt)
+		local cx, cy = px(700.5, 753.5)
+		neonRect(cursorHolder, cx, cy, 119 * K, 37 * K, 0)
+	end
 
-	local cursorHolder = new("Frame", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-	}, prompt)
-	local cx, cy = px(700.5, 753.5)
-	neonRect(cursorHolder, cx, cy, 119 * K, 37 * K, 0)
+	-- try the real logo image first
+	local imageOk = false
+	if LOGO_ID ~= "" then
+		local img = new("ImageLabel", {
+			Position = UDim2.fromOffset(PAD - 240 * K, PAD - 222 * K),
+			Size = UDim2.fromOffset(1254 * K, 1254 * K),
+			BackgroundTransparency = 1,
+			Image = "rbxassetid://" .. LOGO_ID,
+			ScaleType = Enum.ScaleType.Stretch,
+			ZIndex = 1,
+		}, stage)
+		local done = false
+		task.spawn(function()
+			pcall(function()
+				ContentProvider:PreloadAsync({ img })
+			end)
+			done = true
+		end)
+		local t0 = os.clock()
+		while not done and os.clock() - t0 < 4 do
+			task.wait()
+		end
+		imageOk = img.IsLoaded
+		if not imageOk then
+			img:Destroy()
+		end
+	end
+	if not imageOk then
+		drawLogo()
+	end
 
+	-- scan line
 	local scan = new("Frame", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromOffset(W / 2, -PAD),
@@ -343,7 +385,9 @@ do
 	scan.Visible = false
 
 	tween(glow, 0.6, { GroupTransparency = 0.45 })
-	tween(prompt, 0.3, { GroupTransparency = 0 })
+	if prompt then
+		tween(prompt, 0.3, { GroupTransparency = 0 })
+	end
 	local pulse = TweenService:Create(
 		glow,
 		TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
@@ -354,14 +398,16 @@ do
 	end)
 	task.wait(0.3)
 
-	task.spawn(function()
-		while alive do
-			cursorHolder.Visible = true
-			task.wait(0.45)
-			cursorHolder.Visible = false
-			task.wait(0.35)
-		end
-	end)
+	if cursorHolder then
+		task.spawn(function()
+			while alive do
+				cursorHolder.Visible = true
+				task.wait(0.45)
+				cursorHolder.Visible = false
+				task.wait(0.35)
+			end
+		end)
+	end
 
 	local breathe = TweenService:Create(
 		logoScale,
@@ -573,30 +619,134 @@ end
 
 local v2 = WindUI:CreateWindow({
 Title = "ASH₃",
-Author = "Violance District",
+Author = "Violence District",
 Folder = "ASH3",
-Icon = "rbxassetid://123099487486899",
+Icon = "rbxassetid://125282844393157",
 Theme = "Dark",
 NewElements = true,
 HideSearchBar = false,
 Size = UDim2.fromOffset(760, 560),
 OpenButton = {
+-- زر عائم على يسار الشاشة: يظهر عند إخفاء القائمة ويعيد فتحها عند الضغط
 Title = "Open ASH₃",
-Icon = "rbxassetid://123099487486899",
+Icon = "rbxassetid://125282844393157",
+Position = UDim2.new(0, 36, 0.5, 0),
+OnlyIcon = true,
 CornerRadius = UDim.new(0, 10),
 StrokeThickness = 2,
-Enabled = true,
+Enabled = false,
 Draggable = true,
 OnlyMobile = false,
 Scale = 1,
 Color = ColorSequence.new(Color3.fromRGB(175, 110, 255), Color3.fromRGB(90, 140, 255))
 },
 Topbar = {
+-- نُبقي الارتفاع الداخلي حتى لا تختل حسابات WindUI، ثم نخفي الشريط بصريًا
 Height = 60,
 ButtonsType = "Mac"
 }
 })
 
+-- زر شعار ثابت على يسار الشاشة لإخفاء القائمة وإظهارها
+local ToggleButtonParent
+if gethui then
+	local ok, h = pcall(gethui)
+	if ok and h then
+		ToggleButtonParent = h
+	end
+end
+if not ToggleButtonParent then
+	local ok, cg = pcall(function()
+		return game:GetService("CoreGui")
+	end)
+	ToggleButtonParent = ok and cg or game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local oldToggleGui = ToggleButtonParent:FindFirstChild("ASH3_ToggleButton")
+if oldToggleGui then
+	oldToggleGui:Destroy()
+end
+
+local toggleGui = Instance.new("ScreenGui")
+toggleGui.Name = "ASH3_ToggleButton"
+toggleGui.IgnoreGuiInset = true
+toggleGui.ResetOnSpawn = false
+toggleGui.DisplayOrder = 10000
+toggleGui.Parent = ToggleButtonParent
+
+local toggleButton = Instance.new("ImageButton")
+toggleButton.Name = "LogoButton"
+toggleButton.AnchorPoint = Vector2.new(0, 0.5)
+toggleButton.Position = UDim2.new(0, 12, 0.5, 0)
+toggleButton.Size = UDim2.fromOffset(48, 48)
+toggleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+toggleButton.BackgroundTransparency = 0.08
+toggleButton.BorderSizePixel = 0
+toggleButton.Image = "rbxassetid://125282844393157"
+toggleButton.ScaleType = Enum.ScaleType.Fit
+toggleButton.AutoButtonColor = true
+toggleButton.ZIndex = 100
+toggleButton.Parent = toggleGui
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 6)
+toggleCorner.Parent = toggleButton
+
+local toggleStroke = Instance.new("UIStroke")
+toggleStroke.Thickness = 2
+toggleStroke.Color = Color3.fromRGB(90, 160, 255)
+toggleStroke.Transparency = 0.1
+toggleStroke.Parent = toggleButton
+
+-- الزر عائم وقابل للسحب بالماوس أو اللمس، والنقرة العادية تبدّل ظهور القائمة
+local ToggleInputService = game:GetService("UserInputService")
+local toggleDragging = false
+local toggleMoved = false
+local toggleDragStart
+local toggleStartPosition
+
+local function moveToggle(input)
+	local delta = input.Position - toggleDragStart
+	toggleButton.Position = UDim2.new(
+		toggleStartPosition.X.Scale,
+		toggleStartPosition.X.Offset + delta.X,
+		toggleStartPosition.Y.Scale,
+		toggleStartPosition.Y.Offset + delta.Y
+	)
+	if delta.Magnitude > 6 then
+		toggleMoved = true
+	end
+end
+
+toggleButton.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
+		toggleDragging = true
+		toggleMoved = false
+		toggleDragStart = input.Position
+		toggleStartPosition = toggleButton.Position
+	end
+end)
+
+ToggleInputService.InputChanged:Connect(function(input)
+	if toggleDragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+		or input.UserInputType == Enum.UserInputType.Touch) then
+		moveToggle(input)
+	end
+end)
+
+ToggleInputService.InputEnded:Connect(function(input)
+	if (input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch) and toggleDragging then
+		toggleDragging = false
+		if not toggleMoved then
+			pcall(function()
+				v2:Toggle()
+			end)
+		end
+	end
+end)
+-- إبقاء شريط WindUI الأصلي لتفادي كسر تخطيط النافذة
 function v2:CreateTab(title)
 return wrapWindTab(self:Tab({
 Title = title,
@@ -12248,6 +12398,21 @@ end)
 SurvivorTab = v2:CreateTab("Survivor", false, false)
 S_Page = SurvivorTab:CreatePage("Survivor")
 GenCard = S_Page:CreateSection("Generator Settings", "plug-zap")
+
+-- Farm tab
+FarmTab = v2:CreateTab("Farm", false, false)
+FarmPage = FarmTab:CreatePage("Farm")
+FarmCard = FarmPage:CreateSection("Halloween Event", "zap")
+
+FarmCard:AddButton("Farm Pumpkin With Survival", function()
+	lib:Notify({
+		Title = "Farm Pumpkin With Survival",
+		Description = "وظيفة Pumpkin Farm غير مضافة لمحرك السكربت الأساسي بعد.",
+		Duration = 4,
+		Icon = "info"
+	})
+end)
+
 SkillCheckToggle = GenCard:AddToggle("Auto Skill Check", false, function(p224)
 	_G.Ox.Auto.SkillCheck = p224
 
