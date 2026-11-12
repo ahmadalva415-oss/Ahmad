@@ -1,76 +1,1220 @@
+--// ASH₃ HUB - Delta Loader
 
---// NAZK HUB - Delta Loader
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local Stats = game:GetService("Stats")
 
+local player = Players.LocalPlayer
 local placeId = tostring(game.PlaceId)
 
-local scripts = {
-    ["142823291"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Mm2",
-    ["286090429"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/NAZK%20hub%20arsenal",
+--// Settings
+local FPS_CAP = 260 -- 0 = unlimited
 
-    --// Haze Seas
-    ["99664616626491"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween",
-    ["14979402479"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween",
-    ["6918802270"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Chest%20tween",
+--// Theme (black & white)
+local BLACK = Color3.fromRGB(8, 8, 8)
+local ROW = Color3.fromRGB(20, 20, 20)
+local HOVER = Color3.fromRGB(45, 45, 45)
+local WHITE = Color3.fromRGB(255, 255, 255)
+local GRAY = Color3.fromRGB(140, 140, 140)
 
-    --// Aura
-    ["109509029034984"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/+1%20Aura%20per%20click",
-
-    --// Arabian Keyboard
-    ["89625393697373"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Arabian%20keyboard",
-
-    --// Blox Fruits
-    ["100117331123089"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blox%20fruit",
-    ["79091703265657"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blox%20fruit",
-    ["85211729168715"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blox%20fruit",
-
-    --// Steal an Egg
-    ["107778070777162"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Steal%20an%20egg",
-
-    --// Grow a Chicken Fighter
-    ["94640181989498"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Grow%20a%20Chicken%20Fighter",
-    ["94939256104840"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Grow%20a%20Chicken%20Fighter",
-
-    --// Speed Monkey Escape
-    ["114697347887839"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Speed%20Monkey%20Escape",
-
-    --// Ride a Pet
-    ["124216119978534"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Ride%20a%20pet",
-
-    --// Project Slayer 2
-    ["136406881576517"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/1%20project%20SLAYER%202",
-
-    --// Anime Dice
-    ["113290951185459"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Anime%20Dice",
-
-    --// Runaways
-    ["118418618261207"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Runaways",
-
-    --// Blade Ball
-    ["13772394625"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blade%20ball",
-    ["15144787112"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blade%20ball",
-    ["15264892126"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Blade%20ball",
-
-    --// Jump for Animals
-    ["126870639873289"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Jump%20for%20animals",
-
-    --// FTAP
-    ["6961824067"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/FTAP",
-
-    --// Violence District
-    ["93978595733734"] = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Violence%20district"
+--// Supported maps (add a new map here and the UI picks it up automatically)
+local maps = {
+    {
+        Name = "Violence District",
+        Image = "rbxassetid://120703206235262",
+        PlaceIds = { "93978595733734" },
+        Url = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Violence%20district",
+    },
 }
 
---// Find Script
-local url = scripts[placeId]
+local function findMap(id)
+    for _, map in ipairs(maps) do
+        for _, pid in ipairs(map.PlaceIds) do
+            if pid == id then
+                return map
+            end
+        end
+    end
+    return nil
+end
 
-if not url then
+--// FPS cap (works only if the executor provides setfpscap)
+local function applyFpsCap(cap)
+    local ok = pcall(function()
+        setfpscap(cap)
+    end)
+    return ok
+end
+
+local capOk = applyFpsCap(FPS_CAP)
+local currentCap = FPS_CAP
+
+local capOptions = {
+    { label = "60", value = 60 },
+    { label = "120", value = 120 },
+    { label = "260", value = 260 },
+    { label = "MAX", value = 0 },
+}
+
+--// Helpers
+local function getGuiParent()
+    local ok, ui = pcall(function()
+        return gethui and gethui()
+    end)
+    if ok and ui then
+        return ui
+    end
+    local okCore = pcall(function()
+        return CoreGui.Name
+    end)
+    if okCore then
+        return CoreGui
+    end
+    return player:WaitForChild("PlayerGui")
+end
+
+local function make(class, props, parent)
+    local obj = Instance.new(class)
+    for k, v in pairs(props) do
+        obj[k] = v
+    end
+    obj.Parent = parent
+    return obj
+end
+
+local function tween(obj, time, props, style, dir)
+    local t = TweenService:Create(
+        obj,
+        TweenInfo.new(time, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out),
+        props
+    )
+    t:Play()
+    return t
+end
+
+local function pulse(obj)
+    TweenService:Create(
+        obj,
+        TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+        { BackgroundTransparency = 0.85 }
+    ):Play()
+end
+
+local function round(x)
+    return math.floor(x + 0.5)
+end
+
+-- "ASH" with a hand-built subscript 3 (no special glyph needed)
+local function makeLogo(parent, bigSize, subSize)
+    local holder = make("Frame", {
+        BackgroundTransparency = 1,
+        AutomaticSize = Enum.AutomaticSize.XY,
+        Size = UDim2.fromOffset(0, 0),
+    }, parent)
+    make("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        VerticalAlignment = Enum.VerticalAlignment.Bottom,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, holder)
+    make("TextLabel", {
+        BackgroundTransparency = 1,
+        AutomaticSize = Enum.AutomaticSize.XY,
+        Size = UDim2.fromOffset(0, 0),
+        Text = "ASH",
+        TextColor3 = WHITE,
+        Font = Enum.Font.GothamBlack,
+        TextSize = bigSize,
+        LayoutOrder = 1,
+    }, holder)
+    make("TextLabel", {
+        BackgroundTransparency = 1,
+        AutomaticSize = Enum.AutomaticSize.XY,
+        Size = UDim2.fromOffset(0, 0),
+        Text = "3",
+        TextColor3 = WHITE,
+        Font = Enum.Font.GothamBlack,
+        TextSize = subSize,
+        LayoutOrder = 2,
+    }, holder)
+    return holder
+end
+
+local function toast(gui, text)
+    local t = make("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0, -50),
+        Size = UDim2.fromOffset(280, 38),
+        BackgroundColor3 = BLACK,
+        BorderSizePixel = 0,
+    }, gui)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, t)
+    make("UIStroke", { Color = WHITE, Transparency = 0.5, Thickness = 1 }, t)
+    make("TextLabel", {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Text = text,
+        TextColor3 = WHITE,
+        Font = Enum.Font.GothamMedium,
+        TextSize = 13,
+    }, t)
+    tween(t, 0.4, { Position = UDim2.new(0.5, 0, 0, 14) }, Enum.EasingStyle.Back)
+    task.delay(2.6, function()
+        if t.Parent then
+            local out = tween(t, 0.3, { Position = UDim2.new(0.5, 0, 0, -50) })
+            out.Completed:Wait()
+            t:Destroy()
+        end
+    end)
+end
+
+-- segmented control with a sliding white indicator
+local function makeSegment(parent, labels, size, position, onChoose)
+    local n = #labels
+    local holder = make("Frame", {
+        Position = position,
+        Size = size,
+        BackgroundColor3 = ROW,
+        BorderSizePixel = 0,
+    }, parent)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, holder)
+    make("UIStroke", { Color = WHITE, Transparency = 0.88, Thickness = 1 }, holder)
+
+    local indicator = make("Frame", {
+        Size = UDim2.new(1 / n, -4, 1, -4),
+        Position = UDim2.new(0, 2, 0, 2),
+        BackgroundColor3 = WHITE,
+        BorderSizePixel = 0,
+    }, holder)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, indicator)
+
+    local buttons = {}
+    local function choose(i, silent)
+        tween(indicator, 0.25, { Position = UDim2.new((i - 1) / n, 2, 0, 2) }, Enum.EasingStyle.Quint)
+        for j, b in ipairs(buttons) do
+            tween(b, 0.2, { TextColor3 = (j == i) and BLACK or GRAY })
+        end
+        if not silent and onChoose then
+            onChoose(i)
+        end
+    end
+
+    for i, text in ipairs(labels) do
+        local b = make("TextButton", {
+            Size = UDim2.new(1 / n, 0, 1, 0),
+            Position = UDim2.new((i - 1) / n, 0, 0, 0),
+            BackgroundTransparency = 1,
+            Text = text,
+            TextColor3 = GRAY,
+            Font = Enum.Font.GothamBold,
+            TextSize = 11,
+            AutoButtonColor = false,
+            ZIndex = 2,
+        }, holder)
+        b.MouseButton1Click:Connect(function()
+            choose(i)
+        end)
+        buttons[i] = b
+    end
+    choose(1, true)
+    return { frame = holder, choose = choose }
+end
+
+local function makeSwitch(parent, position, initial, onChange)
+    local on = initial
+    local track = make("TextButton", {
+        Position = position,
+        Size = UDim2.fromOffset(38, 20),
+        BackgroundColor3 = on and WHITE or ROW,
+        BorderSizePixel = 0,
+        Text = "",
+        AutoButtonColor = false,
+    }, parent)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, track)
+    make("UIStroke", { Color = WHITE, Transparency = 0.6, Thickness = 1 }, track)
+    local knob = make("Frame", {
+        AnchorPoint = Vector2.new(0, 0.5),
+        Position = on and UDim2.new(1, -17, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
+        Size = UDim2.fromOffset(14, 14),
+        BackgroundColor3 = on and BLACK or WHITE,
+        BorderSizePixel = 0,
+    }, track)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, knob)
+    track.MouseButton1Click:Connect(function()
+        on = not on
+        tween(track, 0.2, { BackgroundColor3 = on and WHITE or ROW })
+        tween(knob, 0.2, {
+            Position = on and UDim2.new(1, -17, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
+            BackgroundColor3 = on and BLACK or WHITE,
+        })
+        onChange(on)
+    end)
+    return track
+end
+
+--// Stats helpers
+local HIST = 24
+
+local function push(t, v)
+    t[#t + 1] = v
+    if #t > HIST then
+        table.remove(t, 1)
+    end
+end
+
+local function summarize(t)
+    local sum, lo, hi = 0, math.huge, 0
+    for _, v in ipairs(t) do
+        sum = sum + v
+        if v < lo then
+            lo = v
+        end
+        if v > hi then
+            hi = v
+        end
+    end
+    return sum / #t, lo, hi
+end
+
+local function makeStatCard(parent, position, size, label)
+    local card = make("Frame", {
+        Position = position,
+        Size = size,
+        BackgroundColor3 = ROW,
+        BorderSizePixel = 0,
+    }, parent)
+    make("UICorner", { CornerRadius = UDim.new(0, 10) }, card)
+    make("UIStroke", { Color = WHITE, Transparency = 0.88, Thickness = 1 }, card)
+
+    make("TextLabel", {
+        Position = UDim2.new(0, 10, 0, 8),
+        Size = UDim2.new(0.5, -10, 0, 10),
+        BackgroundTransparency = 1,
+        Text = label,
+        TextColor3 = GRAY,
+        Font = Enum.Font.Code,
+        TextSize = 9,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, card)
+    local tag = make("TextLabel", {
+        Position = UDim2.new(0.5, 0, 0, 8),
+        Size = UDim2.new(0.5, -10, 0, 10),
+        BackgroundTransparency = 1,
+        Text = "",
+        TextColor3 = GRAY,
+        Font = Enum.Font.Code,
+        TextSize = 9,
+        TextXAlignment = Enum.TextXAlignment.Right,
+    }, card)
+    local big = make("TextLabel", {
+        Position = UDim2.new(0, 10, 0, 19),
+        Size = UDim2.new(1, -20, 0, 26),
+        BackgroundTransparency = 1,
+        Text = "--",
+        TextColor3 = WHITE,
+        Font = Enum.Font.Code,
+        TextSize = 24,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, card)
+
+    local track = make("Frame", {
+        Position = UDim2.new(0, 10, 0, 48),
+        Size = UDim2.new(1, -20, 0, 3),
+        BackgroundColor3 = WHITE,
+        BackgroundTransparency = 0.9,
+        BorderSizePixel = 0,
+    }, card)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, track)
+    local fill = make("Frame", {
+        Size = UDim2.fromScale(0, 1),
+        BackgroundColor3 = WHITE,
+        BorderSizePixel = 0,
+    }, track)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, fill)
+
+    local line1 = make("TextLabel", {
+        Position = UDim2.new(0, 10, 0, 57),
+        Size = UDim2.new(1, -20, 0, 11),
+        BackgroundTransparency = 1,
+        Text = "",
+        TextColor3 = GRAY,
+        Font = Enum.Font.Code,
+        TextSize = 9,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, card)
+    local line2 = make("TextLabel", {
+        Position = UDim2.new(0, 10, 0, 69),
+        Size = UDim2.new(1, -20, 0, 11),
+        BackgroundTransparency = 1,
+        Text = "",
+        TextColor3 = GRAY,
+        Font = Enum.Font.Code,
+        TextSize = 9,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, card)
+
+    -- sparkline made of thin bars
+    local spark = make("Frame", {
+        Position = UDim2.new(0, 10, 0, 83),
+        Size = UDim2.new(1, -20, 0, 22),
+        BackgroundTransparency = 1,
+    }, card)
+    local cells = {}
+    for i = 1, HIST do
+        cells[i] = make("Frame", {
+            AnchorPoint = Vector2.new(0, 1),
+            Position = UDim2.new((i - 1) / HIST, 0, 1, 0),
+            Size = UDim2.new(1 / HIST, -1, 0.05, 0),
+            BackgroundColor3 = WHITE,
+            BackgroundTransparency = (i == HIST) and 0 or 0.55,
+            BorderSizePixel = 0,
+        }, spark)
+    end
+
+    return { big = big, tag = tag, fill = fill, line1 = line1, line2 = line2, cells = cells }
+end
+
+local function drawCells(cells, hist, peak)
+    local offset = HIST - #hist
+    for i = 1, HIST do
+        local v = hist[i - offset]
+        local h = 0.05
+        if v then
+            h = math.clamp(v / peak, 0.05, 1)
+        end
+        cells[i].Size = UDim2.new(1 / HIST, -1, h, 0)
+    end
+end
+
+--// Unsupported Game UI
+local function showUnsupportedUI()
+    local old = getGuiParent():FindFirstChild("ASH3HubUnsupported")
+    if old then
+        old:Destroy()
+    end
+
+    local gui = make("ScreenGui", {
+        Name = "ASH3HubUnsupported",
+        ResetOnSpawn = false,
+        IgnoreGuiInset = true,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    }, getGuiParent())
+
+    --// Main window
+    local main = make("Frame", {
+        Name = "Main",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromScale(0.64, 0.82),
+        BackgroundColor3 = BLACK,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+        Active = true,
+        Draggable = true,
+    }, gui)
+    make("UICorner", { CornerRadius = UDim.new(0, 14) }, main)
+    make("UISizeConstraint", {
+        MinSize = Vector2.new(460, 250),
+        MaxSize = Vector2.new(660, 390),
+    }, main)
+    local scale = make("UIScale", { Scale = 0.85 }, main)
+
+    --// Effects (all engine-side tweens, can be switched off from the SYSTEM tab)
+    local stroke = make("UIStroke", { Color = WHITE, Thickness = 1.5, Transparency = 0.2 }, main)
+    local grad = make("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, WHITE),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(35, 35, 35)),
+            ColorSequenceKeypoint.new(1, WHITE),
+        }),
+    }, stroke)
+    local borderTween = TweenService:Create(
+        grad,
+        TweenInfo.new(5, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1),
+        { Rotation = 360 }
+    )
+
+    local fx = make("Frame", {
+        Name = "FX",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+    }, main)
+    local particles = {}
+    for i = 1, 10 do
+        local size = math.random(2, 3)
+        local p = make("Frame", {
+            Size = UDim2.fromOffset(size, size),
+            BackgroundColor3 = WHITE,
+            BackgroundTransparency = math.random(60, 90) / 100,
+            BorderSizePixel = 0,
+            Position = UDim2.fromScale(math.random(), 1.1),
+        }, fx)
+        make("UICorner", { CornerRadius = UDim.new(1, 0) }, p)
+        particles[i] = p
+    end
+
+    local scan = make("Frame", {
+        Size = UDim2.new(1, 0, 0, 2),
+        Position = UDim2.fromScale(0, -0.02),
+        BackgroundColor3 = WHITE,
+        BackgroundTransparency = 0.85,
+        BorderSizePixel = 0,
+    }, main)
+    make("UIGradient", {
+        Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 1),
+            NumberSequenceKeypoint.new(0.5, 0),
+            NumberSequenceKeypoint.new(1, 1),
+        }),
+    }, scan)
+    local scanTween = TweenService:Create(
+        scan,
+        TweenInfo.new(4.5, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1),
+        { Position = UDim2.fromScale(0, 1.02) }
+    )
+
+    local fxGen = 0
+    local pTween = {}
+
+    local function startFX()
+        fxGen = fxGen + 1
+        local gen = fxGen
+        fx.Visible = true
+        scan.Visible = true
+        borderTween:Play()
+        scanTween:Play()
+        for _, p in ipairs(particles) do
+            task.spawn(function()
+                task.wait(math.random() * 4)
+                while gen == fxGen and p.Parent do
+                    local x = math.random()
+                    p.Position = UDim2.fromScale(x, 1.05)
+                    local t = TweenService:Create(
+                        p,
+                        TweenInfo.new(math.random(70, 140) / 10, Enum.EasingStyle.Linear),
+                        { Position = UDim2.fromScale(x + (math.random() - 0.5) * 0.12, -0.05) }
+                    )
+                    pTween[p] = t
+                    t:Play()
+                    t.Completed:Wait()
+                end
+            end)
+        end
+    end
+
+    local function stopFX()
+        fxGen = fxGen + 1
+        fx.Visible = false
+        scan.Visible = false
+        borderTween:Pause()
+        scanTween:Pause()
+        for _, t in pairs(pTween) do
+            t:Cancel()
+        end
+    end
+
+    -- corner brackets
+    local function bracket(ax, ay)
+        local px = (ax == 0) and 8 or -8
+        local py = (ay == 0) and 8 or -8
+        local b = make("Frame", {
+            Size = UDim2.fromOffset(14, 14),
+            AnchorPoint = Vector2.new(ax, ay),
+            Position = UDim2.new(ax, px, ay, py),
+            BackgroundTransparency = 1,
+        }, main)
+        make("Frame", {
+            Size = UDim2.new(1, 0, 0, 1),
+            AnchorPoint = Vector2.new(0, ay),
+            Position = UDim2.fromScale(0, ay),
+            BackgroundColor3 = WHITE,
+            BackgroundTransparency = 0.45,
+            BorderSizePixel = 0,
+        }, b)
+        make("Frame", {
+            Size = UDim2.new(0, 1, 1, 0),
+            AnchorPoint = Vector2.new(ax, 0),
+            Position = UDim2.fromScale(ax, 0),
+            BackgroundColor3 = WHITE,
+            BackgroundTransparency = 0.45,
+            BorderSizePixel = 0,
+        }, b)
+    end
+    bracket(0, 0)
+    bracket(1, 0)
+    bracket(0, 1)
+    bracket(1, 1)
+
+    --// LEFT: title, tabs, pages
+    local left = make("Frame", {
+        Name = "Left",
+        Size = UDim2.fromScale(0.62, 1),
+        BackgroundTransparency = 1,
+    }, main)
+
+    local title = make("TextLabel", {
+        Position = UDim2.new(0, 20, 0, 16),
+        Size = UDim2.new(1, -40, 0, 22),
+        BackgroundTransparency = 1,
+        Text = "",
+        TextColor3 = WHITE,
+        Font = Enum.Font.GothamBold,
+        TextSize = 16,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, left)
+
+    make("TextLabel", {
+        Position = UDim2.new(0, 20, 0, 40),
+        Size = UDim2.new(1, -40, 0, 16),
+        BackgroundTransparency = 1,
+        Text = "We only support these games",
+        TextColor3 = GRAY,
+        Font = Enum.Font.Gotham,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, left)
+
+    task.spawn(function()
+        local full = "We don't support this game"
+        task.wait(0.3)
+        for i = 1, #full do
+            if not title.Parent then
+                return
+            end
+            title.Text = full:sub(1, i)
+            task.wait(0.03)
+        end
+    end)
+
+    local pages = make("Frame", {
+        Name = "Pages",
+        Position = UDim2.new(0, 20, 0, 98),
+        Size = UDim2.new(1, -40, 1, -112),
+        BackgroundTransparency = 1,
+    }, left)
+    local gamesPage = make("Frame", {
+        Name = "Games",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+    }, pages)
+    local systemPage = make("Frame", {
+        Name = "System",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Visible = false,
+    }, pages)
+
+    makeSegment(left, { "GAMES", "SYSTEM" }, UDim2.fromOffset(170, 26), UDim2.new(0, 20, 0, 62), function(i)
+        gamesPage.Visible = (i == 1)
+        systemPage.Visible = (i == 2)
+    end)
+
+    --// GAMES page: search + supported maps
+    local searchHolder = make("Frame", {
+        Size = UDim2.new(1, 0, 0, 28),
+        BackgroundColor3 = ROW,
+        BorderSizePixel = 0,
+    }, gamesPage)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, searchHolder)
+    local searchStroke = make("UIStroke", { Color = WHITE, Transparency = 0.85, Thickness = 1 }, searchHolder)
+
+    -- magnifier icon built from shapes
+    local icon = make("Frame", {
+        Position = UDim2.new(0, 11, 0.5, -7),
+        Size = UDim2.fromOffset(14, 14),
+        BackgroundTransparency = 1,
+    }, searchHolder)
+    local lens = make("Frame", {
+        Size = UDim2.fromOffset(9, 9),
+        BackgroundTransparency = 1,
+    }, icon)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, lens)
+    make("UIStroke", { Color = GRAY, Thickness = 1.5 }, lens)
+    make("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromOffset(11, 11),
+        Size = UDim2.fromOffset(6, 2),
+        Rotation = 45,
+        BackgroundColor3 = GRAY,
+        BorderSizePixel = 0,
+    }, icon)
+
+    local search = make("TextBox", {
+        Position = UDim2.new(0, 32, 0, 0),
+        Size = UDim2.new(1, -42, 1, 0),
+        BackgroundTransparency = 1,
+        Text = "",
+        PlaceholderText = "Search maps...",
+        PlaceholderColor3 = GRAY,
+        TextColor3 = WHITE,
+        Font = Enum.Font.Gotham,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ClearTextOnFocus = false,
+    }, searchHolder)
+    search.Focused:Connect(function()
+        tween(searchStroke, 0.2, { Transparency = 0.3 })
+    end)
+    search.FocusLost:Connect(function()
+        tween(searchStroke, 0.2, { Transparency = 0.85 })
+    end)
+
+    local list = make("ScrollingFrame", {
+        Name = "Maps",
+        Position = UDim2.new(0, 0, 0, 36),
+        Size = UDim2.new(1, 0, 1, -36),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = WHITE,
+        ScrollingDirection = Enum.ScrollingDirection.Y,
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    }, gamesPage)
+    make("UIListLayout", {
+        Padding = UDim.new(0, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, list)
+
+    local empty = make("TextLabel", {
+        Position = UDim2.new(0, 0, 0, 48),
+        Size = UDim2.new(1, 0, 0, 20),
+        BackgroundTransparency = 1,
+        Text = "No maps found",
+        TextColor3 = GRAY,
+        Font = Enum.Font.Gotham,
+        TextSize = 12,
+        Visible = false,
+    }, gamesPage)
+
+    local rows = {}
+
+    for i, map in ipairs(maps) do
+        local row = make("Frame", {
+            Name = map.Name,
+            Size = UDim2.new(1, -6, 0, 62),
+            BackgroundColor3 = ROW,
+            BorderSizePixel = 0,
+            ClipsDescendants = true,
+            LayoutOrder = i,
+        }, list)
+        make("UICorner", { CornerRadius = UDim.new(0, 10) }, row)
+        local rowStroke = make("UIStroke", { Color = WHITE, Transparency = 0.85, Thickness = 1 }, row)
+
+        -- shine that sweeps across on hover
+        local shine = make("Frame", {
+            Size = UDim2.new(0.35, 0, 1, 0),
+            Position = UDim2.fromScale(-0.5, 0),
+            BackgroundColor3 = WHITE,
+            BorderSizePixel = 0,
+            ZIndex = 1,
+        }, row)
+        make("UIGradient", {
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 1),
+                NumberSequenceKeypoint.new(0.5, 0.93),
+                NumberSequenceKeypoint.new(1, 1),
+            }),
+        }, shine)
+
+        -- map image
+        local img = make("ImageLabel", {
+            Size = UDim2.fromOffset(46, 46),
+            AnchorPoint = Vector2.new(0, 0.5),
+            Position = UDim2.new(0, 8, 0.5, 0),
+            BackgroundColor3 = BLACK,
+            BorderSizePixel = 0,
+            Image = map.Image,
+            ScaleType = Enum.ScaleType.Crop,
+            ZIndex = 2,
+        }, row)
+        make("UICorner", { CornerRadius = UDim.new(0, 8) }, img)
+        make("UIStroke", { Color = WHITE, Transparency = 0.7, Thickness = 1 }, img)
+
+        -- map name
+        make("TextLabel", {
+            Position = UDim2.new(0, 64, 0, 13),
+            Size = UDim2.new(1, -134, 0, 18),
+            BackgroundTransparency = 1,
+            Text = map.Name,
+            TextColor3 = WHITE,
+            Font = Enum.Font.GothamBold,
+            TextSize = 13,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 2,
+        }, row)
+
+        -- status badge with pulsing dot
+        local dot = make("Frame", {
+            Position = UDim2.new(0, 65, 0, 38),
+            Size = UDim2.fromOffset(6, 6),
+            BackgroundColor3 = WHITE,
+            BorderSizePixel = 0,
+            ZIndex = 2,
+        }, row)
+        make("UICorner", { CornerRadius = UDim.new(1, 0) }, dot)
+        pulse(dot)
+        make("TextLabel", {
+            Position = UDim2.new(0, 77, 0, 33),
+            Size = UDim2.fromOffset(90, 16),
+            BackgroundTransparency = 1,
+            Text = "SUPPORTED",
+            TextColor3 = GRAY,
+            Font = Enum.Font.GothamMedium,
+            TextSize = 10,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 2,
+        }, row)
+
+        -- JOIN button (teleports to the supported game)
+        local join = make("TextButton", {
+            AnchorPoint = Vector2.new(1, 0.5),
+            Position = UDim2.new(1, -10, 0.5, 0),
+            Size = UDim2.fromOffset(52, 26),
+            BackgroundColor3 = BLACK,
+            BorderSizePixel = 0,
+            Text = "JOIN",
+            TextColor3 = WHITE,
+            Font = Enum.Font.GothamBold,
+            TextSize = 11,
+            AutoButtonColor = false,
+            ZIndex = 2,
+        }, row)
+        make("UICorner", { CornerRadius = UDim.new(1, 0) }, join)
+        make("UIStroke", { Color = WHITE, Transparency = 0.5, Thickness = 1 }, join)
+        join.MouseEnter:Connect(function()
+            tween(join, 0.15, { BackgroundColor3 = WHITE, TextColor3 = BLACK })
+        end)
+        join.MouseLeave:Connect(function()
+            tween(join, 0.15, { BackgroundColor3 = BLACK, TextColor3 = WHITE })
+        end)
+        join.MouseButton1Click:Connect(function()
+            join.Text = "..."
+            toast(gui, "Teleporting to " .. map.Name)
+            local ok, err = pcall(function()
+                TeleportService:Teleport(tonumber(map.PlaceIds[1]), player)
+            end)
+            if not ok then
+                warn("❌ Teleport failed: " .. tostring(err))
+                toast(gui, "Teleport failed, try again")
+            end
+            task.wait(2)
+            join.Text = "JOIN"
+        end)
+
+        row.MouseEnter:Connect(function()
+            tween(rowStroke, 0.2, { Transparency = 0.3 })
+            shine.Position = UDim2.fromScale(-0.5, 0)
+            tween(shine, 0.7, { Position = UDim2.fromScale(1.2, 0) })
+        end)
+        row.MouseLeave:Connect(function()
+            tween(rowStroke, 0.2, { Transparency = 0.85 })
+        end)
+
+        rows[#rows + 1] = { frame = row, name = map.Name }
+    end
+
+    local function applyFilter()
+        local q = string.lower(search.Text)
+        local shown = 0
+        for _, r in ipairs(rows) do
+            local match = (q == "") or (string.find(string.lower(r.name), q, 1, true) ~= nil)
+            r.frame.Visible = match
+            if match then
+                shown = shown + 1
+            end
+        end
+        empty.Visible = (shown == 0)
+    end
+    search:GetPropertyChangedSignal("Text"):Connect(applyFilter)
+
+    --// SYSTEM page: FPS + ping dashboard and controls
+    local fpsCard = makeStatCard(
+        systemPage,
+        UDim2.new(0, 0, 0, 0),
+        UDim2.new(0.5, -4, 0, 112),
+        "FPS"
+    )
+    local pingCard = makeStatCard(
+        systemPage,
+        UDim2.new(0.5, 4, 0, 0),
+        UDim2.new(0.5, -4, 0, 112),
+        "PING"
+    )
+    pingCard.tag.Text = "LATENCY"
+
+    local controls = make("Frame", {
+        Position = UDim2.new(0, 0, 0, 120),
+        Size = UDim2.new(1, 0, 0, 26),
+        BackgroundTransparency = 1,
+    }, systemPage)
+    make("TextLabel", {
+        Size = UDim2.fromOffset(26, 26),
+        BackgroundTransparency = 1,
+        Text = "CAP",
+        TextColor3 = GRAY,
+        Font = Enum.Font.Code,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, controls)
+
+    local capLabels = {}
+    local capIndex = 3
+    for i, c in ipairs(capOptions) do
+        capLabels[i] = c.label
+        if c.value == FPS_CAP then
+            capIndex = i
+        end
+    end
+    local capSeg = makeSegment(controls, capLabels, UDim2.fromOffset(140, 26), UDim2.new(0, 28, 0, 0), function(i)
+        currentCap = capOptions[i].value
+        capOk = applyFpsCap(currentCap)
+        if capOk then
+            toast(gui, "FPS cap set to " .. capOptions[i].label)
+        else
+            toast(gui, "Your executor can't change the FPS cap")
+        end
+    end)
+    capSeg.choose(capIndex, true)
+
+    local fxEnabled = true
+    make("TextLabel", {
+        Position = UDim2.new(1, -72, 0, 0),
+        Size = UDim2.fromOffset(28, 26),
+        BackgroundTransparency = 1,
+        Text = "FX",
+        TextColor3 = GRAY,
+        Font = Enum.Font.Code,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Right,
+    }, controls)
+    makeSwitch(controls, UDim2.new(1, -38, 0.5, -10), true, function(on)
+        fxEnabled = on
+        if on then
+            startFX()
+        else
+            stopFX()
+        end
+    end)
+
+    --// Divider
+    local divider = make("Frame", {
+        Position = UDim2.new(0.62, 0, 0, 16),
+        Size = UDim2.new(0, 1, 1, -32),
+        BackgroundColor3 = WHITE,
+        BorderSizePixel = 0,
+    }, main)
+    make("UIGradient", {
+        Rotation = 90,
+        Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 1),
+            NumberSequenceKeypoint.new(0.5, 0.75),
+            NumberSequenceKeypoint.new(1, 1),
+        }),
+    }, divider)
+
+    --// RIGHT: branding, current game, status
+    local right = make("Frame", {
+        Name = "Right",
+        Position = UDim2.fromScale(0.62, 0),
+        Size = UDim2.fromScale(0.38, 1),
+        BackgroundTransparency = 1,
+    }, main)
+
+    local function bar(parent, w, rot)
+        make("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromOffset(w, 2),
+            Rotation = rot,
+            BackgroundColor3 = WHITE,
+            BorderSizePixel = 0,
+        }, parent)
+    end
+
+    local function circleButton(xOff, builder)
+        local b = make("TextButton", {
+            AnchorPoint = Vector2.new(1, 0),
+            Position = UDim2.new(1, xOff, 0, 16),
+            Size = UDim2.fromOffset(24, 24),
+            BackgroundColor3 = ROW,
+            BorderSizePixel = 0,
+            Text = "",
+            AutoButtonColor = false,
+        }, right)
+        make("UICorner", { CornerRadius = UDim.new(1, 0) }, b)
+        make("UIStroke", { Color = WHITE, Transparency = 0.8, Thickness = 1 }, b)
+        builder(b)
+        b.MouseEnter:Connect(function()
+            tween(b, 0.15, { BackgroundColor3 = HOVER })
+        end)
+        b.MouseLeave:Connect(function()
+            tween(b, 0.15, { BackgroundColor3 = ROW })
+        end)
+        return b
+    end
+
+    local close = circleButton(-16, function(b)
+        bar(b, 11, 45)
+        bar(b, 11, -45)
+    end)
+    local minimize = circleButton(-46, function(b)
+        bar(b, 10, 0)
+    end)
+
+    local col = make("Frame", {
+        Position = UDim2.new(0, 0, 0, 52),
+        Size = UDim2.new(1, 0, 1, -64),
+        BackgroundTransparency = 1,
+    }, right)
+    make("UIListLayout", {
+        Padding = UDim.new(0, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+    }, col)
+
+    local logo = makeLogo(col, 30, 16)
+    logo.LayoutOrder = 1
+
+    make("TextLabel", {
+        LayoutOrder = 2,
+        Size = UDim2.new(1, 0, 0, 12),
+        BackgroundTransparency = 1,
+        Text = "H  U  B",
+        TextColor3 = GRAY,
+        Font = Enum.Font.GothamMedium,
+        TextSize = 11,
+    }, col)
+
+    -- current game card
+    local card = make("Frame", {
+        LayoutOrder = 3,
+        Size = UDim2.new(1, -28, 0, 64),
+        BackgroundColor3 = ROW,
+        BorderSizePixel = 0,
+    }, col)
+    make("UICorner", { CornerRadius = UDim.new(0, 10) }, card)
+    make("UIStroke", { Color = WHITE, Transparency = 0.88, Thickness = 1 }, card)
+    make("TextLabel", {
+        Position = UDim2.new(0, 10, 0, 8),
+        Size = UDim2.new(1, -20, 0, 10),
+        BackgroundTransparency = 1,
+        Text = "CURRENT GAME",
+        TextColor3 = GRAY,
+        Font = Enum.Font.Code,
+        TextSize = 9,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, card)
+    local gameLabel = make("TextLabel", {
+        Position = UDim2.new(0, 10, 0, 20),
+        Size = UDim2.new(1, -20, 0, 26),
+        BackgroundTransparency = 1,
+        Text = "Loading...",
+        TextColor3 = WHITE,
+        Font = Enum.Font.GothamBold,
+        TextSize = 12,
+        TextWrapped = true,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+    }, card)
+    make("TextLabel", {
+        Position = UDim2.new(0, 10, 0, 47),
+        Size = UDim2.new(1, -20, 0, 12),
+        BackgroundTransparency = 1,
+        Text = "ID  " .. placeId,
+        TextColor3 = GRAY,
+        Font = Enum.Font.Code,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, card)
+
+    task.spawn(function()
+        local ok, productInfo = pcall(function()
+            return MarketplaceService:GetProductInfo(game.PlaceId)
+        end)
+        if gameLabel.Parent then
+            gameLabel.Text = (ok and productInfo and productInfo.Name) or "Unknown game"
+        end
+    end)
+
+    -- status chip
+    local chip = make("Frame", {
+        LayoutOrder = 4,
+        Size = UDim2.fromOffset(120, 22),
+        BackgroundTransparency = 1,
+    }, col)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, chip)
+    make("UIStroke", { Color = WHITE, Transparency = 0.6, Thickness = 1 }, chip)
+    local chipDot = make("Frame", {
+        Position = UDim2.new(0, 12, 0.5, -3),
+        Size = UDim2.fromOffset(6, 6),
+        BackgroundColor3 = WHITE,
+        BorderSizePixel = 0,
+    }, chip)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, chipDot)
+    pulse(chipDot)
+    make("TextLabel", {
+        Position = UDim2.new(0, 26, 0, 0),
+        Size = UDim2.new(1, -26, 1, 0),
+        BackgroundTransparency = 1,
+        Text = "UNSUPPORTED",
+        TextColor3 = WHITE,
+        Font = Enum.Font.GothamBold,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, chip)
+
+    -- always-visible live readout
+    local liveLabel = make("TextLabel", {
+        LayoutOrder = 5,
+        Size = UDim2.new(1, 0, 0, 14),
+        BackgroundTransparency = 1,
+        Text = "-- FPS  |  -- MS",
+        TextColor3 = GRAY,
+        Font = Enum.Font.Code,
+        TextSize = 10,
+    }, col)
+
+    --// Stats engine: one Heartbeat counter, UI refreshed every 0.25s
+    local frames, acc, worst = 0, 0, 0
+    local hb = RunService.Heartbeat:Connect(function(dt)
+        frames = frames + 1
+        acc = acc + dt
+        if dt > worst then
+            worst = dt
+        end
+    end)
+
+    local fpsHist, pingHist = {}, {}
+
+    task.spawn(function()
+        while gui.Parent do
+            task.wait(0.25)
+            local f, a, w = frames, acc, worst
+            frames, acc, worst = 0, 0, 0
+
+            if main.Visible and f > 0 and a > 0 then
+                local fps = f / a
+                local frameMs = a / f * 1000
+                local worstMs = w * 1000
+
+                local ping = nil
+                pcall(function()
+                    ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+                end)
+
+                push(fpsHist, fps)
+                if ping then
+                    push(pingHist, ping)
+                end
+
+                liveLabel.Text = round(fps) .. " FPS  |  " .. (ping and round(ping) or "--") .. " MS"
+
+                if systemPage.Visible then
+                    local fAvg, fLow, fHigh = summarize(fpsHist)
+                    local refMax = (currentCap > 0) and currentCap or math.max(fHigh, 60)
+
+                    fpsCard.big.Text = tostring(round(fps))
+                    fpsCard.tag.Text = (capOk and currentCap > 0) and ("CAP " .. currentCap)
+                        or (capOk and "CAP MAX" or "CAP --")
+                    fpsCard.fill.Size = UDim2.fromScale(math.clamp(fps / refMax, 0, 1), 1)
+                    fpsCard.line1.Text = ("AVG %d  LOW %d"):format(round(fAvg), round(fLow))
+                    fpsCard.line2.Text = ("FT %.2f  WORST %.1f"):format(frameMs, worstMs)
+                    drawCells(fpsCard.cells, fpsHist, math.max(refMax, fHigh))
+
+                    if #pingHist > 0 then
+                        local pAvg, pLow, pHigh = summarize(pingHist)
+                        pingCard.big.Text = ping and tostring(round(ping)) or "--"
+                        pingCard.fill.Size = UDim2.fromScale(math.clamp((ping or 0) / 200, 0, 1), 1)
+                        pingCard.line1.Text = ("AVG %d  MAX %d"):format(round(pAvg), round(pHigh))
+                        pingCard.line2.Text = ("JITTER %d MS"):format(round(pHigh - pLow))
+                        drawCells(pingCard.cells, pingHist, math.max(pHigh * 1.2, 60))
+                    else
+                        pingCard.big.Text = "--"
+                        pingCard.line1.Text = "NO DATA"
+                    end
+                end
+            end
+        end
+        hb:Disconnect()
+    end)
+
+    --// Minimize pill
+    local pill = make("TextButton", {
+        Name = "Pill",
+        AnchorPoint = Vector2.new(0.5, 1),
+        Position = UDim2.new(0.5, 0, 1, -16),
+        Size = UDim2.fromOffset(104, 34),
+        BackgroundColor3 = BLACK,
+        BorderSizePixel = 0,
+        Text = "",
+        AutoButtonColor = false,
+        Visible = false,
+    }, gui)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, pill)
+    make("UIStroke", { Color = WHITE, Transparency = 0.4, Thickness = 1 }, pill)
+    local pillLogo = makeLogo(pill, 18, 11)
+    pillLogo.AnchorPoint = Vector2.new(0.5, 0.5)
+    pillLogo.Position = UDim2.fromScale(0.5, 0.5)
+
+    local function setOpen(open)
+        if open then
+            main.Visible = true
+            pill.Visible = false
+            tween(scale, 0.3, { Scale = 1 }, Enum.EasingStyle.Back)
+            if fxEnabled then
+                startFX()
+            end
+        else
+            local t = tween(scale, 0.2, { Scale = 0.85 })
+            t.Completed:Wait()
+            main.Visible = false
+            pill.Visible = true
+            stopFX()
+        end
+    end
+    minimize.MouseButton1Click:Connect(function()
+        setOpen(false)
+    end)
+    pill.MouseButton1Click:Connect(function()
+        setOpen(true)
+    end)
+
+    close.MouseButton1Click:Connect(function()
+        stopFX()
+        local t = tween(scale, 0.2, { Scale = 0.85 })
+        t.Completed:Wait()
+        gui:Destroy()
+    end)
+
+    --// Open animation
+    tween(scale, 0.4, { Scale = 1 }, Enum.EasingStyle.Back)
+    startFX()
+    task.delay(0.5, function()
+        if gui.Parent then
+            toast(gui, "Unsupported game detected")
+        end
+    end)
+end
+
+--// Find Script
+local map = findMap(placeId)
+
+if not map then
     warn("❌ Unsupported PlaceId: " .. placeId)
+    showUnsupportedUI()
     return
 end
 
 --// Download Script
 local ok, response = pcall(function()
-    return game:HttpGet(url)
+    return game:HttpGet(map.Url)
 end)
 
 if not ok then
@@ -97,5 +1241,5 @@ local run, result = pcall(execute)
 if not run then
     warn("❌ Script execution failed: " .. tostring(result))
 else
-    print("✅ NAZK HUB loaded successfully!")
+    print("✅ ASH₃ HUB loaded successfully!")
 end
