@@ -2,7 +2,7 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
-local AUTOEXEC_CODE = [[loadstring(game:HttpGet("https://pastefy.app/9MooaVB6/raw"))()]]
+local AUTOEXEC_CODE = [[loadstring(game:HttpGet("https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Anime%20Dice"))()]]
 
 if game.PlaceId ~= 113290951185459 then
     error("[Anime Dice - Perfectus] This script only works in Anime Dice.", 0)
@@ -79,11 +79,11 @@ do
 end
 
 local window = Rayfield:CreateWindow({
-    name = "NAZK Hub",
-    subtitle = "Anime Dice | NAZK Hub",
+    name = "ASH₃",
+    subtitle = "Anime Dice | ASH₃",
     sidebarLayout = true,
-    theme = "default",
-    icon = "rbxassetid://139759348685642",
+    theme = "light",
+    icon = "rbxassetid://125282844393157",
     configuration = {
         autoSave = false,
         autoLoad = false,
