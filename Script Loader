@@ -29,6 +29,12 @@ local maps = {
         PlaceIds = { "93978595733734" },
         Url = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Violence%20district",
     },
+    {
+        Name = "Anime Dice",
+        Image = "rbxassetid://120414472092394",
+        PlaceIds = { "113290951185459" },
+        Url = "https://raw.githubusercontent.com/ahmadalva415-oss/Ahmad/main/Anime%20Dice",
+    },
 }
 
 local function findMap(id)
@@ -1191,6 +1197,117 @@ local function showUnsupportedUI()
         local t = tween(scale, 0.2, { Scale = 0.85 })
         t.Completed:Wait()
         gui:Destroy()
+    end)
+
+    --// Floating Discord copy button (bottom-right)
+    local discordWidget = make("Frame", {
+        Name = "DiscordCopyWidget",
+        AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.new(0.92, 0, 0.92, 0),
+        Size = UDim2.fromOffset(174, 46),
+        BackgroundTransparency = 1,
+        ZIndex = 50,
+    }, main)
+
+    local discordBar = make("Frame", {
+        Name = "CopyBar",
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -44, 0.5, 0),
+        Size = UDim2.fromOffset(0, 38),
+        Visible = false,
+        BackgroundColor3 = ROW,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+        ZIndex = 50,
+    }, discordWidget)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, discordBar)
+    make("UIStroke", { Color = WHITE, Transparency = 0.65, Thickness = 1 }, discordBar)
+
+    local copyText = make("TextLabel", {
+        Position = UDim2.new(0, 14, 0, 0),
+        Size = UDim2.new(1, -42, 1, 0),
+        BackgroundTransparency = 1,
+        Text = "COPY",
+        TextColor3 = WHITE,
+        Font = Enum.Font.GothamBold,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 51,
+    }, discordBar)
+    local checkMark = make("TextLabel", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -12, 0.5, 0),
+        Size = UDim2.fromOffset(18, 18),
+        BackgroundTransparency = 1,
+        Text = "✓",
+        TextColor3 = WHITE,
+        Font = Enum.Font.GothamBlack,
+        TextSize = 16,
+        TextTransparency = 1,
+        Rotation = -35,
+        ZIndex = 51,
+    }, discordBar)
+
+    local discordButton = make("ImageButton", {
+        Name = "DiscordButton",
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, 0, 0.5, 0),
+        Size = UDim2.fromOffset(40, 40),
+        BackgroundColor3 = ROW,
+        BorderSizePixel = 0,
+        Image = "rbxassetid://124772058028335",
+        ScaleType = Enum.ScaleType.Fit,
+        AutoButtonColor = false,
+        ZIndex = 52,
+    }, discordWidget)
+    make("UICorner", { CornerRadius = UDim.new(0, 9) }, discordButton)
+    make("UIStroke", { Color = WHITE, Transparency = 0.82, Thickness = 1 }, discordButton)
+    local discordScale = make("UIScale", { Scale = 1 }, discordButton)
+
+    -- A gentle idle pulse keeps the floating Discord icon noticeable.
+    TweenService:Create(
+        discordScale,
+        TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+        { Scale = 1.07 }
+    ):Play()
+
+    local discordBusy = false
+    discordButton.MouseButton1Click:Connect(function()
+        if discordBusy then
+            return
+        end
+        discordBusy = true
+        copyText.Text = "COPY"
+        checkMark.TextTransparency = 1
+        checkMark.Rotation = -35
+        discordBar.Visible = true
+        discordBar.Size = UDim2.fromOffset(0, 38)
+        local expand = tween(discordBar, 0.32, { Size = UDim2.fromOffset(112, 38) }, Enum.EasingStyle.Back)
+        expand.Completed:Wait()
+
+        local copied = pcall(function()
+            if typeof(setclipboard) ~= "function" then
+                error("Clipboard API unavailable")
+            end
+            setclipboard("https://discord.gg/UTUnkuJwqt")
+        end)
+
+        if copied then
+            copyText.Text = "COPIED"
+            tween(checkMark, 0.28, { TextTransparency = 0, Rotation = 0 }, Enum.EasingStyle.Back)
+            tween(discordScale, 0.16, { Scale = 1.2 }, Enum.EasingStyle.Back)
+            task.wait(0.16)
+            tween(discordScale, 0.2, { Scale = 1.07 }, Enum.EasingStyle.Back)
+        else
+            copyText.Text = "FAILED"
+            toast(gui, "Clipboard is unavailable")
+        end
+
+        task.wait(1.5)
+        local collapse = tween(discordBar, 0.25, { Size = UDim2.fromOffset(0, 38) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        collapse.Completed:Wait()
+        discordBar.Visible = false
+        discordBusy = false
     end)
 
     --// Open animation
