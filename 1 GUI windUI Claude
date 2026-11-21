@@ -1,0 +1,898 @@
+-- ASH3 splash (light, non-blocking, no top-level locals)
+do
+	task.spawn(function()
+		pcall(function()
+			local TS = game:GetService("TweenService")
+			local root = (gethui and gethui()) or game:GetService("CoreGui")
+			local old = root:FindFirstChild("ASH3_Splash")
+			if old then old:Destroy() end
+			local W = Color3.new(1, 1, 1)
+			local g = Instance.new("ScreenGui")
+			g.Name = "ASH3_Splash"
+			g.IgnoreGuiInset = true
+			g.ResetOnSpawn = false
+			g.DisplayOrder = 1000
+			g.Parent = root
+			local bg = Instance.new("Frame")
+			bg.Size = UDim2.fromScale(1, 1)
+			bg.BackgroundColor3 = Color3.new(0, 0, 0)
+			bg.BorderSizePixel = 0
+			bg.Parent = g
+			local function lab(txt, size, y, tr, font)
+				local l = Instance.new("TextLabel")
+				l.AnchorPoint = Vector2.new(0.5, 0.5)
+				l.Position = UDim2.new(0.5, 0, 0.5, y)
+				l.Size = UDim2.fromOffset(400, size + 8)
+				l.BackgroundTransparency = 1
+				l.Text = txt
+				l.TextColor3 = W
+				l.TextTransparency = 1
+				l.Font = font
+				l.TextSize = size
+				l.Parent = bg
+				return l
+			end
+			local title = lab("ASH3", 54, -20, 1, Enum.Font.GothamBlack)
+			local sub = lab("V I O L E N C E   D I S T R I C T", 12, 24, 1, Enum.Font.GothamMedium)
+			sub.TextColor3 = Color3.fromRGB(140, 140, 140)
+			local track = Instance.new("Frame")
+			track.AnchorPoint = Vector2.new(0.5, 0.5)
+			track.Position = UDim2.new(0.5, 0, 0.5, 52)
+			track.Size = UDim2.fromOffset(180, 2)
+			track.BackgroundColor3 = W
+			track.BackgroundTransparency = 0.88
+			track.BorderSizePixel = 0
+			track.Parent = bg
+			local fill = Instance.new("Frame")
+			fill.Size = UDim2.fromScale(0, 1)
+			fill.BackgroundColor3 = W
+			fill.BorderSizePixel = 0
+			fill.Parent = track
+			TS:Create(title, TweenInfo.new(0.6), {TextTransparency = 0}):Play()
+			task.wait(0.3)
+			TS:Create(sub, TweenInfo.new(0.6), {TextTransparency = 0}):Play()
+			TS:Create(fill, TweenInfo.new(1.4, Enum.EasingStyle.Quad), {Size = UDim2.fromScale(1, 1)}):Play()
+			task.wait(1.7)
+			TS:Create(bg, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+			TS:Create(title, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
+			TS:Create(sub, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
+			TS:Create(track, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+			TS:Create(fill, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+			task.wait(0.6)
+			g:Destroy()
+		end)
+	end)
+end
+
+
+-- Discord: https://discord.gg/UTUnkuJwqt
+
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+_G.ASH3_THEME_NAMES = {"ASH3 Obsidian", "ASH3 Royal Gold", "ASH3 Ivory", "ASH3 Crimson"}
+do
+	local function c(r, g, b) return Color3.fromRGB(r, g, b) end
+	local list = {
+		{"ASH3 Obsidian", c(255,255,255), c(8,8,8), c(26,26,26), c(235,235,235), c(255,255,255)},
+		{"ASH3 Royal Gold", c(212,175,55), c(9,8,5), c(32,27,12), c(232,200,95), c(255,255,255)},
+		{"ASH3 Ivory", c(20,20,20), c(240,238,232), c(222,219,210), c(40,40,40), c(15,15,15)},
+		{"ASH3 Crimson", c(220,40,50), c(10,6,6), c(34,14,16), c(240,110,115), c(255,255,255)}
+	}
+	for _, t in ipairs(list) do
+		pcall(function()
+			WindUI:AddTheme({Name = t[1], Accent = t[2], Dialog = t[3], Outline = t[2], Text = t[6],
+				Placeholder = c(130,130,130), Background = t[3], Button = t[4], Icon = t[5]})
+		end)
+	end
+end
+local DISCORD_LINK = "https://discord.gg/UTUnkuJwqt"
+
+local function copyDiscordLink()
+local copied = false
+for _, clipboardFunction in ipairs({setclipboard, toclipboard, writeclipboard}) do
+if type(clipboardFunction) == "function" then
+local ok = pcall(clipboardFunction, DISCORD_LINK)
+if ok then
+copied = true
+break
+end
+end
+end
+return copied
+end
+
+-- WindUI migration layer: keeps the existing feature callbacks intact while
+-- presenting them through WindUI's modern layout and element API.
+local function windOptions(options)
+options = options or {}
+return options
+end
+
+local function wrapWindElement(element, parent)
+if not element then
+return element
+end
+
+if element.SetValue == nil and element.Set ~= nil then
+element.SetValue = element.Set
+end
+
+element._windParent = parent or element
+
+function element:AddKeyPicker(_, options)
+options = type(options) == "table" and options or {Default = options}
+return self._windParent:Keybind({
+Title = options.Text or options.Title or "Keybind",
+Value = options.Default or "None",
+Flag = options.Flag,
+Callback = options.Callback
+})
+end
+
+function element:AddColorPicker(color, options)
+options = options or {}
+return self._windParent:Colorpicker({
+Title = options.Title or "Color",
+Default = color,
+Flag = options.Flag,
+Callback = options.Callback
+})
+end
+
+return element
+end
+
+local function wrapWindSection(section)
+local adapter = {}
+adapter._target = section
+
+function adapter:AddToggle(title, default, callback, options)
+options = windOptions(options)
+return wrapWindElement(self._target:Toggle({
+Title = title,
+Value = default,
+Flag = options.Flag,
+Locked = options.Locked,
+Callback = callback
+}), self._target)
+end
+
+function adapter:AddCheckbox(title, default, callback, options)
+return self:AddToggle(title, default, callback, options)
+end
+
+function adapter:AddSlider(title, min, max, default, callback, options)
+options = windOptions(options)
+return wrapWindElement(self._target:Slider({
+Title = title,
+Value = {Min = min, Max = max, Default = default},
+Step = options.Increment or 1,
+Flag = options.Flag,
+Callback = callback
+}), self._target)
+end
+
+function adapter:AddDropdown(title, values, _, callback, options)
+options = windOptions(options)
+return wrapWindElement(self._target:Dropdown({
+Title = title,
+Values = values,
+Value = options.Default or (values and values[1]),
+AllowNone = true,
+Flag = options.Flag,
+Callback = callback
+}), self._target)
+end
+
+function adapter:AddButton(title, callback)
+return self._target:Button({Title = title, Icon = "", Justify = "Center", Callback = callback})
+end
+
+function adapter:AddTextbox(title, placeholder, callback, options)
+options = windOptions(options)
+return wrapWindElement(self._target:Input({
+Title = title,
+Placeholder = placeholder,
+Flag = options.Flag,
+Callback = callback
+}), self._target)
+end
+
+function adapter:AddKeybind(title, default, callback)
+return wrapWindElement(self._target:Keybind({Title = title, Value = default, Callback = callback}), self._target)
+end
+
+function adapter:AddColorPicker(title, color, options)
+options = options or {}
+options.Title = title
+return wrapWindElement(self._target:Colorpicker({Title = title, Default = color, Callback = options.Callback, Flag = options.Flag}))
+end
+
+function adapter:AddConfigManager()
+-- Configuration is managed by WindUI's built-in ConfigManager.
+return self
+end
+
+return adapter
+end
+
+local function wrapWindPage(page)
+local adapter = {}
+adapter._target = page
+
+function adapter:CreateSection(title)
+return wrapWindSection(self._target:Section({
+Title = title,
+Box = true,
+BoxBorder = true,
+Opened = true
+}))
+end
+
+return adapter
+end
+
+local function wrapWindTab(tab)
+local adapter = {}
+adapter._target = tab
+function adapter:CreatePage()
+return wrapWindPage(self._target)
+end
+return adapter
+end
+
+local lib = WindUI
+local windNotify = WindUI.Notify
+function lib:Notify(data)
+data = data or {}
+return windNotify(WindUI, {
+Title = data.Title or "ASH₃",
+Content = data.Description or data.Content or "",
+Duration = data.Duration or data.Time or 3,
+Icon = data.Icon or "info"
+})
+end
+
+local v2 = WindUI:CreateWindow({
+Title = "ASH₃",
+Author = "Violence District",
+Folder = "ASH3",
+Icon = "rbxassetid://125282844393157",
+Theme = "ASH3 Obsidian",
+NewElements = true,
+HideSearchBar = false,
+Size = UDim2.fromOffset(760, 560),
+OpenButton = {
+Title = "Open ASH₃",
+Icon = "rbxassetid://125282844393157",
+Position = UDim2.new(0, 36, 0.5, 0),
+OnlyIcon = true,
+CornerRadius = UDim.new(0, 10),
+StrokeThickness = 2,
+Enabled = false,
+Draggable = true,
+OnlyMobile = false,
+Scale = 1,
+Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(90, 90, 90))
+},
+Topbar = {
+Height = 60,
+ButtonsType = "Mac"
+}
+})
+
+-- زر شعار ثابت على يسار الشاشة لإخفاء القائمة وإظهارها
+local ToggleButtonParent
+if gethui then
+	local ok, h = pcall(gethui)
+	if ok and h then
+		ToggleButtonParent = h
+	end
+end
+if not ToggleButtonParent then
+	local ok, cg = pcall(function()
+		return game:GetService("CoreGui")
+	end)
+	ToggleButtonParent = ok and cg or game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local oldToggleGui = ToggleButtonParent:FindFirstChild("ASH3_ToggleButton")
+if oldToggleGui then
+	oldToggleGui:Destroy()
+end
+
+local toggleGui = Instance.new("ScreenGui")
+toggleGui.Name = "ASH3_ToggleButton"
+toggleGui.IgnoreGuiInset = true
+toggleGui.ResetOnSpawn = false
+toggleGui.DisplayOrder = 10000
+toggleGui.Parent = ToggleButtonParent
+
+local toggleButton = Instance.new("ImageButton")
+toggleButton.Name = "LogoButton"
+toggleButton.AnchorPoint = Vector2.new(0, 0.5)
+toggleButton.Position = UDim2.new(0, 12, 0.5, 0)
+toggleButton.Size = UDim2.fromOffset(48, 48)
+toggleButton.BackgroundColor3 = Color3.fromRGB(8, 8, 8)
+toggleButton.BackgroundTransparency = 0.08
+toggleButton.BorderSizePixel = 0
+toggleButton.Image = "rbxassetid://125282844393157"
+toggleButton.ScaleType = Enum.ScaleType.Fit
+toggleButton.AutoButtonColor = true
+toggleButton.ZIndex = 100
+toggleButton.Parent = toggleGui
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 6)
+toggleCorner.Parent = toggleButton
+
+local toggleStroke = Instance.new("UIStroke")
+toggleStroke.Thickness = 2
+toggleStroke.Color = Color3.fromRGB(255, 255, 255)
+toggleStroke.Transparency = 0.1
+toggleStroke.Parent = toggleButton
+
+local ToggleInputService = game:GetService("UserInputService")
+local toggleDragging = false
+local toggleMoved = false
+local toggleDragStart
+local toggleStartPosition
+
+local function moveToggle(input)
+	local delta = input.Position - toggleDragStart
+	toggleButton.Position = UDim2.new(
+		toggleStartPosition.X.Scale,
+		toggleStartPosition.X.Offset + delta.X,
+		toggleStartPosition.Y.Scale,
+		toggleStartPosition.Y.Offset + delta.Y
+	)
+	if delta.Magnitude > 6 then
+		toggleMoved = true
+	end
+end
+
+toggleButton.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
+		toggleDragging = true
+		toggleMoved = false
+		toggleDragStart = input.Position
+		toggleStartPosition = toggleButton.Position
+	end
+end)
+
+ToggleInputService.InputChanged:Connect(function(input)
+	if toggleDragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+		or input.UserInputType == Enum.UserInputType.Touch) then
+		moveToggle(input)
+	end
+end)
+
+ToggleInputService.InputEnded:Connect(function(input)
+	if (input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch) and toggleDragging then
+		toggleDragging = false
+		if not toggleMoved then
+			pcall(function()
+				v2:Toggle()
+			end)
+		end
+	end
+end)
+
+function v2:CreateTab(title)
+return wrapWindTab(self:Tab({
+Title = title,
+Icon = "solar:layers-bold-duotone",
+IconShape = "Square",
+Border = true
+}))
+end
+
+function v2:SetMenuKey(key)
+if type(key) == "string" then
+key = Enum.KeyCode[key]
+end
+if key then self:SetToggleKey(key) end
+end
+
+function v2:SetTransparency(value)
+if WindUI.SetTransparency then WindUI:SetTransparency(value) end
+end
+
+function v2:SetLocked()
+end
+
+function lib:SetWatermark()
+end
+
+-- Tabs (empty: add your sections here)
+MainTab = v2:CreateTab("Main", false, false)
+M_Page = MainTab:CreatePage("Main")
+
+SurvivorTab = v2:CreateTab("Survivor", false, false)
+S_Page = SurvivorTab:CreatePage("Survivor")
+
+KillerTab = v2:CreateTab("Killer", false, false)
+K_Page = KillerTab:CreatePage("Killer")
+
+EspTab = v2:CreateTab("Visual", false, false)
+EspPage = EspTab:CreatePage("ESP")
+
+TeleportTab = v2:CreateTab("Teleport", false, false)
+T_Page = TeleportTab:CreatePage("Teleport")
+
+SettingsTab = v2:CreateTab("Settings", false, false)
+S_Page1 = SettingsTab:CreatePage("Settings")
+local HttpService = game:GetService("HttpService")
+local CFG_DIR, CFG_FILE = "ASH3", "ASH3/config.json"
+_G.ASH3_PillVisible = true
+
+local function applyPill()
+	local g = _G.ASH3_PillGui
+	if g then g.Enabled = _G.ASH3_PillVisible end
+end
+
+SettingsCard = S_Page1:CreateSection("Settings", "sliders-vertical")
+TopBarToggle = SettingsCard:AddToggle("Top Bar (FPS / MS)", true, function(v)
+	_G.ASH3_PillVisible = v
+	applyPill()
+end, {
+	Flag = "TopBar"
+})
+
+local function saveCfg()
+	local ok = pcall(function()
+		if makefolder and isfolder and not isfolder(CFG_DIR) then makefolder(CFG_DIR) end
+		writefile(CFG_FILE, HttpService:JSONEncode({TopBar = _G.ASH3_PillVisible}))
+	end)
+	lib:Notify({Title = "Config", Description = ok and "Saved: " .. CFG_FILE or "Save failed", Duration = 3})
+end
+local function loadCfg(silent)
+	local ok, data = pcall(function()
+		return HttpService:JSONDecode(readfile(CFG_FILE))
+	end)
+	if ok and type(data) == "table" then
+		if data.TopBar ~= nil then
+			_G.ASH3_PillVisible = data.TopBar
+			pcall(function() TopBarToggle:SetValue(data.TopBar) end)
+			applyPill()
+		end
+		if not silent then lib:Notify({Title = "Config", Description = "Loaded", Duration = 3}) end
+	elseif not silent then
+		lib:Notify({Title = "Config", Description = "No saved config", Duration = 3})
+	end
+end
+
+SettingsCard:AddButton("Save JSON", saveCfg)
+SettingsCard:AddButton("Load JSON", function() loadCfg(false) end)
+task.spawn(function()
+	task.wait(2)
+	loadCfg(true)
+end)
+
+do -- ASH3 visual layer (no top-level locals)
+	task.spawn(function()
+		pcall(function()
+			local TS = game:GetService("TweenService")
+			local RS = game:GetService("RunService")
+			local St = game:GetService("Stats")
+			local root = (gethui and gethui()) or game:GetService("CoreGui")
+			local W = Color3.new(1, 1, 1)
+			task.wait(1.5)
+			local g = root:FindFirstChild("WindUI")
+			local main, area = nil, 0
+			if g then
+				for _, d in ipairs(g:GetDescendants()) do
+					if d:IsA("Frame") and d:FindFirstChildOfClass("UICorner") then
+						local a = d.AbsoluteSize
+						if a.X > 560 and a.X < 1000 and a.Y > 380 and a.Y < 760 and a.X * a.Y > area then
+							main, area = d, a.X * a.Y
+						end
+					end
+				end
+			end
+			if main then
+				main.ClipsDescendants = true
+				local st = Instance.new("UIStroke")
+				st.Thickness = 1.5
+				st.Color = W
+				st.Transparency = 0.15
+				st.Parent = main
+				local gr = Instance.new("UIGradient")
+				gr.Color = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, W),
+					ColorSequenceKeypoint.new(0.5, Color3.fromRGB(35, 35, 35)),
+					ColorSequenceKeypoint.new(1, W)
+				})
+				gr.Parent = st
+				TS:Create(gr, TweenInfo.new(5, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1), {Rotation = 360}):Play()
+				local scan = Instance.new("Frame")
+				scan.Size = UDim2.new(1, 0, 0, 2)
+				scan.BackgroundColor3 = W
+				scan.BackgroundTransparency = 0.88
+				scan.BorderSizePixel = 0
+				scan.ZIndex = 50
+				scan.Active = false
+				scan.Parent = main
+				TS:Create(scan, TweenInfo.new(5, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1), {Position = UDim2.fromScale(0, 1)}):Play()
+				task.spawn(function()
+					while scan.Parent do
+						scan.Visible = _G.ASH3_FX ~= false
+						task.wait(0.5)
+					end
+				end)
+				_G.ASH3_FX = _G.ASH3_FX ~= false
+				for i = 1, 10 do
+					local pt = Instance.new("Frame")
+					local sz = math.random(2, 3)
+					pt.Size = UDim2.fromOffset(sz, sz)
+					pt.BackgroundColor3 = W
+					pt.BackgroundTransparency = math.random(60, 90) / 100
+					pt.BorderSizePixel = 0
+					pt.ZIndex = 50
+					pt.Parent = main
+					local c = Instance.new("UICorner")
+					c.CornerRadius = UDim.new(1, 0)
+					c.Parent = pt
+					task.spawn(function()
+						task.wait(math.random() * 5)
+						while pt.Parent do
+							if _G.ASH3_FX == false then
+								pt.Visible = false
+								task.wait(0.5)
+								continue
+							end
+							pt.Visible = true
+							local x = math.random()
+							pt.Position = UDim2.fromScale(x, 1.03)
+							local tw = TS:Create(pt, TweenInfo.new(math.random(80, 150) / 10, Enum.EasingStyle.Linear), {Position = UDim2.fromScale(x + (math.random() - 0.5) * 0.1, -0.03)})
+							tw:Play()
+							tw.Completed:Wait()
+						end
+					end)
+				end
+				for _, ax in ipairs({{0, 0}, {1, 0}, {0, 1}, {1, 1}}) do
+					local b = Instance.new("Frame")
+					b.Size = UDim2.fromOffset(14, 14)
+					b.AnchorPoint = Vector2.new(ax[1], ax[2])
+					b.Position = UDim2.new(ax[1], ax[1] == 0 and 8 or -8, ax[2], ax[2] == 0 and 8 or -8)
+					b.BackgroundTransparency = 1
+					b.ZIndex = 50
+					b.Parent = main
+					local h = Instance.new("Frame")
+					h.Size = UDim2.new(1, 0, 0, 1)
+					h.AnchorPoint = Vector2.new(0, ax[2])
+					h.Position = UDim2.fromScale(0, ax[2])
+					h.BackgroundColor3 = W
+					h.BackgroundTransparency = 0.45
+					h.BorderSizePixel = 0
+					h.Parent = b
+					local v = Instance.new("Frame")
+					v.Size = UDim2.new(0, 1, 1, 0)
+					v.AnchorPoint = Vector2.new(ax[1], 0)
+					v.Position = UDim2.fromScale(ax[1], 0)
+					v.BackgroundColor3 = W
+					v.BackgroundTransparency = 0.45
+					v.BorderSizePixel = 0
+					v.Parent = b
+				end
+			end
+			-- live watermark pill
+			local wg = Instance.new("ScreenGui")
+			wg.Name = "ASH3_Watermark"
+			wg.ResetOnSpawn = false
+			wg.IgnoreGuiInset = true
+			wg.DisplayOrder = 900
+			wg.Parent = root
+			local pill = Instance.new("Frame")
+			pill.AnchorPoint = Vector2.new(0.5, 0)
+			pill.Position = UDim2.new(0.5, 0, 0, 10)
+			pill.Size = UDim2.fromOffset(0, 26)
+			pill.AutomaticSize = Enum.AutomaticSize.X
+			pill.BackgroundColor3 = Color3.fromRGB(8, 8, 8)
+			pill.BorderSizePixel = 0
+			pill.Parent = wg
+			pill.Active = true
+			_G.ASH3_PillGui = wg
+			wg.Enabled = _G.ASH3_PillVisible ~= false
+			do -- floating: drag the pill anywhere
+				local UIS = game:GetService("UserInputService")
+				local dr, ds, dp
+				pill.InputBegan:Connect(function(i)
+					if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+						dr, ds, dp = true, i.Position, pill.Position
+						i.Changed:Connect(function()
+							if i.UserInputState == Enum.UserInputState.End then dr = false end
+						end)
+					end
+				end)
+				UIS.InputChanged:Connect(function(i)
+					if dr and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+						local d = i.Position - ds
+						pill.Position = UDim2.new(dp.X.Scale, dp.X.Offset + d.X, dp.Y.Scale, dp.Y.Offset + d.Y)
+					end
+				end)
+			end
+			local pc = Instance.new("UICorner")
+			pc.CornerRadius = UDim.new(1, 0)
+			pc.Parent = pill
+			local ps = Instance.new("UIStroke")
+			ps.Color = W
+			ps.Transparency = 0.55
+			ps.Parent = pill
+			local pp = Instance.new("UIPadding")
+			pp.PaddingLeft = UDim.new(0, 14)
+			pp.PaddingRight = UDim.new(0, 14)
+			pp.Parent = pill
+			local lb = Instance.new("TextLabel")
+			lb.Size = UDim2.fromOffset(0, 26)
+			lb.AutomaticSize = Enum.AutomaticSize.X
+			lb.BackgroundTransparency = 1
+			lb.Font = Enum.Font.Code
+			lb.TextSize = 12
+			lb.TextColor3 = W
+			lb.Text = "ASH3  |  -- FPS  |  -- MS"
+			lb.Parent = pill
+			local n, t0 = 0, os.clock()
+			RS.Heartbeat:Connect(function()
+				n = n + 1
+				local now = os.clock()
+				if now - t0 >= 0.5 then
+					local ping = 0
+					pcall(function() ping = math.floor(St.Network.ServerStatsItem["Data Ping"]:GetValue() + 0.5) end)
+					lb.Text = "ASH3  |  " .. math.floor(n / (now - t0) + 0.5) .. " FPS  |  " .. ping .. " MS"
+					n, t0 = 0, now
+				end
+			end)
+		end)
+	end)
+end
+
+do -- ASH3 extra animated shapes (no top-level locals)
+	task.spawn(function()
+		pcall(function()
+			local TS = game:GetService("TweenService")
+			local root = (gethui and gethui()) or game:GetService("CoreGui")
+			local W = Color3.new(1, 1, 1)
+			task.wait(2.2)
+			local g = root:FindFirstChild("WindUI")
+			local main, area = nil, 0
+			if g then
+				for _, d in ipairs(g:GetDescendants()) do
+					if d:IsA("Frame") and d:FindFirstChildOfClass("UICorner") then
+						local a = d.AbsoluteSize
+						if a.X > 560 and a.X < 1000 and a.Y > 380 and a.Y < 760 and a.X * a.Y > area then
+							main, area = d, a.X * a.Y
+						end
+					end
+				end
+			end
+			if not main then return end
+			local box = Instance.new("Frame")
+			box.Name = "ASH3_Shapes"
+			box.Size = UDim2.fromScale(1, 1)
+			box.BackgroundTransparency = 1
+			box.ZIndex = 49
+			box.Parent = main
+			local function circle(parent, size)
+				local f = Instance.new("Frame")
+				f.AnchorPoint = Vector2.new(0.5, 0.5)
+				f.Size = UDim2.fromOffset(size, size)
+				f.BorderSizePixel = 0
+				f.ZIndex = 49
+				local c = Instance.new("UICorner")
+				c.CornerRadius = UDim.new(1, 0)
+				c.Parent = f
+				f.Parent = parent
+				return f
+			end
+			local loopInfo = function(t, style)
+				return TweenInfo.new(t, style or Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+			end
+			-- twinkling white dots that also drift
+			for i = 1, 18 do
+				local d = circle(box, math.random(2, 4))
+				d.BackgroundColor3 = W
+				d.BackgroundTransparency = 0.9
+				local x, y = math.random(), math.random()
+				d.Position = UDim2.fromScale(x, y)
+				TS:Create(d, loopInfo(math.random(15, 40) / 10), {BackgroundTransparency = 0.15}):Play()
+				TS:Create(d, loopInfo(math.random(40, 90) / 10), {Position = UDim2.fromScale(x + (math.random() - 0.5) * 0.12, y + (math.random() - 0.5) * 0.12)}):Play()
+			end
+			-- rotating hollow diamonds
+			for i = 1, 4 do
+				local sq = Instance.new("Frame")
+				sq.AnchorPoint = Vector2.new(0.5, 0.5)
+				sq.Size = UDim2.fromOffset(math.random(14, 26), math.random(14, 26))
+				sq.Position = UDim2.fromScale(math.random(10, 90) / 100, math.random(10, 90) / 100)
+				sq.BackgroundTransparency = 1
+				sq.Rotation = 45
+				sq.ZIndex = 49
+				sq.Parent = box
+				local st = Instance.new("UIStroke")
+				st.Color = W
+				st.Transparency = 0.7
+				st.Thickness = 1
+				st.Parent = sq
+				TS:Create(sq, TweenInfo.new(math.random(60, 120) / 10, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1), {Rotation = 405}):Play()
+				TS:Create(st, loopInfo(math.random(20, 40) / 10), {Transparency = 0.95}):Play()
+			end
+			-- expanding ripple rings
+			for i = 1, 3 do
+				task.spawn(function()
+					task.wait(i * 1.3)
+					while box.Parent do
+						local r = circle(box, 6)
+						r.BackgroundTransparency = 1
+						r.Position = UDim2.fromScale(math.random(15, 85) / 100, math.random(15, 85) / 100)
+						local st = Instance.new("UIStroke")
+						st.Color = W
+						st.Transparency = 0.5
+						st.Thickness = 1
+						st.Parent = r
+						TS:Create(r, TweenInfo.new(3, Enum.EasingStyle.Quad), {Size = UDim2.fromOffset(120, 120)}):Play()
+						local tw = TS:Create(st, TweenInfo.new(3, Enum.EasingStyle.Quad), {Transparency = 1})
+						tw:Play()
+						tw.Completed:Wait()
+						r:Destroy()
+						task.wait(math.random(5, 20) / 10)
+					end
+				end)
+			end
+			-- sliding light streaks
+			for i = 1, 2 do
+				local ln = Instance.new("Frame")
+				ln.Size = UDim2.new(0.25, 0, 0, 1)
+				ln.Position = UDim2.fromScale(-0.3, 0.3 + i * 0.3)
+				ln.BackgroundColor3 = W
+				ln.BorderSizePixel = 0
+				ln.ZIndex = 49
+				ln.Parent = box
+				local gr = Instance.new("UIGradient")
+				gr.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.4), NumberSequenceKeypoint.new(1, 1)})
+				gr.Parent = ln
+				TS:Create(ln, TweenInfo.new(5 + i * 2, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1), {Position = UDim2.fromScale(1.1, 0.3 + i * 0.3)}):Play()
+			end
+			while box.Parent do
+				box.Visible = _G.ASH3_FX ~= false
+				task.wait(0.5)
+			end
+		end)
+	end)
+end
+
+lib:Notify({
+	Title = "ASH₃",
+	Description = "Loaded",
+	Duration = 3
+})
+
+--// ASH3 Reference Dashboard visual layer (black & white)
+task.spawn(function()
+task.wait(2.5)
+pcall(function()
+local TS = game:GetService("TweenService")
+local Players2 = game:GetService("Players")
+local LP = Players2.LocalPlayer
+local BLACK = Color3.fromRGB(8, 8, 8)
+local WHITE = Color3.fromRGB(255, 255, 255)
+local function getRoot()
+local ok, hui = pcall(function() return gethui and gethui() end)
+if ok and hui then return hui end
+local ok2, cg = pcall(function() return game:GetService("CoreGui") end)
+if ok2 and cg then return cg end
+return LP:WaitForChild("PlayerGui")
+end
+local root = getRoot()
+local old = root:FindFirstChild("ASH3_ReferenceDashboard")
+if old then old:Destroy() end
+local wg = root:FindFirstChild("WindUI")
+if not wg then return end
+local main, area = nil, 0
+for _, obj in ipairs(wg:GetDescendants()) do
+if obj:IsA("Frame") and obj.Visible then
+local s = obj.AbsoluteSize
+local a = s.X * s.Y
+if s.X >= 420 and s.Y >= 280 and a > area then
+main, area = obj, a
+end
+end
+end
+if not main then return end
+main.BackgroundColor3 = BLACK
+main.BackgroundTransparency = 0.02
+main.ClipsDescendants = true
+local layer = Instance.new("Frame")
+layer.Name = "ReferenceFX"
+layer.Size = UDim2.fromScale(1, 1)
+layer.BackgroundTransparency = 1
+layer.ZIndex = 999
+layer.Active = false
+layer.Parent = main
+local function tw(obj, time, props)
+local t = TS:Create(obj, TweenInfo.new(time, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props)
+t:Play()
+return t
+end
+-- Moving scanline
+local scan = Instance.new("Frame")
+scan.Size = UDim2.new(1, 0, 0, 2)
+scan.Position = UDim2.fromScale(0, -0.03)
+scan.BackgroundColor3 = WHITE
+scan.BackgroundTransparency = 0.86
+scan.BorderSizePixel = 0
+scan.ZIndex = 1000
+scan.Parent = layer
+local sg = Instance.new("UIGradient")
+sg.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1)})
+sg.Parent = scan
+task.spawn(function()
+while scan.Parent do
+scan.Position = UDim2.fromScale(0, -0.03)
+tw(scan, 4.5, {Position = UDim2.fromScale(0, 1.03)}).Completed:Wait()
+task.wait(1.8)
+end
+end)
+-- HUD corner brackets
+local function bracket(x, y)
+local b = Instance.new("Frame")
+b.Size = UDim2.fromOffset(16, 16)
+b.AnchorPoint = Vector2.new(x, y)
+b.Position = UDim2.new(x, x == 0 and 8 or -8, y, y == 0 and 8 or -8)
+b.BackgroundTransparency = 1
+b.ZIndex = 1001
+b.Parent = layer
+local h = Instance.new("Frame")
+h.Size = UDim2.new(1, 0, 0, 1)
+h.Position = UDim2.fromScale(0, y)
+h.AnchorPoint = Vector2.new(0, y)
+h.BackgroundColor3 = WHITE
+h.BackgroundTransparency = 0.35
+h.BorderSizePixel = 0
+h.Parent = b
+local v = Instance.new("Frame")
+v.Size = UDim2.new(0, 1, 1, 0)
+v.Position = UDim2.fromScale(x, 0)
+v.AnchorPoint = Vector2.new(x, 0)
+v.BackgroundColor3 = WHITE
+v.BackgroundTransparency = 0.35
+v.BorderSizePixel = 0
+v.Parent = b
+end
+bracket(0, 0); bracket(1, 0); bracket(0, 1); bracket(1, 1)
+-- Animated monochrome border
+local stroke = Instance.new("UIStroke")
+stroke.Name = "ASH3_AnimatedBorder"
+stroke.Thickness = 1.2
+stroke.Transparency = 0.22
+stroke.Color = WHITE
+stroke.Parent = main
+local bg = Instance.new("UIGradient")
+bg.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, WHITE), ColorSequenceKeypoint.new(0.5, Color3.fromRGB(35, 35, 35)), ColorSequenceKeypoint.new(1, WHITE)})
+bg.Parent = stroke
+TS:Create(bg, TweenInfo.new(6, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1), {Rotation = 360}):Play()
+-- Floating particles
+for i = 1, 12 do
+local p = Instance.new("Frame")
+local sz = math.random(2, 3)
+p.Size = UDim2.fromOffset(sz, sz)
+p.Position = UDim2.fromScale(math.random(), 1.05)
+p.BackgroundColor3 = WHITE
+p.BackgroundTransparency = math.random(78, 94) / 100
+p.BorderSizePixel = 0
+p.ZIndex = 998
+p.Parent = layer
+local c = Instance.new("UICorner")
+c.CornerRadius = UDim.new(1, 0)
+c.Parent = p
+task.spawn(function()
+while p.Parent do
+local x = math.random()
+p.Position = UDim2.fromScale(x, 1.04)
+TS:Create(p, TweenInfo.new(math.random(70, 140) / 10, Enum.EasingStyle.Linear), {Position = UDim2.fromScale(x + (math.random() - 0.5) * 0.12, -0.04)}):Play()
+task.wait(math.random(7, 14))
+end
+end)
+end
+end)
+end)
